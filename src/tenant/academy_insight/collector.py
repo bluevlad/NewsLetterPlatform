@@ -34,9 +34,9 @@ class AcademyInsightCollector:
         return body
 
     async def collect_summary(self) -> Dict:
-        """요약 통계 수집 - GET /summary"""
+        """요약 통계 수집 - GET /dashboard/summary"""
         try:
-            data = await self._get("/summary")
+            data = await self._get("/dashboard/summary")
             logger.info("AcademyInsight 요약 통계 수집 완료")
             return data if isinstance(data, dict) else {}
         except Exception as e:
@@ -44,9 +44,9 @@ class AcademyInsightCollector:
             return {}
 
     async def collect_trending_posts(self) -> list:
-        """트렌딩 게시글 수집 - GET /posts/trending"""
+        """트렌딩 게시글 수집 - GET /dashboard/trending-posts"""
         try:
-            data = await self._get("/posts/trending")
+            data = await self._get("/dashboard/trending-posts")
             logger.info(f"AcademyInsight 트렌딩 게시글 수집 완료: {len(data) if isinstance(data, list) else 0}건")
             return data if isinstance(data, list) else []
         except Exception as e:
@@ -54,9 +54,9 @@ class AcademyInsightCollector:
             return []
 
     async def collect_academy_ranking(self) -> list:
-        """학원 랭킹 수집 - GET /academies/ranking"""
+        """학원 랭킹 수집 - GET /dashboard/academy-ranking"""
         try:
-            data = await self._get("/academies/ranking")
+            data = await self._get("/dashboard/academy-ranking")
             logger.info(f"AcademyInsight 학원 랭킹 수집 완료: {len(data) if isinstance(data, list) else 0}건")
             return data if isinstance(data, list) else []
         except Exception as e:

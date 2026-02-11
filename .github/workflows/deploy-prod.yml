@@ -34,16 +34,16 @@ jobs:
           DATABASE_URL=sqlite:///./data/newsletterplatform.db
 
           # Scheduler (24h format, KST)
-          # TeacherHub
-          TEACHERHUB_COLLECT_HOUR=7
+          # TeacherHub - crawl 01:00, report 01:30
+          TEACHERHUB_COLLECT_HOUR=2
           TEACHERHUB_COLLECT_MINUTE=0
-          TEACHERHUB_SEND_HOUR=8
+          TEACHERHUB_SEND_HOUR=7
           TEACHERHUB_SEND_MINUTE=0
 
-          # AcademyInsight
-          ACADEMY_COLLECT_HOUR=7
-          ACADEMY_COLLECT_MINUTE=10
-          ACADEMY_SEND_HOUR=8
+          # AcademyInsight - crawl 04:00
+          ACADEMY_COLLECT_HOUR=5
+          ACADEMY_COLLECT_MINUTE=0
+          ACADEMY_SEND_HOUR=7
           ACADEMY_SEND_MINUTE=10
 
           # Tenant API URLs
