@@ -1,15 +1,17 @@
-version: '3.8'
-
 services:
+  # 스케줄러 서비스 (데이터 수집 + 뉴스레터 발송)
   newsletterplatform-scheduler:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: newsletterplatform-scheduler
     restart: unless-stopped
+    env_file:
+      - .env.production
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./config:/app/config
-      - ./.env.production:/app/.env:ro
     environment:
       - TZ=Asia/Seoul
       - PYTHONUNBUFFERED=1
@@ -19,21 +21,30 @@ services:
       - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # 웹 서버 서비스 (구독 관리)
   newsletterplatform-web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: newsletterplatform-web
     restart: unless-stopped
+    env_file:
+      - .env.production
     ports:
       - "4055:4055"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./config:/app/config
-      - ./.env.production:/app/.env:ro
     environment:
       - TZ=Asia/Seoul
       - PYTHONUNBUFFERED=1
@@ -48,7 +59,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   unmong-network:
+    name: unmong-main_unmong-network
     external: true
