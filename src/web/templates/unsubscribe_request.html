@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}구독 해지 - {{ tenant.display_name }}{% endblock %}
+{% block header_subtitle %}{{ tenant.display_name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>뉴스레터 구독 해지</h2>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+
+    <p class="text-muted text-center" style="margin-bottom: 1.5rem;">
+        구독 해지를 원하시면 이메일 주소를 입력해주세요.<br>
+        인증코드가 발송됩니다.
+    </p>
+
+    <form method="POST" action="/{{ tenant.tenant_id }}/unsubscribe">
+        <div class="form-group">
+            <label for="email">이메일 주소 *</label>
+            <input type="email" id="email" name="email" required
+                   placeholder="example@email.com"
+                   value="{{ email or '' }}">
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+            인증코드 받기
+        </button>
+    </form>
+
+    <p class="text-center text-muted text-small mt-2">
+        입력하신 이메일로 6자리 인증코드가 발송됩니다.
+    </p>
+
+    <a href="/" class="btn btn-secondary">홈으로 돌아가기</a>
+</div>
+{% endblock %}

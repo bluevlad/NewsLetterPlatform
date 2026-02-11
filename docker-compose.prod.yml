@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  newsletterplatform-scheduler:
+    build: .
+    container_name: newsletterplatform-scheduler
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+      - ./.env.production:/app/.env:ro
+    environment:
+      - TZ=Asia/Seoul
+      - PYTHONUNBUFFERED=1
+    networks:
+      - unmong-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  newsletterplatform-web:
+    build: .
+    container_name: newsletterplatform-web
+    restart: unless-stopped
+    ports:
+      - "4055:4055"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+      - ./.env.production:/app/.env:ro
+    environment:
+      - TZ=Asia/Seoul
+      - PYTHONUNBUFFERED=1
+    command: ["python", "-m", "src.main", "--web"]
+    networks:
+      - unmong-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4055/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  unmong-network:
+    external: true

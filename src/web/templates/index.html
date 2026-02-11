@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}NewsLetterPlatform - 뉴스레터 구독{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>뉴스레터를 선택하세요</h2>
+
+    <div class="tenant-list">
+        {% for tenant in tenants %}
+        <a href="/{{ tenant.tenant_id }}/subscribe" style="text-decoration: none;">
+            <div class="tenant-card">
+                <h3>{{ tenant.display_name }}</h3>
+                <p>{{ tenant.email_subject_prefix }} 매일 분석 데이터를 이메일로 받아보세요</p>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="features">
+        <div class="feature-item">
+            <span class="feature-icon">&#x1F4CA;</span>
+            <div class="feature-text">
+                <strong>데이터 기반 분석</strong>
+                AI 기반 평판/동향 분석 결과를 매일 브리핑
+            </div>
+        </div>
+        <div class="feature-item">
+            <span class="feature-icon">&#x1F551;</span>
+            <div class="feature-text">
+                <strong>매일 아침 자동 발송</strong>
+                하루를 시작하며 최신 동향을 확인하세요
+            </div>
+        </div>
+        <div class="feature-item">
+            <span class="feature-icon">&#x1F193;</span>
+            <div class="feature-text">
+                <strong>무료 구독</strong>
+                언제든지 구독 해지가 가능합니다
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

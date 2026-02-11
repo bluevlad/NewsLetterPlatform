@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}인증코드 확인 - {{ tenant.display_name }}{% endblock %}
+{% block header_subtitle %}{{ tenant.display_name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>구독 해지 인증</h2>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+
+    <div class="alert alert-info">
+        <strong>{{ email }}</strong>으로 인증코드를 발송했습니다.<br>
+        이메일을 확인하고 6자리 코드를 입력해주세요.
+    </div>
+
+    <form method="POST" action="/{{ tenant.tenant_id }}/unsubscribe/verify">
+        <input type="hidden" name="verification_id" value="{{ verification_id }}">
+        <input type="hidden" name="email" value="{{ email }}">
+
+        <div class="form-group">
+            <label for="code">인증코드 (6자리)</label>
+            <input type="text" id="code" name="code" required
+                   class="code-input"
+                   placeholder="000000"
+                   maxlength="6"
+                   pattern="[0-9]{6}"
+                   inputmode="numeric"
+                   autocomplete="one-time-code">
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+            구독 해지하기
+        </button>
+    </form>
+
+    <p class="expiry-notice">
+        인증코드는 10분간 유효합니다.
+    </p>
+
+    <a href="/{{ tenant.tenant_id }}/unsubscribe" class="btn btn-secondary">다시 신청하기</a>
+</div>
+{% endblock %}
