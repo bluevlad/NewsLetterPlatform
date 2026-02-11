@@ -1,6 +1,12 @@
 """
 TeacherHub 데이터 수집기
 Spring Boot API 호출
+
+API Endpoints:
+  - GET /reports/daily          → 일일 리포트 (PeriodReportDTO)
+  - GET /weekly/summary         → 주간 요약 통계 (WeeklySummaryDTO)
+  - GET /weekly/ranking         → 주간 강사 랭킹 (List<WeeklyReportDTO>)
+  - GET /weekly/current         → 현재 주차 정보
 """
 
 import logging
@@ -21,11 +27,11 @@ class TeacherHubCollector:
     def __init__(self, api_base_url: str = None):
         self.api_base_url = (api_base_url or settings.teacherhub_api_url).rstrip("/")
 
-    async def _get(self, path: str) -> Any:
+    async def _get(self, path: str, params: dict = None) -> Any:
         """API GET 요청"""
         url = f"{self.api_base_url}{path}"
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
-            response = await client.get(url)
+            response = await client.get(url, params=params)
             response.raise_for_status()
             return response.json()
 
@@ -33,31 +39,65 @@ class TeacherHubCollector:
         """일일 리포트 수집 - GET /reports/daily"""
         try:
             data = await self._get("/reports/daily")
-            logger.info(f"TeacherHub 일일 리포트 수집 완료")
+            logger.info("TeacherHub 일일 리포트 수집 완료")
             return data
         except Exception as e:
             logger.error(f"TeacherHub 일일 리포트 수집 실패: {e}")
             return {}
 
-    async def collect_ranking(self) -> list:
-        """강사 랭킹 수집 - GET /analysis/ranking"""
+    async def _get_current_week(self) -> Dict:
+        """현재 주차 정보 조회 - GET /weekly/current"""
         try:
-            data = await self._get("/analysis/ranking")
-            logger.info(f"TeacherHub 랭킹 수집 완료: {len(data) if isinstance(data, list) else 0}건")
+            return await self._get("/weekly/current")
+        except Exception as e:
+            logger.error(f"TeacherHub 현재 주차 조회 실패: {e}")
+            return {}
+
+    async def collect_weekly_summary(self) -> Dict:
+        """주간 요약 통계 수집 - GET /weekly/summary"""
+        try:
+            current = await self._get_current_week()
+            if not current:
+                return {}
+
+            year = current.get("year")
+            week = current.get("week")
+
+            data = await self._get("/weekly/summary", {"year": year, "week": week})
+
+            # 현재 주차 데이터가 없으면 직전 주차 조회
+            if data.get("totalMentions", 0) == 0 and week and week > 1:
+                prev_data = await self._get("/weekly/summary", {"year": year, "week": week - 1})
+                if prev_data.get("totalMentions", 0) > 0:
+                    data = prev_data
+
+            logger.info(f"TeacherHub 주간 요약 수집 완료: {data.get('weekLabel', '')}")
+            return data
+        except Exception as e:
+            logger.error(f"TeacherHub 주간 요약 수집 실패: {e}")
+            return {}
+
+    async def collect_weekly_ranking(self) -> list:
+        """주간 강사 랭킹 수집 - GET /weekly/ranking"""
+        try:
+            current = await self._get_current_week()
+            if not current:
+                return []
+
+            year = current.get("year")
+            week = current.get("week")
+
+            data = await self._get("/weekly/ranking", {"year": year, "week": week, "limit": 10})
+
+            # 현재 주차 데이터가 없으면 직전 주차 조회
+            if not data and week and week > 1:
+                data = await self._get("/weekly/ranking", {"year": year, "week": week - 1, "limit": 10})
+
+            logger.info(f"TeacherHub 주간 랭킹 수집 완료: {len(data) if isinstance(data, list) else 0}건")
             return data if isinstance(data, list) else []
         except Exception as e:
-            logger.error(f"TeacherHub 랭킹 수집 실패: {e}")
+            logger.error(f"TeacherHub 주간 랭킹 수집 실패: {e}")
             return []
-
-    async def collect_summary(self) -> Dict:
-        """요약 통계 수집 - GET /analysis/summary"""
-        try:
-            data = await self._get("/analysis/summary")
-            logger.info(f"TeacherHub 요약 통계 수집 완료")
-            return data if isinstance(data, dict) else {}
-        except Exception as e:
-            logger.error(f"TeacherHub 요약 통계 수집 실패: {e}")
-            return {}
 
     async def collect_all(self) -> Dict[str, Any]:
         """전체 데이터 수집 (개별 에러 처리)"""
@@ -67,13 +107,13 @@ class TeacherHubCollector:
         if daily_report:
             result["daily_report"] = daily_report
 
-        ranking = await self.collect_ranking()
-        if ranking:
-            result["ranking"] = ranking
+        weekly_summary = await self.collect_weekly_summary()
+        if weekly_summary:
+            result["weekly_summary"] = weekly_summary
 
-        summary = await self.collect_summary()
-        if summary:
-            result["summary"] = summary
+        weekly_ranking = await self.collect_weekly_ranking()
+        if weekly_ranking:
+            result["weekly_ranking"] = weekly_ranking
 
         logger.info(f"TeacherHub 전체 수집 완료: {list(result.keys())}")
         return result
