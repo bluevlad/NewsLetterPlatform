@@ -1,0 +1,29 @@
+# 테넌트 설정
+# 각 테넌트의 데이터 소스, 발송 스케줄, 이메일 설정을 정의합니다.
+
+tenants:
+  teacher-hub:
+    display_name: "TeacherHub 강사 평판 브리핑"
+    description: "공무원 학원 강사 평판 분석 일일/주간 브리핑"
+    api_base_url: "${TEACHERHUB_API_URL}"
+    email_subject_prefix: "[TeacherHub]"
+    email_template: "teacher_hub/daily_report.html"
+    schedule:
+      collect_hour: 7
+      collect_minute: 0
+      send_hour: 8
+      send_minute: 0
+    is_active: true
+
+  academy-insight:
+    display_name: "AcademyInsight 학원 동향 브리핑"
+    description: "학원 온라인 평판 분석 일일 브리핑"
+    api_base_url: "${ACADEMY_INSIGHT_API_URL}"
+    email_subject_prefix: "[AcademyInsight]"
+    email_template: "academy_insight/daily_report.html"
+    schedule:
+      collect_hour: 7
+      collect_minute: 10
+      send_hour: 8
+      send_minute: 10
+    is_active: true
