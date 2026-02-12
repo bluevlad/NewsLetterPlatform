@@ -6,10 +6,12 @@ NewsLetterPlatform 웹 애플리케이션
 import logging
 import threading
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..config import settings
 from ..common.database.repository import get_session_factory
@@ -26,6 +28,27 @@ app = FastAPI(
     description="멀티테넌트 뉴스레터 통합 플랫폼",
     version="1.0.0"
 )
+
+class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
+    """CSRF 방지: POST 요청의 Origin/Referer가 허용된 호스트인지 검증"""
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "POST":
+            origin = request.headers.get("origin") or request.headers.get("referer")
+            if origin:
+                parsed = urlparse(origin)
+                allowed_hosts = {
+                    urlparse(settings.web_base_url).hostname,
+                    "localhost",
+                    "127.0.0.1",
+                }
+                if parsed.hostname not in allowed_hosts:
+                    logger.warning("CSRF check failed: origin=%s", origin)
+                    raise HTTPException(status_code=403, detail="Forbidden: invalid origin")
+        return await call_next(request)
+
+# CSRF 미들웨어 적용
+app.add_middleware(CSRFOriginCheckMiddleware)
 
 # 웹 페이지 템플릿
 templates_dir = Path(__file__).parent / "templates"
@@ -59,6 +82,8 @@ def get_db():
 
 def get_tenant_or_404(tenant_id: str):
     """테넌트 조회, 없으면 404"""
+    if not tenant_id or len(tenant_id) > 64 or not tenant_id.replace("_", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="잘못된 테넌트 ID 형식입니다")
     registry = get_registry()
     tenant = registry.get(tenant_id)
     if not tenant:

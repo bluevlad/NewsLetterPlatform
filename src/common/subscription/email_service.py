@@ -29,10 +29,12 @@ def send_verification_email(
             verification_type=verification_type
         )
 
+        safe_prefix = tenant_subject_prefix.replace('\r', '').replace('\n', '').replace('\x00', '')
+        safe_code = code.replace('\r', '').replace('\n', '').replace('\x00', '')
         if verification_type == "unsubscribe":
-            subject = f"{tenant_subject_prefix} 구독 해지 인증코드: {code}"
+            subject = f"{safe_prefix} 구독 해지 인증코드: {safe_code}"
         else:
-            subject = f"{tenant_subject_prefix} 인증코드: {code}"
+            subject = f"{safe_prefix} 인증코드: {safe_code}"
 
         sender = get_sender()
         result = sender.send(

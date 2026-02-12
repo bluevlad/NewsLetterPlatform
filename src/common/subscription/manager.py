@@ -28,9 +28,8 @@ def generate_verification_code() -> str:
 
 
 def generate_unsubscribe_token(email: str) -> str:
-    """구독 해지 토큰 생성 (SHA256)"""
-    data = f"{email}{secrets.token_hex(16)}{datetime.now().isoformat()}"
-    return hashlib.sha256(data.encode()).hexdigest()[:32]
+    """구독 해지 토큰 생성 (cryptographic random)"""
+    return secrets.token_urlsafe(32)
 
 
 class SubscriptionManager:
