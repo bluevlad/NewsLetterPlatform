@@ -308,7 +308,7 @@
 <body>
     <div class="container">
         <header>
-            <a href="/" style="text-decoration: none;">
+            <a href="{% if tenant %}/{{ tenant.tenant_id }}/subscribe{% else %}/{% endif %}" style="text-decoration: none;">
                 <div class="logo">{% if tenant %}{{ tenant.brand_config.logo_text }}{% else %}NewsLetterPlatform{% endif %}</div>
             </a>
             <p class="subtitle">{% block header_subtitle %}{% if tenant %}{{ tenant.brand_config.tagline }}{% else %}멀티테넌트 뉴스레터 통합 플랫폼{% endif %}{% endblock %}</p>
