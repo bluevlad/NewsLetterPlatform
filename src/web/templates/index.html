@@ -9,9 +9,9 @@
     <div class="tenant-list">
         {% for tenant in tenants %}
         <a href="/{{ tenant.tenant_id }}/subscribe" style="text-decoration: none;">
-            <div class="tenant-card">
+            <div class="tenant-card" style="border-left: 3px solid {{ tenant.brand_config.primary_color }};">
                 <h3>{{ tenant.display_name }}</h3>
-                <p>{{ tenant.email_subject_prefix }} 매일 분석 데이터를 이메일로 받아보세요</p>
+                <p>{{ tenant.brand_config.description }}</p>
             </div>
         </a>
         {% endfor %}

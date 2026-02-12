@@ -3,7 +3,28 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+
+@dataclass
+class BrandFeature:
+    """구독 페이지에 표시할 기능 소개 항목"""
+    icon: str
+    title: str
+    description: str
+
+
+@dataclass
+class BrandConfig:
+    """테넌트 브랜드 설정"""
+    primary_color: str = "#10b981"
+    primary_color_dark: str = "#059669"
+    accent_color: str = "#38bdf8"
+    logo_text: str = "NewsLetterPlatform"
+    tagline: str = "멀티테넌트 뉴스레터 통합 플랫폼"
+    description: str = "매일 분석 데이터를 이메일로 받아보세요"
+    features: List[BrandFeature] = field(default_factory=list)
 
 
 class BaseTenant(ABC):
@@ -33,6 +54,11 @@ class BaseTenant(ABC):
     @abstractmethod
     def schedule_config(self) -> Dict[str, int]:
         """스케줄러 설정 (collect_hour, collect_minute, send_hour, send_minute)"""
+
+    @property
+    def brand_config(self) -> BrandConfig:
+        """테넌트 브랜드 설정 (하위 클래스에서 오버라이드 가능)"""
+        return BrandConfig()
 
     @abstractmethod
     async def collect_data(self) -> Dict[str, Any]:

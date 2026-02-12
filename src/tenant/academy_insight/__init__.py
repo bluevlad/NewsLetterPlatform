@@ -4,8 +4,8 @@ AcademyInsight 테넌트 구현
 
 from typing import Any, Dict
 
-from ..base import BaseTenant
-from .config import TENANT_ID, DISPLAY_NAME, EMAIL_SUBJECT_PREFIX, EMAIL_TEMPLATE
+from ..base import BaseTenant, BrandConfig
+from .config import TENANT_ID, DISPLAY_NAME, EMAIL_SUBJECT_PREFIX, EMAIL_TEMPLATE, BRAND_CONFIG
 from .collector import AcademyInsightCollector
 from .formatter import AcademyInsightFormatter
 from ...config import settings
@@ -33,6 +33,10 @@ class AcademyInsightTenant(BaseTenant):
     @property
     def email_template(self) -> str:
         return EMAIL_TEMPLATE
+
+    @property
+    def brand_config(self) -> BrandConfig:
+        return BRAND_CONFIG
 
     @property
     def schedule_config(self) -> Dict[str, int]:

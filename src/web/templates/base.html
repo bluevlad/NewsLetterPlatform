@@ -11,8 +11,9 @@
             --card-bg: rgba(30, 41, 59, 0.7);
             --text-color: #f1f5f9;
             --text-muted: #94a3b8;
-            --accent-color: #38bdf8;
-            --action-color: #10b981;
+            --accent-color: {% if tenant %}{{ tenant.brand_config.accent_color }}{% else %}#38bdf8{% endif %};
+            --action-color: {% if tenant %}{{ tenant.brand_config.primary_color }}{% else %}#10b981{% endif %};
+            --action-color-dark: {% if tenant %}{{ tenant.brand_config.primary_color_dark }}{% else %}#059669{% endif %};
             --border-color: rgba(148, 163, 184, 0.1);
             --warning-color: #f59e0b;
             --danger-color: #ef4444;
@@ -52,7 +53,7 @@
         .logo {
             font-size: 2rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #10b981 0%, #38bdf8 100%);
+            background: linear-gradient(135deg, var(--action-color) 0%, var(--accent-color) 100%);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -142,13 +143,23 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            background: linear-gradient(135deg, var(--action-color) 0%, var(--action-color-dark) 100%);
             color: white;
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
         }
 
         .btn-secondary {
@@ -298,9 +309,9 @@
     <div class="container">
         <header>
             <a href="/" style="text-decoration: none;">
-                <div class="logo">NewsLetterPlatform</div>
+                <div class="logo">{% if tenant %}{{ tenant.brand_config.logo_text }}{% else %}NewsLetterPlatform{% endif %}</div>
             </a>
-            <p class="subtitle">{% block header_subtitle %}멀티테넌트 뉴스레터 통합 플랫폼{% endblock %}</p>
+            <p class="subtitle">{% block header_subtitle %}{% if tenant %}{{ tenant.brand_config.tagline }}{% else %}멀티테넌트 뉴스레터 통합 플랫폼{% endif %}{% endblock %}</p>
         </header>
 
         {% block content %}{% endblock %}

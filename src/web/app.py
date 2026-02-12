@@ -33,6 +33,18 @@ templates = Jinja2Templates(directory=str(templates_dir))
 subscription_manager = SubscriptionManager()
 
 
+def resolve_template(tenant_id: str, template_name: str) -> str:
+    """테넌트별 템플릿 오버라이드 지원
+
+    overrides/{tenant_id}/{template_name} 파일이 존재하면 우선 사용,
+    없으면 기본 템플릿 반환.
+    """
+    override_path = templates_dir / "overrides" / tenant_id / template_name
+    if override_path.exists():
+        return f"overrides/{tenant_id}/{template_name}"
+    return template_name
+
+
 def get_db():
     """데이터베이스 세션"""
     SessionLocal = get_session_factory()
@@ -71,7 +83,7 @@ async def home(request: Request):
 async def subscribe_form(request: Request, tenant_id: str):
     """구독 신청 폼"""
     tenant = get_tenant_or_404(tenant_id)
-    return templates.TemplateResponse("subscribe.html", {
+    return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
         "request": request,
         "tenant": tenant,
     })
@@ -95,7 +107,7 @@ async def subscribe_submit(
         )
 
         if not success:
-            return templates.TemplateResponse("subscribe.html", {
+            return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
                 "request": request,
                 "tenant": tenant,
                 "error": code_or_msg,
@@ -120,7 +132,7 @@ async def subscribe_submit(
                 status_code=303
             )
         else:
-            return templates.TemplateResponse("subscribe.html", {
+            return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
                 "request": request,
                 "tenant": tenant,
                 "error": "이메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.",
@@ -131,7 +143,7 @@ async def subscribe_submit(
     except Exception as e:
         db.rollback()
         logger.error(f"구독 신청 처리 오류: {e}")
-        return templates.TemplateResponse("subscribe.html", {
+        return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
             "request": request,
             "tenant": tenant,
             "error": "오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
@@ -146,7 +158,7 @@ async def subscribe_submit(
 async def verify_form(request: Request, tenant_id: str, verification_id: int, email: str = ""):
     """인증코드 입력 폼"""
     tenant = get_tenant_or_404(tenant_id)
-    return templates.TemplateResponse("verify_code.html", {
+    return templates.TemplateResponse(resolve_template(tenant_id, "verify_code.html"), {
         "request": request,
         "tenant": tenant,
         "verification_id": verification_id,
@@ -173,7 +185,7 @@ async def verify_submit(
         )
 
         if not success:
-            return templates.TemplateResponse("verify_code.html", {
+            return templates.TemplateResponse(resolve_template(tenant_id, "verify_code.html"), {
                 "request": request,
                 "tenant": tenant,
                 "verification_id": verification_id,
@@ -190,7 +202,7 @@ async def verify_submit(
     except Exception as e:
         db.rollback()
         logger.error(f"인증 처리 오류: {e}")
-        return templates.TemplateResponse("verify_code.html", {
+        return templates.TemplateResponse(resolve_template(tenant_id, "verify_code.html"), {
             "request": request,
             "tenant": tenant,
             "verification_id": verification_id,
@@ -205,7 +217,7 @@ async def verify_submit(
 async def result_page(request: Request, tenant_id: str, email: str = ""):
     """구독 완료 페이지"""
     tenant = get_tenant_or_404(tenant_id)
-    return templates.TemplateResponse("result.html", {
+    return templates.TemplateResponse(resolve_template(tenant_id, "result.html"), {
         "request": request,
         "tenant": tenant,
         "email": email,
@@ -218,7 +230,7 @@ async def result_page(request: Request, tenant_id: str, email: str = ""):
 async def unsubscribe_form(request: Request, tenant_id: str):
     """구독 해지 신청 폼"""
     tenant = get_tenant_or_404(tenant_id)
-    return templates.TemplateResponse("unsubscribe_request.html", {
+    return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_request.html"), {
         "request": request,
         "tenant": tenant,
     })
@@ -241,7 +253,7 @@ async def unsubscribe_submit(
         )
 
         if not success:
-            return templates.TemplateResponse("unsubscribe_request.html", {
+            return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_request.html"), {
                 "request": request,
                 "tenant": tenant,
                 "error": code_or_msg,
@@ -265,7 +277,7 @@ async def unsubscribe_submit(
                 status_code=303
             )
         else:
-            return templates.TemplateResponse("unsubscribe_request.html", {
+            return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_request.html"), {
                 "request": request,
                 "tenant": tenant,
                 "error": "이메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.",
@@ -275,7 +287,7 @@ async def unsubscribe_submit(
     except Exception as e:
         db.rollback()
         logger.error(f"구독 해지 신청 오류: {e}")
-        return templates.TemplateResponse("unsubscribe_request.html", {
+        return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_request.html"), {
             "request": request,
             "tenant": tenant,
             "error": "오류가 발생했습니다.",
@@ -291,7 +303,7 @@ async def unsubscribe_verify_form(
 ):
     """구독 해지 인증코드 입력 폼"""
     tenant = get_tenant_or_404(tenant_id)
-    return templates.TemplateResponse("unsubscribe_verify.html", {
+    return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_verify.html"), {
         "request": request,
         "tenant": tenant,
         "verification_id": verification_id,
@@ -318,7 +330,7 @@ async def unsubscribe_verify_submit(
         )
 
         if not success:
-            return templates.TemplateResponse("unsubscribe_verify.html", {
+            return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_verify.html"), {
                 "request": request,
                 "tenant": tenant,
                 "verification_id": verification_id,
@@ -335,7 +347,7 @@ async def unsubscribe_verify_submit(
     except Exception as e:
         db.rollback()
         logger.error(f"구독 해지 인증 오류: {e}")
-        return templates.TemplateResponse("unsubscribe_verify.html", {
+        return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_verify.html"), {
             "request": request,
             "tenant": tenant,
             "verification_id": verification_id,
@@ -350,7 +362,7 @@ async def unsubscribe_verify_submit(
 async def unsubscribe_result_page(request: Request, tenant_id: str, email: str = ""):
     """구독 해지 완료 페이지"""
     tenant = get_tenant_or_404(tenant_id)
-    return templates.TemplateResponse("unsubscribe_result.html", {
+    return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_result.html"), {
         "request": request,
         "tenant": tenant,
         "email": email,
@@ -368,14 +380,14 @@ async def unsubscribe_by_token(request: Request, tenant_id: str, token: str):
         success, message, email = subscription_manager.unsubscribe_by_token(db, token)
 
         if not success:
-            return templates.TemplateResponse("unsubscribe_result.html", {
+            return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_result.html"), {
                 "request": request,
                 "tenant": tenant,
                 "error": message,
             })
 
         db.commit()
-        return templates.TemplateResponse("unsubscribe_result.html", {
+        return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_result.html"), {
             "request": request,
             "tenant": tenant,
             "email": email,
@@ -384,7 +396,7 @@ async def unsubscribe_by_token(request: Request, tenant_id: str, token: str):
     except Exception as e:
         db.rollback()
         logger.error(f"토큰 기반 구독 해지 오류: {e}")
-        return templates.TemplateResponse("unsubscribe_result.html", {
+        return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_result.html"), {
             "request": request,
             "tenant": tenant,
             "error": "오류가 발생했습니다.",
