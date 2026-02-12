@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     # 웹 서버
     web_host: str = Field(default="0.0.0.0", env="WEB_HOST")
     web_port: int = Field(default=4055, env="WEB_PORT")
+    web_base_url: str = Field(default="http://localhost:4055", env="WEB_BASE_URL")
 
     # 로깅
     log_level: str = Field(default="INFO", env="LOG_LEVEL")

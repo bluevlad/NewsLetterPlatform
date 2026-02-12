@@ -4,6 +4,7 @@ NewsLetterPlatform 웹 애플리케이션
 """
 
 import logging
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Form, HTTPException
@@ -14,6 +15,7 @@ from ..config import settings
 from ..common.database.repository import get_session_factory
 from ..common.subscription.manager import SubscriptionManager
 from ..common.subscription.email_service import send_verification_email
+from ..common.scheduler.jobs import send_welcome_newsletter
 from ..tenant.registry import get_registry
 
 logger = logging.getLogger(__name__)
@@ -194,6 +196,14 @@ async def verify_submit(
             })
 
         db.commit()
+
+        # 웰컴 뉴스레터 비동기 발송 (응답 지연 방지)
+        threading.Thread(
+            target=send_welcome_newsletter,
+            args=(tenant_id, email.strip().lower()),
+            daemon=True
+        ).start()
+
         return RedirectResponse(
             url=f"/{tenant_id}/result?email={email}",
             status_code=303
