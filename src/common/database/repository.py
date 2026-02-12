@@ -141,6 +141,24 @@ class SendHistoryRepository:
             .count() > 0
         )
 
+    @staticmethod
+    def get_sent_today_subscriber_ids(session: Session, tenant_id: str) -> set[int]:
+        """당일 발송 완료된 구독자 ID 일괄 조회 (N+1 방지)"""
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        rows = (
+            session.query(SendHistory.subscriber_id)
+            .filter(
+                and_(
+                    SendHistory.tenant_id == tenant_id,
+                    SendHistory.sent_at >= today_start,
+                    SendHistory.is_success == True
+                )
+            )
+            .distinct()
+            .all()
+        )
+        return {row[0] for row in rows}
+
 
 class CollectedDataRepository:
     """수집 데이터 저장소"""
