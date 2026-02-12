@@ -66,7 +66,8 @@ class GmailSender:
         try:
             message = MIMEMultipart("alternative")
             message["Subject"] = Header(subject, "utf-8")
-            message["From"] = f"{sender_name} <{self.sender_email}>"
+            safe_sender_name = sender_name.replace('\r', '').replace('\n', '').replace('\x00', '')
+            message["From"] = f"{safe_sender_name} <{self.sender_email}>"
             message["To"] = recipient
 
             html_part = MIMEText(html_content, "html", "utf-8")
