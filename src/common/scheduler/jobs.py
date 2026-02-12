@@ -99,9 +99,12 @@ def run_send_job(tenant_id: str) -> None:
             logger.warning(f"[{tenant_id}] 등록된 구독자가 없습니다.")
             return
 
+        # 당일 발송 완료된 구독자 ID 일괄 조회 (N+1 쿼리 방지)
+        sent_today_ids = SendHistoryRepository.get_sent_today_subscriber_ids(session, tenant_id)
+
         for subscriber in subscribers:
             try:
-                if SendHistoryRepository.already_sent_today(session, tenant_id, subscriber.id):
+                if subscriber.id in sent_today_ids:
                     logger.debug(f"[{tenant_id}] 이미 발송됨: {subscriber.email}")
                     continue
 
