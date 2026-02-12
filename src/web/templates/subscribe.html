@@ -1,11 +1,25 @@
 {% extends "base.html" %}
 
 {% block title %}구독 신청 - {{ tenant.display_name }}{% endblock %}
-{% block header_subtitle %}{{ tenant.display_name }}{% endblock %}
+{% block header_subtitle %}{{ tenant.brand_config.tagline }}{% endblock %}
 
 {% block content %}
 <div class="card">
     <h2>뉴스레터 구독 신청</h2>
+
+    {% if tenant.brand_config.features %}
+    <div class="features">
+        {% for feature in tenant.brand_config.features %}
+        <div class="feature-item">
+            <span class="feature-icon">{{ feature.icon | safe }}</span>
+            <div class="feature-text">
+                <strong>{{ feature.title }}</strong>
+                {{ feature.description }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     {% if error %}
     <div class="alert alert-error">{{ error }}</div>

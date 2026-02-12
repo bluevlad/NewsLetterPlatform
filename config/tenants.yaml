@@ -1,5 +1,6 @@
 # 테넌트 설정
 # 각 테넌트의 데이터 소스, 발송 스케줄, 이메일 설정을 정의합니다.
+# brand 섹션은 참조 문서용입니다. 실제 브랜드 설정은 각 테넌트의 config.py가 source of truth입니다.
 
 tenants:
   teacher-hub:
@@ -14,6 +15,11 @@ tenants:
       send_hour: 8
       send_minute: 0
     is_active: true
+    brand:
+      primary_color: "#3b82f6"
+      primary_color_dark: "#2563eb"
+      accent_color: "#60a5fa"
+      color_scheme: "Blue"
 
   academy-insight:
     display_name: "AcademyInsight 학원 동향 브리핑"
@@ -27,3 +33,8 @@ tenants:
       send_hour: 8
       send_minute: 10
     is_active: true
+    brand:
+      primary_color: "#8b5cf6"
+      primary_color_dark: "#7c3aed"
+      accent_color: "#a78bfa"
+      color_scheme: "Violet"
