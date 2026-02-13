@@ -17,7 +17,6 @@ class Settings(BaseSettings):
     # Gmail SMTP
     gmail_address: str = Field(default="", env="GMAIL_ADDRESS")
     gmail_app_password: str = Field(default="", env="GMAIL_APP_PASSWORD")
-    gmail_sender_address: str = Field(default="", env="GMAIL_SENDER_ADDRESS")
 
     # 데이터베이스
     database_url: str = Field(

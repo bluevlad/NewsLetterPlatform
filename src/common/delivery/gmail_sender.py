@@ -34,11 +34,10 @@ class GmailSender:
         sender_email: str = None,
         app_password: str = None
     ):
-        self.auth_email = sender_email or settings.gmail_address
+        self.sender_email = sender_email or settings.gmail_address
         self.app_password = app_password or settings.gmail_app_password
-        self.sender_email = settings.gmail_sender_address or self.auth_email
 
-        if not self.auth_email or not self.app_password:
+        if not self.sender_email or not self.app_password:
             logger.warning(
                 "Gmail 설정이 완료되지 않았습니다. "
                 ".env 파일에 GMAIL_ADDRESS와 GMAIL_APP_PASSWORD를 설정하세요."
@@ -47,7 +46,7 @@ class GmailSender:
     @property
     def is_configured(self) -> bool:
         """Gmail 설정 완료 여부"""
-        return bool(self.auth_email and self.app_password)
+        return bool(self.sender_email and self.app_password)
 
     def send(
         self,
@@ -70,15 +69,13 @@ class GmailSender:
             safe_sender_name = sender_name.replace('\r', '').replace('\n', '').replace('\x00', '')
             message["From"] = f"{safe_sender_name} <{self.sender_email}>"
             message["To"] = recipient
-            message["Reply-To"] = self.sender_email
-            message["Return-Path"] = self.sender_email
 
             html_part = MIMEText(html_content, "html", "utf-8")
             message.attach(html_part)
 
             with smtplib.SMTP(self.SMTP_SERVER, self.SMTP_PORT) as server:
                 server.starttls()
-                server.login(self.auth_email, self.app_password)
+                server.login(self.sender_email, self.app_password)
                 server.sendmail(
                     self.sender_email,
                     recipient,

@@ -29,7 +29,6 @@ jobs:
           # Gmail SMTP
           GMAIL_ADDRESS=${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD=${{ secrets.GMAIL_APP_PASSWORD }}
-          GMAIL_SENDER_ADDRESS=rainend99@gmail.com
 
           # Database
           DATABASE_URL=sqlite:///./data/newsletterplatform.db
