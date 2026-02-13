@@ -3,7 +3,8 @@
 """
 
 import json
-from datetime import datetime
+import logging
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
@@ -13,7 +14,7 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from .models import (
     Base, Subscriber, SendHistory, CollectedData,
-    EmailVerification, VerificationType
+    EmailVerification, VerificationType, JobExecution
 )
 
 
@@ -284,3 +285,98 @@ class EmailVerificationRepository:
         if verification_type:
             query = query.filter(EmailVerification.verification_type == verification_type)
         query.delete()
+
+
+logger = logging.getLogger(__name__)
+
+
+class JobExecutionRepository:
+    """Job 실행 이력 저장소 (멱등성 보장)"""
+
+    @staticmethod
+    def start_execution(session: Session, job_id: str, tenant_id: str) -> Optional[JobExecution]:
+        """Job 실행 시작 기록. 이미 당일 성공 기록이 있으면 None 반환 (멱등성)."""
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+
+        existing = session.query(JobExecution).filter(
+            and_(
+                JobExecution.job_id == job_id,
+                JobExecution.tenant_id == tenant_id,
+                JobExecution.execution_date == today,
+                JobExecution.status == "success"
+            )
+        ).first()
+
+        if existing:
+            return None  # 이미 오늘 성공했으므로 건너뜀
+
+        # running 상태의 이전 기록이 있으면 삭제 (재실행 허용)
+        session.query(JobExecution).filter(
+            and_(
+                JobExecution.job_id == job_id,
+                JobExecution.tenant_id == tenant_id,
+                JobExecution.execution_date == today,
+                JobExecution.status.in_(["running", "failed"])
+            )
+        ).delete(synchronize_session="fetch")
+
+        execution = JobExecution(
+            job_id=job_id,
+            tenant_id=tenant_id,
+            execution_date=today,
+            status="running"
+        )
+        session.add(execution)
+        session.flush()
+        return execution
+
+    @staticmethod
+    def mark_success(session: Session, execution_id: int) -> None:
+        execution = session.query(JobExecution).get(execution_id)
+        if execution:
+            execution.status = "success"
+            execution.finished_at = datetime.utcnow()
+            session.flush()
+
+    @staticmethod
+    def mark_failed(session: Session, execution_id: int, error_message: str) -> None:
+        execution = session.query(JobExecution).get(execution_id)
+        if execution:
+            execution.status = "failed"
+            execution.error_message = error_message
+            execution.finished_at = datetime.utcnow()
+            session.flush()
+
+
+class DataRetentionRepository:
+    """데이터 보존 정책 실행"""
+
+    @staticmethod
+    def cleanup_expired_verifications(session: Session, retention_days: int = 30) -> int:
+        """만료된 인증 코드 정리 (기본 30일)"""
+        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        count = session.query(EmailVerification).filter(
+            EmailVerification.created_at < cutoff
+        ).delete(synchronize_session="fetch")
+        logger.info("Data retention: deleted %d expired verifications (older than %d days)", count, retention_days)
+        return count
+
+    @staticmethod
+    def cleanup_old_send_history(session: Session, retention_days: int = 90) -> int:
+        """오래된 발송 이력 정리 (기본 90일)"""
+        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        count = session.query(SendHistory).filter(
+            SendHistory.sent_at < cutoff
+        ).delete(synchronize_session="fetch")
+        logger.info("Data retention: deleted %d old send history records (older than %d days)", count, retention_days)
+        return count
+
+    @staticmethod
+    def cleanup_old_job_executions(session: Session, retention_days: int = 30) -> int:
+        """오래된 Job 실행 이력 정리 (기본 30일)"""
+        cutoff = (datetime.utcnow() - timedelta(days=retention_days)).strftime("%Y-%m-%d")
+        count = session.query(JobExecution).filter(
+            JobExecution.execution_date < cutoff
+        ).delete(synchronize_session="fetch")
+        logger.info("Data retention: deleted %d old job execution records (older than %d days)", count, retention_days)
+        return count
