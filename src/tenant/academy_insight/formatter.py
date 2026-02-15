@@ -27,6 +27,11 @@ class AcademyInsightFormatter:
             "post_change": today - yesterday,
             "active_academies": summary.get("activeAcademies", 0),
             "total_posts": summary.get("totalPosts", 0),
+            "top_academy_name": summary.get("topAcademy", {}).get("name", "-"),
+            "top_academy_count": summary.get("topAcademy", {}).get("count", 0),
+            "top_source_name": summary.get("topSource", {}).get("name", "-"),
+            "top_source_type": summary.get("topSource", {}).get("sourceType", ""),
+            "top_source_count": summary.get("topSource", {}).get("count", 0),
         }
 
         # 트렌딩 게시글 (상위 10개)
@@ -38,6 +43,9 @@ class AcademyInsightFormatter:
                 "source": post.get("sourceName", ""),
                 "view_count": post.get("viewCount", 0),
                 "created_at": post.get("postedAt", ""),
+                "comment_count": post.get("commentCount", 0),
+                "engagement": post.get("engagement", 0),
+                "post_url": post.get("postUrl", ""),
             })
 
         # 학원 랭킹 (상위 10개)
@@ -48,12 +56,48 @@ class AcademyInsightFormatter:
                 "post_count": academy.get("weekCount", 0),
                 "avg_sentiment": academy.get("avgSentiment", 0),
                 "trend": academy.get("trend", "stable"),
+                "change": academy.get("change", 0),
+                "today_count": academy.get("todayCount", 0),
+                "yesterday_count": academy.get("yesterdayCount", 0),
             })
+
+        highlights = self._build_highlights(stats, formatted_posts)
 
         return {
             "stats": stats,
+            "highlights": highlights,
             "trending_posts": formatted_posts,
             "academy_ranking": formatted_ranking,
             "report_date": datetime.now(),
             "generated_at": datetime.now(),
         }
+
+    @staticmethod
+    def _build_highlights(stats: dict, trending_posts: list) -> list:
+        """데이터에서 주요 하이라이트 자동 생성"""
+        highlights = []
+
+        # topAcademy 하이라이트
+        top_academy = stats.get("top_academy_name", "-")
+        top_academy_count = stats.get("top_academy_count", 0)
+        if top_academy != "-" and top_academy_count > 0:
+            highlights.append(f"{top_academy} 오늘 최다 언급 ({top_academy_count}건)")
+
+        # topSource 하이라이트
+        top_source = stats.get("top_source_name", "-")
+        if top_source != "-":
+            highlights.append(f"{top_source}에서 가장 활발한 논의")
+
+        # engagement 높은 게시글 하이라이트
+        if trending_posts:
+            top_engagement = max(
+                trending_posts,
+                key=lambda p: p.get("engagement", 0),
+            )
+            engagement = top_engagement.get("engagement", 0)
+            title = top_engagement.get("title", "")
+            if engagement > 0 and title:
+                short_title = title[:30] + "..." if len(title) > 30 else title
+                highlights.append(f"'{short_title}' 높은 관심 (참여도 {engagement})")
+
+        return highlights

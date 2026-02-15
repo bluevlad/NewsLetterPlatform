@@ -57,6 +57,26 @@
                         </td>
                     </tr>
 
+                    <!-- Highlights -->
+                    {% if highlights %}
+                    <tr>
+                        <td style="padding: 0 1px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.6); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
+                                <tr>
+                                    <td style="padding: 24px 32px;">
+                                        <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;">오늘의 하이라이트</h2>
+                                        {% for highlight in highlights %}
+                                        <p style="margin: 0 0 8px 0; padding: 8px 12px; background: rgba(167, 139, 250, 0.1); border-radius: 6px; font-size: 14px; color: #e2e8f0; line-height: 1.5;">
+                                            {{ highlight }}
+                                        </p>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {% endif %}
+
                     <!-- Trending Posts -->
                     {% if trending_posts %}
                     <tr>
@@ -70,11 +90,11 @@
                                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 10px; background: rgba(15, 23, 42, 0.5); border-radius: 8px; border-left: 3px solid #a78bfa;">
                                             <tr>
                                                 <td style="padding: 12px 16px;">
-                                                    <p style="margin: 0; font-size: 14px; font-weight: 600; color: #f1f5f9;">
-                                                        {{ post.title | truncate_text(80) }}
+                                                    <p style="margin: 0; font-size: 14px; font-weight: 600;">
+                                                        {% if post.post_url %}<a href="{{ post.post_url }}" style="color: #f1f5f9; text-decoration: none;">{{ post.title | truncate_text(80) }}</a>{% else %}<span style="color: #f1f5f9;">{{ post.title | truncate_text(80) }}</span>{% endif %}
                                                     </p>
                                                     <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">
-                                                        {{ post.academy_name }} &middot; {{ post.source }} &middot; 조회 {{ post.view_count | format_number }}
+                                                        {{ post.academy_name }} &middot; {{ post.source }} &middot; 조회 {{ post.view_count | format_number }}{% if post.comment_count %} &middot; 댓글 {{ post.comment_count | format_number }}{% endif %}
                                                     </p>
                                                 </td>
                                             </tr>
@@ -105,11 +125,12 @@
                                                             <td>
                                                                 <p style="margin: 0; font-size: 14px; font-weight: 600; color: #f1f5f9;">
                                                                     {{ loop.index }}. {{ academy.name }}
+                                                                    {% if academy.change > 0 %}<span style="font-size: 12px; color: #10b981; font-weight: 400;">&nbsp;&#9650;{{ academy.change }}</span>{% elif academy.change < 0 %}<span style="font-size: 12px; color: #ef4444; font-weight: 400;">&nbsp;&#9660;{{ academy.change | abs }}</span>{% endif %}
                                                                 </p>
                                                             </td>
                                                             <td align="right" style="white-space: nowrap;">
                                                                 <p style="margin: 0; font-size: 13px; color: #a78bfa;">
-                                                                    게시글 {{ academy.post_count | format_number }}
+                                                                    주간 {{ academy.post_count | format_number }} &middot; 오늘 {{ academy.today_count | format_number }}
                                                                 </p>
                                                             </td>
                                                         </tr>
