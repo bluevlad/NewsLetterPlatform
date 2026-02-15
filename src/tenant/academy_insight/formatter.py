@@ -20,9 +20,11 @@ class AcademyInsightFormatter:
         academy_ranking = collected_data.get("academy_ranking", [])
 
         # 통계 정보
+        today = summary.get("todayPosts", 0)
+        yesterday = summary.get("yesterdayPosts", 0)
         stats = {
-            "today_posts": summary.get("todayPosts", 0),
-            "post_change": summary.get("postChange", 0),
+            "today_posts": today,
+            "post_change": today - yesterday,
             "active_academies": summary.get("activeAcademies", 0),
             "total_posts": summary.get("totalPosts", 0),
         }
@@ -33,17 +35,17 @@ class AcademyInsightFormatter:
             formatted_posts.append({
                 "title": post.get("title", ""),
                 "academy_name": post.get("academyName", ""),
-                "source": post.get("source", ""),
+                "source": post.get("sourceName", ""),
                 "view_count": post.get("viewCount", 0),
-                "created_at": post.get("createdAt", ""),
+                "created_at": post.get("postedAt", ""),
             })
 
         # 학원 랭킹 (상위 10개)
         formatted_ranking = []
         for academy in academy_ranking[:10]:
             formatted_ranking.append({
-                "name": academy.get("academyName", ""),
-                "post_count": academy.get("postCount", 0),
+                "name": academy.get("name", ""),
+                "post_count": academy.get("weekCount", 0),
                 "avg_sentiment": academy.get("avgSentiment", 0),
                 "trend": academy.get("trend", "stable"),
             })
