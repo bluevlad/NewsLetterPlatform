@@ -89,6 +89,29 @@ class CollectedData(Base):
         return f"<CollectedData(tenant={self.tenant_id}, type={self.data_type})>"
 
 
+class JobExecution(Base):
+    """스케줄러 Job 실행 이력 (멱등성 보장용)"""
+    __tablename__ = "job_executions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String(100), nullable=False)
+    tenant_id = Column(String(50), nullable=False)
+    execution_date = Column(String(10), nullable=False)  # YYYY-MM-DD
+    status = Column(String(20), nullable=False, default="running")  # running, success, failed
+    error_message = Column(Text)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint("job_id", "tenant_id", "execution_date", name="uq_job_execution_daily"),
+        Index("idx_job_exec_status", "status"),
+        Index("idx_job_exec_date", "execution_date"),
+    )
+
+    def __repr__(self):
+        return f"<JobExecution(job={self.job_id}, tenant={self.tenant_id}, date={self.execution_date})>"
+
+
 class EmailVerification(Base):
     """이메일 인증 코드"""
     __tablename__ = "email_verifications"

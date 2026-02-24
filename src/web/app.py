@@ -440,6 +440,28 @@ async def unsubscribe_by_token(request: Request, tenant_id: str, token: str):
         db.close()
 
 
+# ==================== Health Check ====================
+
+@app.get("/health")
+async def health_check():
+    """서비스 상태 확인"""
+    from sqlalchemy import text
+
+    status = {"status": "ok", "service": "NewsLetterPlatform"}
+    try:
+        SessionLocal = get_session_factory()
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+            status["database"] = "ok"
+        finally:
+            db.close()
+    except Exception:
+        status["database"] = "error"
+        status["status"] = "degraded"
+    return status
+
+
 # ==================== 서버 실행 ====================
 
 def run_server():
