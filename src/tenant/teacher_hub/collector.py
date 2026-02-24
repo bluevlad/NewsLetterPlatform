@@ -14,6 +14,7 @@ from typing import Any, Dict
 
 import httpx
 
+from ...common.utils import retry_async
 from ...config import settings
 
 logger = logging.getLogger(__name__)
@@ -28,12 +29,16 @@ class TeacherHubCollector:
         self.api_base_url = (api_base_url or settings.teacherhub_api_url).rstrip("/")
 
     async def _get(self, path: str, params: dict = None) -> Any:
-        """API GET 요청"""
+        """API GET 요청 (3회 재시도)"""
         url = f"{self.api_base_url}{path}"
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
-            return response.json()
+
+        async def _request():
+            async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                return response.json()
+
+        return await retry_async(_request)
 
     async def collect_daily_report(self) -> Dict:
         """일일 리포트 수집 - GET /reports/daily"""

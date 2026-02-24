@@ -5,6 +5,7 @@
 
 import asyncio
 import logging
+import time
 from datetime import datetime
 
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -16,6 +17,7 @@ from ..database.repository import (
 )
 from ..delivery.gmail_sender import get_sender
 from ..template.renderer import get_renderer
+from .health import update_health
 from ...config import settings
 from ...tenant.registry import get_registry
 
@@ -36,7 +38,11 @@ def run_collect_job(tenant_id: str) -> None:
         collected = asyncio.run(tenant.collect_data())
 
         if not collected:
-            logger.warning(f"[{tenant_id}] 수집된 데이터가 없습니다.")
+            logger.warning(
+                f"[{tenant_id}] 수집된 데이터가 없습니다. "
+                "이전 캐시 데이터로 발송됩니다."
+            )
+            update_health("collect")
             return
 
         with get_session() as session:
@@ -46,11 +52,16 @@ def run_collect_job(tenant_id: str) -> None:
         logger.info(f"[{tenant_id}] 데이터 수집 완료: {list(collected.keys())}")
 
     except Exception as e:
-        logger.exception(f"[{tenant_id}] 데이터 수집 중 오류: {e}")
+        logger.exception(
+            f"[{tenant_id}] 데이터 수집 중 오류: {e}. "
+            "이전 캐시 데이터로 발송됩니다."
+        )
+
+    update_health("collect")
 
 
 def run_send_job(tenant_id: str) -> None:
-    """뉴스레터 발송 작업"""
+    """뉴스레터 발송 작업 (배치 발송 + 실패 재시도)"""
     logger.info(f"[{tenant_id}] 뉴스레터 발송 시작")
 
     registry = get_registry()
@@ -65,15 +76,25 @@ def run_send_job(tenant_id: str) -> None:
         return
 
     renderer = get_renderer()
-    sent_count = 0
 
     with get_session() as session:
-        # 캐시된 수집 데이터 로드
-        collected_data = CollectedDataRepository.get_all_latest(session, tenant_id)
+        # 캐시된 수집 데이터 로드 (수집 시각 포함)
+        collected_with_time = CollectedDataRepository.get_all_latest_with_time(session, tenant_id)
 
-        if not collected_data:
+        if not collected_with_time:
             logger.warning(f"[{tenant_id}] 발송할 수집 데이터가 없습니다.")
             return
+
+        # 캐시 데이터 staleness 검사 (24시간 기준)
+        now = datetime.utcnow()
+        collected_data = {}
+        for data_type, (data_dict, collected_at) in collected_with_time.items():
+            collected_data[data_type] = data_dict
+            if collected_at and (now - collected_at).total_seconds() > 24 * 3600:
+                logger.warning(
+                    f"[{tenant_id}] '{data_type}' 데이터가 24시간 이상 경과 "
+                    f"(수집 시각: {collected_at.isoformat()}). 캐시 데이터로 발송합니다."
+                )
 
         # 데이터 포매팅
         try:
@@ -92,7 +113,7 @@ def run_send_job(tenant_id: str) -> None:
         # 이메일 제목
         subject = tenant.generate_subject()
 
-        # 구독자 조회 및 발송
+        # 구독자 조회
         subscribers = SubscriberRepository.get_all_active(session, tenant_id)
 
         if not subscribers:
@@ -102,41 +123,73 @@ def run_send_job(tenant_id: str) -> None:
         # 당일 발송 완료된 구독자 ID 일괄 조회 (N+1 쿼리 방지)
         sent_today_ids = SendHistoryRepository.get_sent_today_subscriber_ids(session, tenant_id)
 
+        # 발송 대상 메시지 리스트 구성
+        messages = []
+        target_subscribers = []
         for subscriber in subscribers:
-            try:
-                if subscriber.id in sent_today_ids:
-                    logger.debug(f"[{tenant_id}] 이미 발송됨: {subscriber.email}")
-                    continue
+            if subscriber.id in sent_today_ids:
+                logger.debug(f"[{tenant_id}] 이미 발송됨: {subscriber.email}")
+                continue
 
-                # 구독자별 해지 URL 치환
-                unsubscribe_url = (
-                    f"{settings.web_base_url}/{tenant_id}"
-                    f"/unsubscribe/token/{subscriber.unsubscribe_token}"
-                )
-                subscriber_html = html_content.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
+            unsubscribe_url = (
+                f"{settings.web_base_url}/{tenant_id}"
+                f"/unsubscribe/token/{subscriber.unsubscribe_token}"
+            )
+            subscriber_html = html_content.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
 
-                result = sender.send(
-                    recipient=subscriber.email,
-                    subject=subject,
-                    html_content=subscriber_html,
-                    sender_name=tenant.display_name
-                )
+            messages.append({
+                "recipient": subscriber.email,
+                "subject": subject,
+                "html_content": subscriber_html,
+                "sender_name": tenant.display_name,
+            })
+            target_subscribers.append(subscriber)
 
-                SendHistoryRepository.create(
-                    session, tenant_id, subscriber.id,
-                    subject, result.success, result.error_message
-                )
+        if not messages:
+            logger.info(f"[{tenant_id}] 발송 대상이 없습니다 (모두 발송 완료).")
+            update_health("send")
+            return
 
-                if result.success:
+        # 1차 배치 발송
+        results = sender.send_batch_efficient(messages)
+
+        # 1차 결과 기록
+        failed_items = []
+        sent_count = 0
+        for subscriber, msg, result in zip(target_subscribers, messages, results):
+            SendHistoryRepository.create(
+                session, tenant_id, subscriber.id,
+                subject, result.success, result.error_message
+            )
+            if result.success:
+                sent_count += 1
+            else:
+                failed_items.append((subscriber, msg))
+                logger.error(f"[{tenant_id}] 발송 실패: {subscriber.email} - {result.error_message}")
+
+        # 2차 재시도 (실패 건)
+        if failed_items:
+            logger.info(f"[{tenant_id}] {len(failed_items)}건 재시도 (5초 후)")
+            time.sleep(5)
+
+            retry_messages = [msg for _, msg in failed_items]
+            retry_results = sender.send_batch_efficient(retry_messages)
+
+            for (subscriber, _), retry_result in zip(failed_items, retry_results):
+                if retry_result.success:
+                    SendHistoryRepository.create(
+                        session, tenant_id, subscriber.id,
+                        subject, True, None
+                    )
                     sent_count += 1
-                    logger.info(f"[{tenant_id}] 발송 성공: {subscriber.email}")
+                    logger.info(f"[{tenant_id}] 재시도 발송 성공: {subscriber.email}")
                 else:
-                    logger.error(f"[{tenant_id}] 발송 실패: {subscriber.email} - {result.error_message}")
+                    logger.error(
+                        f"[{tenant_id}] 재시도 발송 실패: {subscriber.email} - {retry_result.error_message}"
+                    )
 
-            except Exception as e:
-                logger.error(f"[{tenant_id}] 발송 중 오류 ({subscriber.email}): {e}")
-
-    logger.info(f"[{tenant_id}] 뉴스레터 발송 완료: {sent_count}건")
+    logger.info(f"[{tenant_id}] 뉴스레터 발송 완료: {sent_count}/{len(messages)}건")
+    update_health("send")
 
 
 def send_welcome_newsletter(tenant_id: str, email: str) -> bool:

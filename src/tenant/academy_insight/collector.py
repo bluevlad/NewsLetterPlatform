@@ -8,6 +8,7 @@ from typing import Any, Dict
 
 import httpx
 
+from ...common.utils import retry_async
 from ...config import settings
 
 logger = logging.getLogger(__name__)
@@ -22,12 +23,16 @@ class AcademyInsightCollector:
         self.api_base_url = (api_base_url or settings.academy_insight_api_url).rstrip("/")
 
     async def _get(self, path: str) -> Any:
-        """API GET 요청 ({success, data} 엔벨로프 자동 언래핑)"""
+        """API GET 요청 (3회 재시도, {success, data} 엔벨로프 자동 언래핑)"""
         url = f"{self.api_base_url}{path}"
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            body = response.json()
+
+        async def _request():
+            async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                return response.json()
+
+        body = await retry_async(_request)
 
         if isinstance(body, dict) and "data" in body:
             return body["data"]

@@ -20,10 +20,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "python", "-c", "from src.common.scheduler.health import check_health; exit(0 if check_health() else 1)"]
       interval: 5m
       timeout: 10s
       retries: 3
+      start_period: 2m
     logging:
       driver: "json-file"
       options:

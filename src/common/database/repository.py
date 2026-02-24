@@ -231,6 +231,40 @@ class CollectedDataRepository:
         return result
 
 
+    @staticmethod
+    def get_all_latest_with_time(session: Session, tenant_id: str) -> dict:
+        """테넌트의 모든 최신 수집 데이터와 수집 시각 함께 반환
+
+        Returns:
+            {data_type: (data_dict, collected_at)}
+        """
+        from sqlalchemy import func
+
+        subquery = (
+            session.query(
+                CollectedData.data_type,
+                func.max(CollectedData.id).label("max_id")
+            )
+            .filter(CollectedData.tenant_id == tenant_id)
+            .group_by(CollectedData.data_type)
+            .subquery()
+        )
+
+        records = (
+            session.query(CollectedData)
+            .join(subquery, CollectedData.id == subquery.c.max_id)
+            .all()
+        )
+
+        result = {}
+        for record in records:
+            result[record.data_type] = (
+                json.loads(record.data_json),
+                record.collected_at,
+            )
+        return result
+
+
 class EmailVerificationRepository:
     """이메일 인증 저장소"""
 
