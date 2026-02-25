@@ -1,5 +1,9 @@
 """
 AcademyInsight 테넌트 구현
+
+[DEPRECATED] Phase 2 (2026-02) - teacher-hub 테넌트로 통합됨.
+이 모듈은 참조용으로 보존되며, 실제 등록/사용되지 않습니다.
+구독자 마이그레이션: scripts/migrate_subscribers.py 참조.
 """
 
 from typing import Any, Dict

@@ -6,6 +6,7 @@ Data Sources:
   - daily_report: PeriodReportDTO (totalTeachers, totalMentions, avgSentimentScore, teacherSummaries)
   - weekly_summary: WeeklySummaryDTO (totalMentions, totalTeachers, avgSentimentScore, weekLabel)
   - weekly_ranking: List<WeeklyReportDTO> (teacherName, academyName, mentionCount, avgSentimentScore)
+  - academy_stats: List (academyName, postCount/mentionCount, avgSentiment) — AcademyInsight 통합
 """
 
 import logging
@@ -71,15 +72,40 @@ class TeacherHubFormatter:
             "highlights": highlights,
         }
 
+        # 학원 랭킹 (academy_stats에서 변환)
+        academy_stats = collected_data.get("academy_stats", [])
+        academy_ranking = self._format_academy_ranking(academy_stats)
+
         return {
             "stats": stats,
             "top_teachers": top_teachers,
             "ranking": weekly_ranking[:10],
             "report": report_details,
+            "academy_ranking": academy_ranking,
             "week_label": week_label,
             "report_date": datetime.now(),
             "generated_at": datetime.now(),
         }
+
+    @staticmethod
+    def _format_academy_ranking(academy_stats: list) -> list:
+        """학원 통계 데이터를 랭킹 형태로 변환"""
+        ranking = []
+        for academy in academy_stats[:10]:
+            mention_count = (
+                academy.get("mentionCount")
+                or academy.get("postCount", 0)
+            )
+            avg_sentiment = academy.get("avgSentiment", 0) or 0
+            if avg_sentiment <= 1:
+                avg_sentiment = round(avg_sentiment * 100, 1)
+            ranking.append({
+                "name": academy.get("academyName", ""),
+                "mention_count": mention_count,
+                "avg_sentiment": avg_sentiment,
+                "trend": academy.get("trend", "stable"),
+            })
+        return ranking
 
     @staticmethod
     def _extract_highlights(daily_report: dict, weekly_ranking: list) -> list:

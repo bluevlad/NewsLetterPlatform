@@ -19,7 +19,6 @@ from src.common.scheduler.jobs import (
 )
 from src.tenant.registry import get_registry
 from src.tenant.teacher_hub import TeacherHubTenant
-from src.tenant.academy_insight import AcademyInsightTenant
 
 # 로깅 설정
 logging.basicConfig(
@@ -38,10 +37,9 @@ logger = logging.getLogger(__name__)
 
 
 def register_tenants():
-    """테넌트 등록"""
+    """테넌트 등록 (academy-insight는 teacher-hub로 통합됨)"""
     registry = get_registry()
     registry.register(TeacherHubTenant())
-    registry.register(AcademyInsightTenant())
     logger.info(f"테넌트 등록 완료: {registry.get_active_ids()}")
 
 

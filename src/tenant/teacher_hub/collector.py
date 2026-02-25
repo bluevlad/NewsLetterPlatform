@@ -7,6 +7,7 @@ API Endpoints:
   - GET /weekly/summary         → 주간 요약 통계 (WeeklySummaryDTO)
   - GET /weekly/ranking         → 주간 강사 랭킹 (List<WeeklyReportDTO>)
   - GET /weekly/current         → 현재 주차 정보
+  - GET /analysis/academy-stats → 학원 통계 (AcademyInsight 통합)
 """
 
 import logging
@@ -104,6 +105,19 @@ class TeacherHubCollector:
             logger.error(f"TeacherHub 주간 랭킹 수집 실패: {e}")
             return []
 
+    async def collect_academy_stats(self) -> list:
+        """학원 통계 수집 - GET /analysis/academy-stats"""
+        try:
+            data = await self._get("/analysis/academy-stats")
+            # {success, data} 엔벨로프 자동 언래핑
+            if isinstance(data, dict) and "data" in data:
+                data = data["data"]
+            logger.info(f"TeacherHub 학원 통계 수집 완료: {len(data) if isinstance(data, list) else 0}건")
+            return data if isinstance(data, list) else []
+        except Exception as e:
+            logger.error(f"TeacherHub 학원 통계 수집 실패: {e}")
+            return []
+
     async def collect_all(self) -> Dict[str, Any]:
         """전체 데이터 수집 (개별 에러 처리)"""
         result = {}
@@ -119,6 +133,10 @@ class TeacherHubCollector:
         weekly_ranking = await self.collect_weekly_ranking()
         if weekly_ranking:
             result["weekly_ranking"] = weekly_ranking
+
+        academy_stats = await self.collect_academy_stats()
+        if academy_stats:
+            result["academy_stats"] = academy_stats
 
         logger.info(f"TeacherHub 전체 수집 완료: {list(result.keys())}")
         return result

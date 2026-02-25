@@ -119,6 +119,47 @@
                     </tr>
                     {% endif %}
 
+                    <!-- Academy Ranking -->
+                    {% if academy_ranking %}
+                    <tr>
+                        <td style="padding: 0 1px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.6); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
+                                <tr>
+                                    <td style="padding: 24px 32px;">
+                                        <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;">학원 랭킹</h2>
+
+                                        {% for academy in academy_ranking %}
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 10px; background: rgba(15, 23, 42, 0.5); border-radius: 8px; border-left: 3px solid {% if loop.index <= 3 %}#a78bfa{% else %}#475569{% endif %};">
+                                            <tr>
+                                                <td style="padding: 12px 16px;">
+                                                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                                                        <tr>
+                                                            <td>
+                                                                <p style="margin: 0; font-size: 14px; font-weight: 600; color: #f1f5f9;">
+                                                                    {{ loop.index }}. {{ academy.name }}
+                                                                </p>
+                                                            </td>
+                                                            <td align="right" style="white-space: nowrap;">
+                                                                <p style="margin: 0; font-size: 13px; color: #a78bfa;">
+                                                                    언급 {{ academy.mention_count | format_number }}회
+                                                                </p>
+                                                                <p style="margin: 4px 0 0 0; font-size: 13px; color: {% if academy.avg_sentiment >= 70 %}#10b981{% elif academy.avg_sentiment >= 40 %}#f59e0b{% else %}#ef4444{% endif %};">
+                                                                    감성 {{ academy.avg_sentiment | format_percent }}
+                                                                </p>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {% endif %}
+
                     <!-- Footer -->
                     <tr>
                         <td style="padding: 24px 32px; background: rgba(30, 41, 59, 0.5); border-radius: 0 0 16px 16px; border: 1px solid rgba(148, 163, 184, 0.1); border-top: none;">
@@ -126,7 +167,7 @@
                                 <a href="__UNSUBSCRIBE_URL__" style="color: #94a3b8; font-size: 12px; text-decoration: underline;">구독 해지</a>
                             </p>
                             <p style="margin: 0; font-size: 12px; color: #64748b; text-align: center;">
-                                &copy; 2025 TeacherHub 강사 평판 브리핑<br>
+                                &copy; 2025 TeacherHub 강사·학원 평판 브리핑<br>
                                 이 메일은 자동 발송되었습니다.<br>
                                 <span style="color: #475569;">Generated at {{ generated_at | format_date('%Y-%m-%d %H:%M') }}</span>
                             </p>
