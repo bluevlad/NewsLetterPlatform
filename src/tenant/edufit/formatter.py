@@ -8,6 +8,7 @@ Data Sources:
   - weekly_ranking: List[WeeklyTeacherReport] (teacherName, academyName, mentionCount, avgSentimentScore, recommendationCount, topKeywords)
   - analysis_summary: AnalysisSummary (totalMentions, totalRecommendations, totalTeachers, avgSentimentScore)
   - academy_stats: List[AcademyStats] (academyName, totalMentions, totalTeachersMentioned, avgSentimentScore, topTeacherName)
+  - academies: List[AcademyResponse] (id, name, name_en, code, is_active)
 """
 
 import logging
@@ -83,9 +84,18 @@ class EduFitFormatter:
             "highlights": highlights,
         }
 
-        # 학원 랭킹 (academy_stats에서 변환)
+        # 학원 데이터
         academy_stats = collected_data.get("academy_stats", [])
+        academies = collected_data.get("academies", [])
         academy_ranking = self._format_academy_ranking(academy_stats)
+        academy_list = self._format_academy_list(academies, academy_stats)
+
+        # 학원 요약 통계
+        academy_summary = {
+            "total_academies": len(academies),
+            "total_academy_mentions": sum(a.get("totalMentions", 0) for a in academy_stats),
+            "total_teachers_mentioned": sum(a.get("totalTeachersMentioned", 0) for a in academy_stats),
+        }
 
         return {
             "stats": stats,
@@ -93,6 +103,8 @@ class EduFitFormatter:
             "ranking": weekly_ranking[:10],
             "report": report_details,
             "academy_ranking": academy_ranking,
+            "academy_list": academy_list,
+            "academy_summary": academy_summary,
             "report_date": datetime.now(),
             "generated_at": datetime.now(),
         }
@@ -113,6 +125,30 @@ class EduFitFormatter:
                 "top_teacher": academy.get("topTeacherName", ""),
             })
         return ranking
+
+    @staticmethod
+    def _format_academy_list(academies: list, academy_stats: list) -> list:
+        """등록 학원 목록을 통계와 결합"""
+        # academy_stats를 이름 기준 딕셔너리로
+        stats_map = {a.get("academyName", ""): a for a in academy_stats}
+
+        result = []
+        for academy in academies:
+            name = academy.get("name", "")
+            stat = stats_map.get(name, {})
+            avg_sentiment = stat.get("avgSentimentScore", 0) or 0
+            if avg_sentiment and avg_sentiment <= 1:
+                avg_sentiment = round(avg_sentiment * 100, 1)
+            result.append({
+                "name": name,
+                "code": academy.get("code", ""),
+                "total_mentions": stat.get("totalMentions", 0),
+                "teacher_count": stat.get("totalTeachersMentioned", 0),
+                "avg_sentiment": avg_sentiment,
+                "top_teacher": stat.get("topTeacherName", ""),
+                "is_active": academy.get("is_active", True),
+            })
+        return result
 
     @staticmethod
     def _extract_highlights(daily_report: dict, weekly_ranking: list, analysis_summary: dict) -> list:

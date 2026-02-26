@@ -8,6 +8,7 @@ API Endpoints:
   - GET /weekly/ranking         → 주간 강사 랭킹 (List[WeeklyTeacherReport])
   - GET /analysis/summary       → 분석 요약 (AnalysisSummary)
   - GET /analysis/academy-stats → 학원 통계 (List[AcademyStats])
+  - GET /academies              → 등록 학원 목록 (List[AcademyResponse])
 
 Note: /weekly/current 엔드포인트 없음 → ISO week 직접 계산
 """
@@ -120,6 +121,16 @@ class EduFitCollector:
             logger.error(f"EduFit 학원 통계 수집 실패: {e}")
             return []
 
+    async def collect_academies(self) -> list:
+        """등록 학원 목록 수집 - GET /academies"""
+        try:
+            data = await self._get("/academies")
+            logger.info(f"EduFit 학원 목록 수집 완료: {len(data) if isinstance(data, list) else 0}건")
+            return data if isinstance(data, list) else []
+        except Exception as e:
+            logger.error(f"EduFit 학원 목록 수집 실패: {e}")
+            return []
+
     async def collect_all(self) -> Dict[str, Any]:
         """전체 데이터 수집 (개별 에러 처리)"""
         result = {}
@@ -143,6 +154,10 @@ class EduFitCollector:
         academy_stats = await self.collect_academy_stats()
         if academy_stats:
             result["academy_stats"] = academy_stats
+
+        academies = await self.collect_academies()
+        if academies:
+            result["academies"] = academies
 
         logger.info(f"EduFit 전체 수집 완료: {list(result.keys())}")
         return result

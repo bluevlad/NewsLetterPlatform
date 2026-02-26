@@ -5,7 +5,7 @@ EduFit 테넌트 설정
 from ..base import BrandConfig, BrandFeature
 
 TENANT_ID = "edufit"
-DISPLAY_NAME = "EduFit 강사 평판 브리핑"
+DISPLAY_NAME = "EduFit 강사·학원 분석 브리핑"
 EMAIL_SUBJECT_PREFIX = "[EduFit]"
 EMAIL_TEMPLATE = "edufit/daily_report.html"
 
@@ -14,7 +14,7 @@ BRAND_CONFIG = BrandConfig(
     primary_color_dark="#059669",
     accent_color="#34d399",
     logo_text="EduFit",
-    tagline="강사 평판 분석 뉴스레터",
+    tagline="강사·학원 평판 분석 뉴스레터",
     description="강사 평판 분석과 학원 동향 브리핑을 매일 아침 이메일로 받아보세요",
     features=[
         BrandFeature(

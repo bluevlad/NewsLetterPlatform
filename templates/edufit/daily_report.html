@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduFit 강사 평판 브리핑</title>
+    <title>EduFit 강사·학원 분석 브리핑</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0f172a;">
@@ -18,38 +18,72 @@
                                 EduFit
                             </h1>
                             <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 15px;">
-                                강사 평판 브리핑 &middot; {{ report_date | format_date('%Y년 %m월 %d일') }}
+                                강사·학원 분석 브리핑 &middot; {{ report_date | format_date('%Y년 %m월 %d일') }}
                             </p>
                         </td>
                     </tr>
 
-                    <!-- Stats Summary -->
+                    <!-- Stats Summary: 강사 -->
                     <tr>
                         <td style="padding: 0 1px;">
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.8); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
                                 <tr>
-                                    <td style="padding: 24px 32px;">
+                                    <td style="padding: 20px 32px 8px 32px;">
+                                        <p style="margin: 0; font-size: 13px; font-weight: 600; color: #10b981; text-transform: uppercase; letter-spacing: 1px;">강사 분석</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 32px 12px 32px;">
                                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                             <tr>
-                                                <td width="20%" align="center" style="padding: 8px;">
+                                                <td width="25%" align="center" style="padding: 8px;">
                                                     <p style="margin: 0; font-size: 24px; font-weight: 700; color: #10b981;">{{ stats.total_teachers | format_number }}</p>
                                                     <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">총 강사</p>
                                                 </td>
-                                                <td width="20%" align="center" style="padding: 8px;">
+                                                <td width="25%" align="center" style="padding: 8px;">
                                                     <p style="margin: 0; font-size: 24px; font-weight: 700; color: #34d399;">{{ stats.total_mentions | format_number }}</p>
                                                     <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">총 언급수</p>
                                                 </td>
-                                                <td width="20%" align="center" style="padding: 8px;">
+                                                <td width="25%" align="center" style="padding: 8px;">
                                                     <p style="margin: 0; font-size: 24px; font-weight: 700; color: #f59e0b;">{{ stats.avg_sentiment | format_percent }}</p>
                                                     <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">평균 감성</p>
                                                 </td>
-                                                <td width="20%" align="center" style="padding: 8px;">
-                                                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: #a78bfa;">{{ stats.new_mentions_today | format_number }}</p>
-                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">오늘 신규</p>
-                                                </td>
-                                                <td width="20%" align="center" style="padding: 8px;">
+                                                <td width="25%" align="center" style="padding: 8px;">
                                                     <p style="margin: 0; font-size: 24px; font-weight: 700; color: #fb923c;">{{ stats.total_recommendations | format_number }}</p>
                                                     <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">추천 수</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Stats Summary: 학원 -->
+                    <tr>
+                        <td style="padding: 0 1px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.8); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
+                                <tr>
+                                    <td style="padding: 12px 32px 8px 32px;">
+                                        <p style="margin: 0; font-size: 13px; font-weight: 600; color: #a78bfa; text-transform: uppercase; letter-spacing: 1px;">학원 분석</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 32px 20px 32px;">
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                                            <tr>
+                                                <td width="33%" align="center" style="padding: 8px;">
+                                                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: #a78bfa;">{{ academy_summary.total_academies | format_number }}</p>
+                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">등록 학원</p>
+                                                </td>
+                                                <td width="33%" align="center" style="padding: 8px;">
+                                                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: #c4b5fd;">{{ academy_summary.total_academy_mentions | format_number }}</p>
+                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">학원 언급수</p>
+                                                </td>
+                                                <td width="33%" align="center" style="padding: 8px;">
+                                                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: #8b5cf6;">{{ academy_summary.total_teachers_mentioned | format_number }}</p>
+                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">언급 강사수</p>
                                                 </td>
                                             </tr>
                                         </table>
@@ -128,14 +162,66 @@
                     </tr>
                     {% endif %}
 
-                    <!-- Academy Ranking -->
+                    <!-- Academy Analysis -->
+                    {% if academy_list %}
+                    <tr>
+                        <td style="padding: 0 1px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.6); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
+                                <tr>
+                                    <td style="padding: 24px 32px;">
+                                        <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;">학원별 분석</h2>
+
+                                        {% for academy in academy_list %}
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 10px; background: rgba(15, 23, 42, 0.5); border-radius: 8px; border-left: 3px solid {% if loop.index <= 3 %}#a78bfa{% else %}#475569{% endif %};">
+                                            <tr>
+                                                <td style="padding: 12px 16px;">
+                                                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                                                        <tr>
+                                                            <td>
+                                                                <p style="margin: 0; font-size: 14px; font-weight: 600; color: #f1f5f9;">
+                                                                    {{ loop.index }}. {{ academy.name }}
+                                                                </p>
+                                                                {% if academy.top_teacher %}
+                                                                <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">
+                                                                    TOP 강사: {{ academy.top_teacher }}
+                                                                </p>
+                                                                {% endif %}
+                                                            </td>
+                                                            <td align="right" style="white-space: nowrap;">
+                                                                {% if academy.total_mentions > 0 %}
+                                                                <p style="margin: 0; font-size: 13px; color: #a78bfa;">
+                                                                    언급 {{ academy.total_mentions | format_number }}회
+                                                                </p>
+                                                                <p style="margin: 4px 0 0 0; font-size: 13px; color: {% if academy.avg_sentiment >= 70 %}#10b981{% elif academy.avg_sentiment >= 40 %}#f59e0b{% else %}#ef4444{% endif %};">
+                                                                    감성 {{ academy.avg_sentiment | format_percent }}
+                                                                </p>
+                                                                {% else %}
+                                                                <p style="margin: 0; font-size: 12px; color: #64748b;">
+                                                                    데이터 수집 중
+                                                                </p>
+                                                                {% endif %}
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {% endif %}
+
+                    <!-- Academy Ranking (analysis data) -->
                     {% if academy_ranking %}
                     <tr>
                         <td style="padding: 0 1px;">
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.6); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
                                 <tr>
                                     <td style="padding: 24px 32px;">
-                                        <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;">학원 랭킹</h2>
+                                        <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;">학원 언급 랭킹</h2>
 
                                         {% for academy in academy_ranking %}
                                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 10px; background: rgba(15, 23, 42, 0.5); border-radius: 8px; border-left: 3px solid {% if loop.index <= 3 %}#10b981{% else %}#475569{% endif %};">
@@ -181,7 +267,7 @@
                                 <a href="__UNSUBSCRIBE_URL__" style="color: #94a3b8; font-size: 12px; text-decoration: underline;">구독 해지</a>
                             </p>
                             <p style="margin: 0; font-size: 12px; color: #64748b; text-align: center;">
-                                &copy; 2025 EduFit 강사 평판 브리핑<br>
+                                &copy; 2025 EduFit 강사·학원 분석 브리핑<br>
                                 이 메일은 자동 발송되었습니다.<br>
                                 <span style="color: #475569;">Generated at {{ generated_at | format_date('%Y-%m-%d %H:%M') }}</span>
                             </p>
