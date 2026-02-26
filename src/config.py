@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     academy_send_hour: int = Field(default=8, env="ACADEMY_SEND_HOUR")
     academy_send_minute: int = Field(default=10, env="ACADEMY_SEND_MINUTE")
 
+    # 스케줄러 - EduFit
+    edufit_collect_hour: int = Field(default=7, env="EDUFIT_COLLECT_HOUR")
+    edufit_collect_minute: int = Field(default=20, env="EDUFIT_COLLECT_MINUTE")
+    edufit_send_hour: int = Field(default=8, env="EDUFIT_SEND_HOUR")
+    edufit_send_minute: int = Field(default=20, env="EDUFIT_SEND_MINUTE")
+
     # 테넌트 API URLs
     teacherhub_api_url: str = Field(
         default="http://localhost:8081/api/v2",
@@ -44,6 +50,10 @@ class Settings(BaseSettings):
     academy_insight_api_url: str = Field(
         default="http://localhost:8082/api",
         env="ACADEMY_INSIGHT_API_URL"
+    )
+    edufit_api_url: str = Field(
+        default="http://localhost:9070/api/v1",
+        env="EDUFIT_API_URL"
     )
 
     # 웹 서버

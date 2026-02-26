@@ -19,6 +19,7 @@ from src.common.scheduler.jobs import (
 )
 from src.tenant.registry import get_registry
 from src.tenant.teacher_hub import TeacherHubTenant
+from src.tenant.edufit import EduFitTenant
 
 # 로깅 설정
 logging.basicConfig(
@@ -40,6 +41,7 @@ def register_tenants():
     """테넌트 등록 (academy-insight는 teacher-hub로 통합됨)"""
     registry = get_registry()
     registry.register(TeacherHubTenant())
+    registry.register(EduFitTenant())
     logger.info(f"테넌트 등록 완료: {registry.get_active_ids()}")
 
 
