@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     edufit_send_hour: int = Field(default=8, env="EDUFIT_SEND_HOUR")
     edufit_send_minute: int = Field(default=20, env="EDUFIT_SEND_MINUTE")
 
+    # 스케줄러 - AllergyInsight
+    allergy_collect_hour: int = Field(default=7, env="ALLERGY_COLLECT_HOUR")
+    allergy_collect_minute: int = Field(default=30, env="ALLERGY_COLLECT_MINUTE")
+    allergy_send_hour: int = Field(default=8, env="ALLERGY_SEND_HOUR")
+    allergy_send_minute: int = Field(default=30, env="ALLERGY_SEND_MINUTE")
+
     # 테넌트 API URLs
     teacherhub_api_url: str = Field(
         default="http://localhost:8081/api/v2",
@@ -54,6 +60,14 @@ class Settings(BaseSettings):
     edufit_api_url: str = Field(
         default="http://localhost:9070/api/v1",
         env="EDUFIT_API_URL"
+    )
+    allergy_insight_api_url: str = Field(
+        default="http://localhost:4050",
+        env="ALLERGY_INSIGHT_API_URL"
+    )
+    allergy_insight_api_token: str = Field(
+        default="",
+        env="ALLERGY_INSIGHT_API_TOKEN"
     )
 
     # 웹 서버

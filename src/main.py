@@ -20,6 +20,7 @@ from src.common.scheduler.jobs import (
 from src.tenant.registry import get_registry
 from src.tenant.teacher_hub import TeacherHubTenant
 from src.tenant.edufit import EduFitTenant
+from src.tenant.allergy_insight import AllergyInsightTenant
 
 # 로깅 설정
 logging.basicConfig(
@@ -42,6 +43,7 @@ def register_tenants():
     registry = get_registry()
     registry.register(TeacherHubTenant())
     registry.register(EduFitTenant())
+    registry.register(AllergyInsightTenant())
     logger.info(f"테넌트 등록 완료: {registry.get_active_ids()}")
 
 
