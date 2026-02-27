@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-멀티테넌트 뉴스레터 통합 플랫폼 - TeacherHub, AcademyInsight 등 에이전트 분석 데이터를 뉴스레터로 발송
+멀티테넌트 뉴스레터 통합 플랫폼 - EduFit, AllergyInsight 뉴스레터 발송
 
 ## Environment
 
@@ -54,7 +54,7 @@ docker compose -f docker-compose.prod.yml up -d  # 운영
 pytest tests/
 ```
 
-Default server port: 4055 (Phase 1) → 4050 (Phase 2)
+Default server port: 4050
 
 ## Project Structure
 
@@ -66,8 +66,8 @@ NewsLetterPlatform/
 │   ├── common/              # 공통 모듈 (구독, 발송, 템플릿, 스케줄러, DB)
 │   ├── tenant/              # 테넌트별 모듈 (collector, formatter)
 │   │   ├── base.py          # 테넌트 인터페이스 (ABC)
-│   │   ├── teacher_hub/     # TeacherHub 테넌트
-│   │   └── academy_insight/ # AcademyInsight 테넌트
+│   │   ├── edufit/          # EduFit 테넌트 (AcademyInsight+TeacherHub 통합)
+│   │   └── allergy_insight/ # AllergyInsight 테넌트 (HealthPulse 통합)
 │   └── web/                 # FastAPI 웹 앱
 ├── templates/               # 이메일 HTML 템플릿
 ├── config/                  # tenants.yaml 등 설정 파일
@@ -95,8 +95,8 @@ NewsLetterPlatform/
 
 | 서비스 | 포트 | Docker 컨테이너명 |
 |--------|------|-------------------|
-| TeacherHub Backend | 8081 | teacherhub-backend |
-| AcademyInsight Backend | 8082 | academycafehub-backend |
+| EduFit Backend | 9070 | edufit-backend |
+| AllergyInsight Backend | 9040 | allergyinsight-backend |
 
 ## Configuration
 
@@ -108,6 +108,6 @@ NewsLetterPlatform/
 
 - **CI/CD**: GitHub Actions (prod 브랜치 push 시 자동 배포)
 - **네트워크**: unmong-network (외부)
-- **운영 포트**: 4055 (Phase 1) → 4050 (Phase 2)
+- **운영 포트**: 4050
 
 > 로컬 환경 정보는 `CLAUDE.local.md` 참조 (git에 포함되지 않음)

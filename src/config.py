@@ -24,18 +24,6 @@ class Settings(BaseSettings):
         env="DATABASE_URL"
     )
 
-    # 스케줄러 - TeacherHub
-    teacherhub_collect_hour: int = Field(default=7, env="TEACHERHUB_COLLECT_HOUR")
-    teacherhub_collect_minute: int = Field(default=0, env="TEACHERHUB_COLLECT_MINUTE")
-    teacherhub_send_hour: int = Field(default=8, env="TEACHERHUB_SEND_HOUR")
-    teacherhub_send_minute: int = Field(default=0, env="TEACHERHUB_SEND_MINUTE")
-
-    # 스케줄러 - AcademyInsight
-    academy_collect_hour: int = Field(default=7, env="ACADEMY_COLLECT_HOUR")
-    academy_collect_minute: int = Field(default=10, env="ACADEMY_COLLECT_MINUTE")
-    academy_send_hour: int = Field(default=8, env="ACADEMY_SEND_HOUR")
-    academy_send_minute: int = Field(default=10, env="ACADEMY_SEND_MINUTE")
-
     # 스케줄러 - EduFit
     edufit_collect_hour: int = Field(default=7, env="EDUFIT_COLLECT_HOUR")
     edufit_collect_minute: int = Field(default=20, env="EDUFIT_COLLECT_MINUTE")
@@ -49,20 +37,12 @@ class Settings(BaseSettings):
     allergy_send_minute: int = Field(default=30, env="ALLERGY_SEND_MINUTE")
 
     # 테넌트 API URLs
-    teacherhub_api_url: str = Field(
-        default="http://localhost:8081/api/v2",
-        env="TEACHERHUB_API_URL"
-    )
-    academy_insight_api_url: str = Field(
-        default="http://localhost:8082/api",
-        env="ACADEMY_INSIGHT_API_URL"
-    )
     edufit_api_url: str = Field(
         default="http://localhost:9070/api/v1",
         env="EDUFIT_API_URL"
     )
     allergy_insight_api_url: str = Field(
-        default="http://localhost:4050",
+        default="http://localhost:9040",
         env="ALLERGY_INSIGHT_API_URL"
     )
     allergy_insight_api_token: str = Field(
@@ -72,8 +52,8 @@ class Settings(BaseSettings):
 
     # 웹 서버
     web_host: str = Field(default="0.0.0.0", env="WEB_HOST")
-    web_port: int = Field(default=4055, env="WEB_PORT")
-    web_base_url: str = Field(default="http://localhost:4055", env="WEB_BASE_URL")
+    web_port: int = Field(default=4050, env="WEB_PORT")
+    web_base_url: str = Field(default="http://localhost:4050", env="WEB_BASE_URL")
 
     # 로깅
     log_level: str = Field(default="INFO", env="LOG_LEVEL")

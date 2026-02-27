@@ -3,38 +3,38 @@
 # brand 섹션은 참조 문서용입니다. 실제 브랜드 설정은 각 테넌트의 config.py가 source of truth입니다.
 
 tenants:
-  teacher-hub:
-    display_name: "TeacherHub 강사 평판 브리핑"
-    description: "공무원 학원 강사 평판 분석 일일/주간 브리핑"
-    api_base_url: "${TEACHERHUB_API_URL}"
-    email_subject_prefix: "[TeacherHub]"
-    email_template: "teacher_hub/daily_report.html"
+  edufit:
+    display_name: "EduFit 강사·학원 분석 브리핑"
+    description: "공무원 학원 강사·학원 평판 분석 일일 브리핑 (AcademyInsight+TeacherHub 통합)"
+    api_base_url: "${EDUFIT_API_URL}"
+    email_subject_prefix: "[EduFit]"
+    email_template: "edufit/daily_report.html"
     schedule:
       collect_hour: 7
-      collect_minute: 0
+      collect_minute: 20
       send_hour: 8
-      send_minute: 0
+      send_minute: 20
     is_active: true
     brand:
-      primary_color: "#3b82f6"
-      primary_color_dark: "#2563eb"
-      accent_color: "#60a5fa"
-      color_scheme: "Blue"
+      primary_color: "#10b981"
+      primary_color_dark: "#059669"
+      accent_color: "#34d399"
+      color_scheme: "Green"
 
-  academy-insight:
-    display_name: "AcademyInsight 학원 동향 브리핑"
-    description: "학원 온라인 평판 분석 일일 브리핑"
-    api_base_url: "${ACADEMY_INSIGHT_API_URL}"
-    email_subject_prefix: "[AcademyInsight]"
-    email_template: "academy_insight/daily_report.html"
+  allergy-insight:
+    display_name: "AllergyInsight 알러지 뉴스 브리핑"
+    description: "알러지 뉴스 & 논문 브리핑 (HealthPulse 통합)"
+    api_base_url: "${ALLERGY_INSIGHT_API_URL}"
+    email_subject_prefix: "[AllergyInsight]"
+    email_template: "allergy_insight/daily_report.html"
     schedule:
       collect_hour: 7
-      collect_minute: 10
+      collect_minute: 30
       send_hour: 8
-      send_minute: 10
+      send_minute: 30
     is_active: true
     brand:
-      primary_color: "#8b5cf6"
-      primary_color_dark: "#7c3aed"
-      accent_color: "#a78bfa"
-      color_scheme: "Violet"
+      primary_color: "#2e7d32"
+      primary_color_dark: "#1b5e20"
+      accent_color: "#66bb6a"
+      color_scheme: "Green"

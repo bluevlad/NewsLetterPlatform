@@ -34,32 +34,27 @@ jobs:
           DATABASE_URL=sqlite:///./data/newsletterplatform.db
 
           # Scheduler (24h format, KST)
-          # TeacherHub - crawl 01:00, report 01:30
-          TEACHERHUB_COLLECT_HOUR=2
-          TEACHERHUB_COLLECT_MINUTE=0
-          TEACHERHUB_SEND_HOUR=7
-          TEACHERHUB_SEND_MINUTE=0
-
-          # AcademyInsight - crawl 04:00
-          ACADEMY_COLLECT_HOUR=5
-          ACADEMY_COLLECT_MINUTE=0
-          ACADEMY_SEND_HOUR=7
-          ACADEMY_SEND_MINUTE=10
-
           # EduFit
           EDUFIT_COLLECT_HOUR=7
           EDUFIT_COLLECT_MINUTE=20
           EDUFIT_SEND_HOUR=8
           EDUFIT_SEND_MINUTE=20
 
+          # AllergyInsight
+          ALLERGY_COLLECT_HOUR=7
+          ALLERGY_COLLECT_MINUTE=30
+          ALLERGY_SEND_HOUR=8
+          ALLERGY_SEND_MINUTE=30
+
           # Tenant API URLs
-          TEACHERHUB_API_URL=http://host.docker.internal:8081/api/v2
-          ACADEMY_INSIGHT_API_URL=http://host.docker.internal:8082/api
           EDUFIT_API_URL=http://host.docker.internal:9070/api/v1
+          ALLERGY_INSIGHT_API_URL=http://host.docker.internal:9040
+          ALLERGY_INSIGHT_API_TOKEN=${{ secrets.ALLERGY_INSIGHT_API_TOKEN }}
 
           # Web Server
           WEB_HOST=0.0.0.0
-          WEB_PORT=4055
+          WEB_PORT=4050
+          WEB_BASE_URL=http://www.unmong.com:4050
 
           # Logging
           LOG_LEVEL=INFO
@@ -89,7 +84,7 @@ jobs:
           docker compose -f docker-compose.prod.yml ps
 
           for i in $(seq 1 6); do
-            if curl -sf http://localhost:4055/ > /dev/null 2>&1; then
+            if curl -sf http://localhost:4050/ > /dev/null 2>&1; then
               echo "Web service health check passed!"
               exit 0
             fi
