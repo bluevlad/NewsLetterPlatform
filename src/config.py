@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     verification_expiry_minutes: int = Field(default=10)
     max_verification_attempts: int = Field(default=5)
 
+    # CSRF 허용 호스트 (쉼표 구분)
+    csrf_allowed_hosts: str = Field(default="", env="CSRF_ALLOWED_HOSTS")
+
     # Admin
     admin_password: str = Field(default="", env="ADMIN_PASSWORD")
     admin_session_hours: int = Field(default=24, env="ADMIN_SESSION_HOURS")

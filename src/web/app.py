@@ -42,6 +42,10 @@ class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
                     "localhost",
                     "127.0.0.1",
                 }
+                if settings.csrf_allowed_hosts:
+                    allowed_hosts.update(
+                        h.strip() for h in settings.csrf_allowed_hosts.split(",") if h.strip()
+                    )
                 if parsed.hostname not in allowed_hosts:
                     logger.warning("CSRF check failed: origin=%s", origin)
                     raise HTTPException(status_code=403, detail="Forbidden: invalid origin")

@@ -55,6 +55,7 @@ jobs:
           WEB_HOST=0.0.0.0
           WEB_PORT=4050
           WEB_BASE_URL=http://www.unmong.com:4050
+          CSRF_ALLOWED_HOSTS=insight.unmong.com
 
           # Logging
           LOG_LEVEL=INFO
