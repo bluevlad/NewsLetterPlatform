@@ -58,6 +58,9 @@ jobs:
 
           # Logging
           LOG_LEVEL=INFO
+
+          # Admin
+          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
           EOF
 
       - name: Build and Deploy
