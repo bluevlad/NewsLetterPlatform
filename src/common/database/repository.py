@@ -3,17 +3,21 @@
 """
 
 import json
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, and_, func, or_, Integer
+from sqlalchemy import create_engine, and_, func, or_, text, Integer
 from sqlalchemy.orm import sessionmaker, Session
+
+logger = logging.getLogger(__name__)
 
 from .models import (
     Base, Subscriber, SendHistory, CollectedData,
-    EmailVerification, VerificationType
+    CollectedDataHistory, EmailVerification, VerificationType,
+    NewsletterType
 )
 
 
@@ -37,6 +41,24 @@ def init_db(database_url: str = "sqlite:///./data/newsletterplatform.db") -> Non
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
     Base.metadata.create_all(bind=_engine)
+
+    _migrate_send_history_newsletter_type(_engine)
+
+
+def _migrate_send_history_newsletter_type(engine) -> None:
+    """기존 send_history 테이블에 newsletter_type 컬럼 추가 (마이그레이션)"""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(send_history)"))
+            columns = [row[1] for row in result]
+            if "newsletter_type" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE send_history ADD COLUMN newsletter_type VARCHAR(20) DEFAULT 'daily' NOT NULL"
+                ))
+                conn.commit()
+                logger.info("send_history 테이블에 newsletter_type 컬럼 추가 완료")
+    except Exception as e:
+        logger.debug(f"send_history 마이그레이션 스킵: {e}")
 
 
 @contextmanager
@@ -152,11 +174,13 @@ class SendHistoryRepository:
 
     @staticmethod
     def create(session: Session, tenant_id: str, subscriber_id: int,
-               subject: str, is_success: bool, error_message: str = None) -> SendHistory:
+               subject: str, is_success: bool, error_message: str = None,
+               newsletter_type: str = "daily") -> SendHistory:
         history = SendHistory(
             tenant_id=tenant_id,
             subscriber_id=subscriber_id,
             subject=subject,
+            newsletter_type=newsletter_type,
             is_success=is_success,
             error_message=error_message
         )
@@ -291,6 +315,27 @@ class SendHistoryRepository:
             for row in rows
         ]
 
+    @staticmethod
+    def get_sent_subscriber_ids_for_period(
+        session: Session, tenant_id: str,
+        newsletter_type: str, period_start: datetime
+    ) -> set[int]:
+        """주기별 발송 완료된 구독자 ID 조회 (weekly/monthly 중복 방지)"""
+        rows = (
+            session.query(SendHistory.subscriber_id)
+            .filter(
+                and_(
+                    SendHistory.tenant_id == tenant_id,
+                    SendHistory.newsletter_type == newsletter_type,
+                    SendHistory.sent_at >= period_start,
+                    SendHistory.is_success == True
+                )
+            )
+            .distinct()
+            .all()
+        )
+        return {row[0] for row in rows}
+
 
 class CollectedDataRepository:
     """수집 데이터 저장소"""
@@ -395,6 +440,68 @@ class CollectedDataRepository:
                 record.collected_at,
             )
         return result
+
+    @staticmethod
+    def save_to_history(session: Session, tenant_id: str, data_type: str,
+                        data: dict, collected_date: date = None) -> CollectedDataHistory:
+        """일일 수집 데이터를 이력 테이블에 저장 (upsert)"""
+        if collected_date is None:
+            collected_date = date.today()
+
+        data_json = json.dumps(data, ensure_ascii=False, default=str)
+
+        existing = session.query(CollectedDataHistory).filter(
+            and_(
+                CollectedDataHistory.tenant_id == tenant_id,
+                CollectedDataHistory.data_type == data_type,
+                CollectedDataHistory.collected_date == collected_date,
+            )
+        ).first()
+
+        if existing:
+            existing.data_json = data_json
+            existing.collected_at = datetime.utcnow()
+            session.flush()
+            return existing
+
+        record = CollectedDataHistory(
+            tenant_id=tenant_id,
+            data_type=data_type,
+            data_json=data_json,
+            collected_date=collected_date,
+        )
+        session.add(record)
+        session.flush()
+        return record
+
+    @staticmethod
+    def get_history_range(session: Session, tenant_id: str,
+                          date_from: date, date_to: date) -> list[dict]:
+        """기간별 이력 조회 - 날짜별 수집 데이터 리스트 반환
+
+        Returns:
+            [{collected_date, data_type, data}, ...]
+        """
+        records = (
+            session.query(CollectedDataHistory)
+            .filter(
+                and_(
+                    CollectedDataHistory.tenant_id == tenant_id,
+                    CollectedDataHistory.collected_date >= date_from,
+                    CollectedDataHistory.collected_date <= date_to,
+                )
+            )
+            .order_by(CollectedDataHistory.collected_date.asc())
+            .all()
+        )
+        return [
+            {
+                "collected_date": record.collected_date,
+                "data_type": record.data_type,
+                "data": json.loads(record.data_json),
+            }
+            for record in records
+        ]
 
 
 class EmailVerificationRepository:

@@ -150,6 +150,164 @@ class EduFitFormatter:
             })
         return result
 
+    def format_weekly(self, history_data: list, collected_data: dict = None) -> dict:
+        """주간 요약 포매팅
+
+        Args:
+            history_data: 7일간 일일 수집 이력 [{collected_date, data_type, data}, ...]
+            collected_data: 추가 수집된 주간 요약 데이터
+        """
+        collected_data = collected_data or {}
+
+        # 이력에서 일별 통계 집계
+        daily_stats = self._aggregate_daily_stats(history_data)
+
+        # 주간 요약 데이터 (API에서 직접 수집된 것 우선)
+        weekly_summary = collected_data.get("weekly_summary", {})
+        weekly_ranking = collected_data.get("weekly_ranking", [])
+        analysis_summary = collected_data.get("analysis_summary", {})
+        academy_stats = collected_data.get("academy_stats", [])
+        academies = collected_data.get("academies", [])
+
+        # 이력 기반 집계
+        total_mentions_sum = sum(d.get("total_mentions", 0) for d in daily_stats)
+        days_count = len(daily_stats)
+
+        stats = {
+            "total_teachers": weekly_summary.get("totalTeachers", 0),
+            "total_mentions": weekly_summary.get("totalMentions", 0) or total_mentions_sum,
+            "avg_sentiment": weekly_summary.get("avgSentimentScore", 0),
+            "total_recommendations": (
+                weekly_summary.get("totalRecommendations", 0)
+                or analysis_summary.get("totalRecommendations", 0)
+            ),
+            "days_count": days_count,
+            "mention_change_rate": weekly_summary.get("mentionChangeRate", 0),
+        }
+
+        if stats["avg_sentiment"] and stats["avg_sentiment"] <= 1:
+            stats["avg_sentiment"] = round(stats["avg_sentiment"] * 100, 1)
+
+        # TOP 강사
+        top_teachers = []
+        for teacher in weekly_ranking[:5]:
+            sentiment = teacher.get("avgSentimentScore", 0) or 0
+            if sentiment <= 1:
+                sentiment = round(sentiment * 100, 1)
+            top_teachers.append({
+                "name": teacher.get("teacherName", ""),
+                "academy": teacher.get("academyName", ""),
+                "mention_count": teacher.get("mentionCount", 0),
+                "sentiment_score": sentiment,
+                "recommendation_count": teacher.get("recommendationCount", 0),
+                "top_keywords": teacher.get("topKeywords", []),
+            })
+
+        # 학원 랭킹
+        academy_ranking = self._format_academy_ranking(academy_stats)
+
+        # 기간 계산
+        from datetime import date, timedelta
+        today = date.today()
+        period_end = today - timedelta(days=today.weekday())
+        period_start = period_end - timedelta(days=7)
+        period_end = period_end - timedelta(days=1)
+
+        return {
+            "stats": stats,
+            "top_teachers": top_teachers,
+            "academy_ranking": academy_ranking,
+            "daily_stats": daily_stats,
+            "period_start": period_start,
+            "period_end": period_end,
+            "report_date": datetime.now(),
+            "generated_at": datetime.now(),
+        }
+
+    def format_monthly(self, history_data: list, collected_data: dict = None) -> dict:
+        """월간 요약 포매팅"""
+        collected_data = collected_data or {}
+
+        daily_stats = self._aggregate_daily_stats(history_data)
+
+        weekly_summary = collected_data.get("weekly_summary", {})
+        weekly_ranking = collected_data.get("weekly_ranking", [])
+        analysis_summary = collected_data.get("analysis_summary", {})
+        academy_stats = collected_data.get("academy_stats", [])
+        academies = collected_data.get("academies", [])
+
+        total_mentions_sum = sum(d.get("total_mentions", 0) for d in daily_stats)
+        days_count = len(daily_stats)
+
+        stats = {
+            "total_teachers": analysis_summary.get("totalTeachers", 0),
+            "total_mentions": analysis_summary.get("totalMentions", 0) or total_mentions_sum,
+            "avg_sentiment": analysis_summary.get("avgSentimentScore", 0),
+            "total_recommendations": analysis_summary.get("totalRecommendations", 0),
+            "days_count": days_count,
+        }
+
+        if stats["avg_sentiment"] and stats["avg_sentiment"] <= 1:
+            stats["avg_sentiment"] = round(stats["avg_sentiment"] * 100, 1)
+
+        top_teachers = []
+        for teacher in weekly_ranking[:10]:
+            sentiment = teacher.get("avgSentimentScore", 0) or 0
+            if sentiment <= 1:
+                sentiment = round(sentiment * 100, 1)
+            top_teachers.append({
+                "name": teacher.get("teacherName", ""),
+                "academy": teacher.get("academyName", ""),
+                "mention_count": teacher.get("mentionCount", 0),
+                "sentiment_score": sentiment,
+                "recommendation_count": teacher.get("recommendationCount", 0),
+                "top_keywords": teacher.get("topKeywords", []),
+            })
+
+        academy_ranking = self._format_academy_ranking(academy_stats)
+        academy_list = self._format_academy_list(academies, academy_stats)
+
+        from datetime import date, timedelta
+        today = date.today()
+        first_of_month = today.replace(day=1)
+        period_end = first_of_month - timedelta(days=1)
+        period_start = period_end.replace(day=1)
+
+        return {
+            "stats": stats,
+            "top_teachers": top_teachers,
+            "academy_ranking": academy_ranking,
+            "academy_list": academy_list,
+            "daily_stats": daily_stats,
+            "period_start": period_start,
+            "period_end": period_end,
+            "report_date": datetime.now(),
+            "generated_at": datetime.now(),
+        }
+
+    @staticmethod
+    def _aggregate_daily_stats(history_data: list) -> list:
+        """이력 데이터에서 일별 통계 집계"""
+        from collections import defaultdict
+        by_date = defaultdict(dict)
+        for record in history_data:
+            d = record["collected_date"]
+            dtype = record["data_type"]
+            data = record["data"]
+            by_date[d][dtype] = data
+
+        daily_stats = []
+        for collected_date in sorted(by_date.keys()):
+            day_data = by_date[collected_date]
+            daily_report = day_data.get("daily_report", {})
+            daily_stats.append({
+                "date": collected_date,
+                "total_mentions": daily_report.get("totalMentions", 0),
+                "total_teachers": daily_report.get("totalTeachers", 0),
+                "avg_sentiment": daily_report.get("avgSentimentScore", 0),
+            })
+        return daily_stats
+
     @staticmethod
     def _extract_highlights(daily_report: dict, weekly_ranking: list, analysis_summary: dict) -> list:
         """데이터에서 주요 하이라이트 자동 생성"""

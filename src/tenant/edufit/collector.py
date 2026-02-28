@@ -161,3 +161,57 @@ class EduFitCollector:
 
         logger.info(f"EduFit 전체 수집 완료: {list(result.keys())}")
         return result
+
+    async def collect_weekly_data(self) -> Dict[str, Any]:
+        """주간 요약 뉴스레터용 데이터 수집"""
+        result = {}
+
+        weekly_summary = await self.collect_weekly_summary()
+        if weekly_summary:
+            result["weekly_summary"] = weekly_summary
+
+        weekly_ranking = await self.collect_weekly_ranking()
+        if weekly_ranking:
+            result["weekly_ranking"] = weekly_ranking
+
+        analysis_summary = await self.collect_analysis_summary()
+        if analysis_summary:
+            result["analysis_summary"] = analysis_summary
+
+        academy_stats = await self.collect_academy_stats()
+        if academy_stats:
+            result["academy_stats"] = academy_stats
+
+        academies = await self.collect_academies()
+        if academies:
+            result["academies"] = academies
+
+        logger.info(f"EduFit 주간 데이터 수집 완료: {list(result.keys())}")
+        return result
+
+    async def collect_monthly_data(self) -> Dict[str, Any]:
+        """월간 요약 뉴스레터용 데이터 수집"""
+        result = {}
+
+        analysis_summary = await self.collect_analysis_summary()
+        if analysis_summary:
+            result["analysis_summary"] = analysis_summary
+
+        academy_stats = await self.collect_academy_stats()
+        if academy_stats:
+            result["academy_stats"] = academy_stats
+
+        academies = await self.collect_academies()
+        if academies:
+            result["academies"] = academies
+
+        weekly_summary = await self.collect_weekly_summary()
+        if weekly_summary:
+            result["weekly_summary"] = weekly_summary
+
+        weekly_ranking = await self.collect_weekly_ranking()
+        if weekly_ranking:
+            result["weekly_ranking"] = weekly_ranking
+
+        logger.info(f"EduFit 월간 데이터 수집 완료: {list(result.keys())}")
+        return result

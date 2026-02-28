@@ -27,6 +27,14 @@ class BrandConfig:
     features: List[BrandFeature] = field(default_factory=list)
 
 
+# 뉴스레터 유형별 라벨
+NEWSLETTER_TYPE_LABELS = {
+    "daily": "일일 브리핑",
+    "weekly": "주간 분석 브리핑",
+    "monthly": "월간 분석 브리핑",
+}
+
+
 class BaseTenant(ABC):
     """멀티테넌트 기본 클래스"""
 
@@ -60,6 +68,21 @@ class BaseTenant(ABC):
         """테넌트 브랜드 설정 (하위 클래스에서 오버라이드 가능)"""
         return BrandConfig()
 
+    @property
+    def supported_frequencies(self) -> List[str]:
+        """지원하는 뉴스레터 주기 (기본: daily만)"""
+        return ["daily"]
+
+    @property
+    def weekly_schedule_config(self) -> Dict[str, Any]:
+        """주간 뉴스레터 스케줄 설정 (기본: 빈 dict)"""
+        return {}
+
+    @property
+    def monthly_schedule_config(self) -> Dict[str, Any]:
+        """월간 뉴스레터 스케줄 설정 (기본: 빈 dict)"""
+        return {}
+
     @abstractmethod
     async def collect_data(self) -> Dict[str, Any]:
         """데이터 수집 (원본 서비스 API 호출)
@@ -76,10 +99,39 @@ class BaseTenant(ABC):
             템플릿 렌더링에 사용할 컨텍스트 딕셔너리
         """
 
-    def generate_subject(self, report_date=None) -> str:
+    async def collect_summary_data(self, newsletter_type: str,
+                                    date_from=None, date_to=None) -> Dict[str, Any]:
+        """주간/월간 요약 데이터 수집 (기본: 빈 dict)
+
+        하위 클래스에서 오버라이드하여 기간별 데이터 수집 구현
+        """
+        return {}
+
+    def format_summary_report(self, newsletter_type: str,
+                               history_data: list,
+                               collected_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """주간/월간 요약 데이터를 템플릿 변수로 변환 (기본: 빈 dict)
+
+        Args:
+            newsletter_type: "weekly" or "monthly"
+            history_data: CollectedDataRepository.get_history_range() 결과
+            collected_data: 추가 수집된 요약 데이터 (optional)
+        """
+        return {}
+
+    def get_email_template(self, newsletter_type: str = "daily") -> str:
+        """뉴스레터 유형별 템플릿 경로"""
+        if newsletter_type == "daily":
+            return self.email_template
+        # 컨벤션: {tenant_dir}/weekly_report.html, monthly_report.html
+        base_dir = self.email_template.rsplit("/", 1)[0]
+        return f"{base_dir}/{newsletter_type}_report.html"
+
+    def generate_subject(self, report_date=None, newsletter_type: str = "daily") -> str:
         """이메일 제목 생성"""
         from datetime import datetime
         if report_date is None:
             report_date = datetime.now()
         date_str = report_date.strftime("%Y-%m-%d")
-        return f"{self.email_subject_prefix} {date_str} 일일 브리핑"
+        label = NEWSLETTER_TYPE_LABELS.get(newsletter_type, "일일 브리핑")
+        return f"{self.email_subject_prefix} {date_str} {label}"

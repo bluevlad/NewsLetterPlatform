@@ -43,6 +43,8 @@
             <thead>
                 <tr>
                     <th>Tenant</th>
+                    <th>Type</th>
+                    <th>Schedule</th>
                     <th>Collect Time</th>
                     <th>Send Time</th>
                 </tr>
@@ -54,6 +56,8 @@
                         <span class="badge badge-info">{{ info.tenant.tenant_id }}</span>
                         {{ info.tenant.display_name }}
                     </td>
+                    <td><span class="badge badge-info">daily</span></td>
+                    <td class="text-sm text-muted">Every day</td>
                     <td>
                         <span style="font-family: monospace; font-weight: 600;">{{ info.collect_time }}</span>
                         <span class="text-muted text-xs">UTC</span>
@@ -63,6 +67,36 @@
                         <span class="text-muted text-xs">UTC</span>
                     </td>
                 </tr>
+                {% if info.weekly_config %}
+                <tr style="background: rgba(56, 189, 248, 0.05);">
+                    <td></td>
+                    <td><span class="badge" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8;">weekly</span></td>
+                    <td class="text-sm text-muted">Every {{ info.weekly_config.day_of_week }}</td>
+                    <td>
+                        <span style="font-family: monospace; font-weight: 600;">{{ info.weekly_config.collect_time }}</span>
+                        <span class="text-muted text-xs">UTC</span>
+                    </td>
+                    <td>
+                        <span style="font-family: monospace; font-weight: 600;">{{ info.weekly_config.send_time }}</span>
+                        <span class="text-muted text-xs">UTC</span>
+                    </td>
+                </tr>
+                {% endif %}
+                {% if info.monthly_config %}
+                <tr style="background: rgba(245, 158, 11, 0.05);">
+                    <td></td>
+                    <td><span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b;">monthly</span></td>
+                    <td class="text-sm text-muted">Day {{ info.monthly_config.day_of_month }} of month</td>
+                    <td>
+                        <span style="font-family: monospace; font-weight: 600;">{{ info.monthly_config.collect_time }}</span>
+                        <span class="text-muted text-xs">UTC</span>
+                    </td>
+                    <td>
+                        <span style="font-family: monospace; font-weight: 600;">{{ info.monthly_config.send_time }}</span>
+                        <span class="text-muted text-xs">UTC</span>
+                    </td>
+                </tr>
+                {% endif %}
             {% endfor %}
             </tbody>
         </table>

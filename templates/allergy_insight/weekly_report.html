@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AllergyInsight - 주간 알러지 뉴스 브리핑</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; background-color: #f0f4f0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 700px; margin: 0 auto; background-color: #ffffff;">
+        <!-- Header -->
+        <tr>
+            <td style="background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%); padding: 35px 30px; text-align: center;">
+                <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">AllergyInsight</h1>
+                <p style="margin: 8px 0 0 0; color: #a5d6a7; font-size: 16px; font-weight: 600;">주간 알러지 뉴스 브리핑</p>
+                <p style="margin: 12px 0 0 0; color: #ffffff; font-size: 16px;">
+                    {{ period_start.strftime('%Y.%m.%d') }} ~ {{ period_end.strftime('%Y.%m.%d') }}
+                </p>
+            </td>
+        </tr>
+
+        <!-- Greeting -->
+        <tr>
+            <td style="padding: 30px 30px 20px 30px;">
+                <p style="margin: 0; color: #333333; font-size: 16px;">
+                    구독자님, 안녕하세요.
+                </p>
+                <p style="margin: 10px 0 0 0; color: #666666; font-size: 15px;">
+                    지난 한 주간의 알러지 관련 소식을 종합하여 전해드립니다.
+                </p>
+            </td>
+        </tr>
+
+        <!-- Weekly Stats Summary -->
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td style="background-color: #e8f5e9; border-radius: 8px; padding: 15px; text-align: center;">
+                            <span style="color: #2e7d32; font-weight: 600; font-size: 14px;">
+                                {{ stats.days_with_data }}일간 집계 &nbsp;|&nbsp;
+                                뉴스 {{ stats.news_count }}건 &nbsp;|&nbsp;
+                                기업동향 {{ stats.company_count }}건 &nbsp;|&nbsp;
+                                논문 {{ stats.paper_count }}건
+                            </span>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+
+        <!-- TOP News (Weekly) -->
+        {% if top_news %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #2e7d32; color: #1b5e20; font-size: 18px;">
+                    주간 주요 뉴스
+                </h2>
+
+                {% for item in top_news[:5] %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 15px;">
+                    <tr>
+                        <td style="background-color: #fafafa; border-left: 4px solid #2e7d32; border-radius: 0 8px 8px 0; padding: 18px;">
+                            <h3 style="margin: 0 0 8px 0; font-size: 16px;">
+                                <a href="{{ item.link }}" style="color: #333333; text-decoration: none;">{{ item.title }}</a>
+                            </h3>
+                            <p style="margin: 0 0 10px 0; color: #888888; font-size: 12px;">
+                                {% if item.category %}[{{ item.category }}] {% endif %}
+                                {% if item.source %}{{ item.source }} &middot; {% endif %}
+                                {% if item.pub_date %}{{ item.pub_date }}{% endif %}
+                                {% if item.importance_score %}
+                                <span style="color: #e53935; margin-left: 8px;">중요도 {{ (item.importance_score * 100)|int }}%</span>
+                                {% endif %}
+                            </p>
+                            <p style="margin: 0; color: #555555; font-size: 14px; line-height: 1.6;">
+                                {{ (item.summary or item.description or '')[:200] }}{% if (item.summary or item.description or '')|length > 200 %}...{% endif %}
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                {% endfor %}
+
+                {% if top_news|length > 5 %}
+                <p style="margin: 5px 0 0 0; color: #888888; font-size: 12px; font-style: italic;">
+                    외 {{ top_news|length - 5 }}건의 뉴스가 있습니다.
+                </p>
+                {% endif %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Company Trends (Weekly) -->
+        {% if company_news %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #37474f; color: #263238; font-size: 18px;">
+                    주간 기업 동향
+                </h2>
+
+                {% for company in company_news %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 18px; border-left: 4px solid {% if company.type == 'main' %}#2e7d32{% else %}#546e7a{% endif %}; border-radius: 0 8px 8px 0; background-color: {% if company.type == 'main' %}#f1f8e9{% else %}#fafafa{% endif %};">
+                    <tr>
+                        <td style="padding: 14px 16px 8px 16px;">
+                            <span style="display: inline-block; background-color: {% if company.type == 'main' %}#2e7d32{% else %}#546e7a{% endif %}; color: #ffffff; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; margin-right: 6px;">{% if company.type == 'main' %}고객사{% else %}경쟁사{% endif %}</span>
+                            <span style="font-size: 15px; font-weight: 700; color: {% if company.type == 'main' %}#1b5e20{% else %}#37474f{% endif %};">{{ company.name }}</span>
+                            {% if company.articles %}
+                            <span style="color: #999999; font-size: 12px; margin-left: 6px;">({{ company.articles|length }}건)</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if company.trend_summary %}
+                    <tr>
+                        <td style="padding: 0 16px 10px 16px;">
+                            <p style="margin: 0; color: {% if company.type == 'main' %}#2e7d32{% else %}#546e7a{% endif %}; font-size: 13px; font-style: italic; line-height: 1.4;">
+                                {{ company.trend_summary }}
+                            </p>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% if company.articles %}
+                    {% for item in company.articles[:3] %}
+                    <tr>
+                        <td style="padding: 6px 16px 8px 16px; {% if not loop.last %}border-bottom: 1px solid {% if company.type == 'main' %}#c8e6c9{% else %}#eceff1{% endif %};{% endif %}">
+                            <h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 500;">
+                                <a href="{{ item.link }}" style="color: #333333; text-decoration: none;">{{ item.title }}</a>
+                            </h4>
+                            <p style="margin: 0; color: #888888; font-size: 11px;">
+                                {% if item.source %}{{ item.source }}{% endif %}
+                                {% if item.pub_date %} &middot; {{ item.pub_date }}{% endif %}
+                            </p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% endif %}
+                </table>
+                {% endfor %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Papers (Weekly) -->
+        {% if papers %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #1565c0; color: #0d47a1; font-size: 18px;">
+                    주간 논문 (PubMed)
+                </h2>
+
+                {% for paper in papers[:5] %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 12px;">
+                    <tr>
+                        <td style="background-color: #e3f2fd; border-radius: 6px; padding: 14px;">
+                            <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 500;">
+                                <a href="{{ paper.link }}" style="color: #1565c0; text-decoration: none;">{{ paper.title[:100] }}{% if paper.title|length > 100 %}...{% endif %}</a>
+                            </h4>
+                            <p style="margin: 0; color: #666666; font-size: 11px;">
+                                {{ paper.journal or '' }}
+                                {% if paper.pmid %} | PMID: {{ paper.pmid }}{% endif %}
+                                {% if paper.pub_date %} | {{ paper.pub_date }}{% endif %}
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                {% endfor %}
+
+                {% if papers|length > 5 %}
+                <p style="margin: 5px 0 0 0; color: #888888; font-size: 12px; font-style: italic;">
+                    외 {{ papers|length - 5 }}건의 논문이 있습니다.
+                </p>
+                {% endif %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- No Data -->
+        {% if not top_news and not papers and not company_news %}
+        <tr>
+            <td style="padding: 40px 30px; text-align: center;">
+                <p style="color: #888888; font-size: 16px;">
+                    이번 주에는 수집된 소식이 없습니다.
+                </p>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Footer -->
+        <tr>
+            <td style="background-color: #f5f5f5; padding: 30px; text-align: center; border-top: 1px solid #eeeeee;">
+                <p style="margin: 0 0 10px 0; color: #888888; font-size: 12px;">
+                    이 메일은 AllergyInsight 시스템에서 자동 발송되었습니다.
+                </p>
+                <p style="margin: 0 0 15px 0; color: #aaaaaa; font-size: 11px;">
+                    <a href="__UNSUBSCRIBE_URL__" style="color: #aaaaaa; text-decoration: underline;">구독 해지</a>
+                </p>
+                <p style="margin: 0; color: #cccccc; font-size: 11px;">
+                    생성 시간: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                </p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

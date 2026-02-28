@@ -69,6 +69,11 @@ def main():
     parser.add_argument("--collect-only", action="store_true", help="수집만 실행")
     parser.add_argument("--send-only", action="store_true", help="발송만 실행")
     parser.add_argument("--tenant", type=str, help="특정 테넌트만 실행", default=None)
+    parser.add_argument(
+        "--newsletter-type", type=str, default="daily",
+        choices=["daily", "weekly", "monthly"],
+        help="뉴스레터 유형 (daily/weekly/monthly, 기본: daily)"
+    )
 
     args = parser.parse_args()
 
@@ -96,24 +101,26 @@ def main():
     else:
         target_ids = registry.get_active_ids()
 
+    nl_type = args.newsletter_type
+
     if args.web:
         logger.info("웹 서버 모드")
         from src.web.app import run_server
         run_server()
     elif args.collect_only:
-        logger.info(f"수집만 실행: {target_ids}")
+        logger.info(f"수집만 실행: {target_ids} (type={nl_type})")
         for tid in target_ids:
-            run_collect_job(tid)
+            run_collect_job(tid, nl_type)
     elif args.send_only:
-        logger.info(f"발송만 실행: {target_ids}")
+        logger.info(f"발송만 실행: {target_ids} (type={nl_type})")
         for tid in target_ids:
-            run_send_job(tid)
+            run_send_job(tid, nl_type)
     elif args.run_once:
-        logger.info(f"즉시 실행 모드: {target_ids}")
+        logger.info(f"즉시 실행 모드: {target_ids} (type={nl_type})")
         for tid in target_ids:
-            run_collect_job(tid)
+            run_collect_job(tid, nl_type)
         for tid in target_ids:
-            run_send_job(tid)
+            run_send_job(tid, nl_type)
     else:
         run_scheduler()
 

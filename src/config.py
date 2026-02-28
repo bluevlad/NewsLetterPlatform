@@ -24,17 +24,38 @@ class Settings(BaseSettings):
         env="DATABASE_URL"
     )
 
-    # 스케줄러 - EduFit
+    # 스케줄러 - EduFit (Daily)
     edufit_collect_hour: int = Field(default=7, env="EDUFIT_COLLECT_HOUR")
     edufit_collect_minute: int = Field(default=20, env="EDUFIT_COLLECT_MINUTE")
     edufit_send_hour: int = Field(default=8, env="EDUFIT_SEND_HOUR")
     edufit_send_minute: int = Field(default=20, env="EDUFIT_SEND_MINUTE")
 
-    # 스케줄러 - AllergyInsight
+    # 스케줄러 - EduFit (Weekly: 매주 월요일)
+    edufit_weekly_day_of_week: str = Field(default="mon", env="EDUFIT_WEEKLY_DAY_OF_WEEK")
+    edufit_weekly_collect_hour: int = Field(default=7, env="EDUFIT_WEEKLY_COLLECT_HOUR")
+    edufit_weekly_collect_minute: int = Field(default=0, env="EDUFIT_WEEKLY_COLLECT_MINUTE")
+    edufit_weekly_send_hour: int = Field(default=9, env="EDUFIT_WEEKLY_SEND_HOUR")
+    edufit_weekly_send_minute: int = Field(default=0, env="EDUFIT_WEEKLY_SEND_MINUTE")
+
+    # 스케줄러 - EduFit (Monthly: 매월 1일)
+    edufit_monthly_day_of_month: int = Field(default=1, env="EDUFIT_MONTHLY_DAY_OF_MONTH")
+    edufit_monthly_collect_hour: int = Field(default=7, env="EDUFIT_MONTHLY_COLLECT_HOUR")
+    edufit_monthly_collect_minute: int = Field(default=0, env="EDUFIT_MONTHLY_COLLECT_MINUTE")
+    edufit_monthly_send_hour: int = Field(default=10, env="EDUFIT_MONTHLY_SEND_HOUR")
+    edufit_monthly_send_minute: int = Field(default=0, env="EDUFIT_MONTHLY_SEND_MINUTE")
+
+    # 스케줄러 - AllergyInsight (Daily)
     allergy_collect_hour: int = Field(default=7, env="ALLERGY_COLLECT_HOUR")
     allergy_collect_minute: int = Field(default=30, env="ALLERGY_COLLECT_MINUTE")
     allergy_send_hour: int = Field(default=8, env="ALLERGY_SEND_HOUR")
     allergy_send_minute: int = Field(default=30, env="ALLERGY_SEND_MINUTE")
+
+    # 스케줄러 - AllergyInsight (Weekly: 매주 월요일)
+    allergy_weekly_day_of_week: str = Field(default="mon", env="ALLERGY_WEEKLY_DAY_OF_WEEK")
+    allergy_weekly_collect_hour: int = Field(default=7, env="ALLERGY_WEEKLY_COLLECT_HOUR")
+    allergy_weekly_collect_minute: int = Field(default=10, env="ALLERGY_WEEKLY_COLLECT_MINUTE")
+    allergy_weekly_send_hour: int = Field(default=9, env="ALLERGY_WEEKLY_SEND_HOUR")
+    allergy_weekly_send_minute: int = Field(default=30, env="ALLERGY_WEEKLY_SEND_MINUTE")
 
     # 테넌트 API URLs
     edufit_api_url: str = Field(

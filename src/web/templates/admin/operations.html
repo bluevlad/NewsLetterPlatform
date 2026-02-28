@@ -4,6 +4,24 @@
 {% block page_title %}{{ tenant.display_name }} - Operations{% endblock %}
 
 {% block content %}
+<!-- Newsletter Type Selector -->
+{% if supported_frequencies|length > 1 %}
+<div class="card mb-3">
+    <div class="card-header">
+        <h3>Newsletter Type</h3>
+    </div>
+    <div class="flex items-center gap-1" style="flex-wrap: wrap;">
+        {% for freq in supported_frequencies %}
+        <button class="btn {% if freq == 'daily' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm newsletter-type-btn"
+                data-type="{{ freq }}"
+                onclick="selectNewsletterType('{{ freq }}', this)">
+            {% if freq == 'daily' %}Daily{% elif freq == 'weekly' %}Weekly{% elif freq == 'monthly' %}Monthly{% endif %}
+        </button>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 <!-- Status -->
 <div class="stats-grid">
     <div class="stat-card">
@@ -53,12 +71,14 @@
             <h3>Collect Data</h3>
         </div>
         <p class="text-sm text-muted mb-2">Trigger data collection from the source API.</p>
-        <button class="btn btn-warning"
-                hx-post="/admin/{{ tenant.tenant_id }}/send/collect"
-                hx-target="#toast-container" hx-swap="beforeend"
-                hx-confirm="Run data collection for {{ tenant.display_name }}?">
-            Run Collect
-        </button>
+        <form hx-post="/admin/{{ tenant.tenant_id }}/send/collect"
+              hx-target="#toast-container" hx-swap="beforeend">
+            <input type="hidden" name="newsletter_type" class="nl-type-input" value="daily">
+            <button type="submit" class="btn btn-warning"
+                    onclick="return confirm('Run data collection (' + document.querySelector('.nl-type-input').value + ') for {{ tenant.display_name }}?')">
+                Run Collect
+            </button>
+        </form>
     </div>
 
     <!-- Send Trigger -->
@@ -67,12 +87,14 @@
             <h3>Send Newsletter</h3>
         </div>
         <p class="text-sm text-muted mb-2">Send newsletter to all active subscribers ({{ active_count }}).</p>
-        <button class="btn btn-danger"
-                hx-post="/admin/{{ tenant.tenant_id }}/send/trigger"
-                hx-target="#toast-container" hx-swap="beforeend"
-                hx-confirm="Send newsletter to {{ active_count }} subscribers for {{ tenant.display_name }}? This cannot be undone.">
-            Send to All
-        </button>
+        <form hx-post="/admin/{{ tenant.tenant_id }}/send/trigger"
+              hx-target="#toast-container" hx-swap="beforeend">
+            <input type="hidden" name="newsletter_type" class="nl-type-input" value="daily">
+            <button type="submit" class="btn btn-danger"
+                    onclick="return confirm('Send ' + document.querySelector('.nl-type-input').value + ' newsletter to {{ active_count }} subscribers? This cannot be undone.')">
+                Send to All
+            </button>
+        </form>
     </div>
 </div>
 
@@ -84,6 +106,7 @@
     <form hx-post="/admin/{{ tenant.tenant_id }}/send/test"
           hx-target="#toast-container" hx-swap="beforeend"
           class="flex items-center gap-1" style="flex-wrap: wrap;">
+        <input type="hidden" name="newsletter_type" class="nl-type-input" value="daily">
         <input type="email" name="email" placeholder="test@example.com" required
                class="form-input" style="flex:1; min-width:250px;">
         <button type="submit" class="btn btn-primary btn-sm">Send Test</button>
@@ -94,8 +117,8 @@
 <div class="card">
     <div class="card-header">
         <h3>Email Preview</h3>
-        <button class="btn btn-secondary btn-sm"
-                hx-get="/admin/{{ tenant.tenant_id }}/send/preview"
+        <button class="btn btn-secondary btn-sm" id="preview-btn"
+                hx-get="/admin/{{ tenant.tenant_id }}/send/preview?newsletter_type=daily"
                 hx-target="#preview-area" hx-swap="innerHTML">
             Load Preview
         </button>
@@ -106,4 +129,27 @@
         </p>
     </div>
 </div>
+
+<script>
+function selectNewsletterType(type, btn) {
+    // Update button styles
+    document.querySelectorAll('.newsletter-type-btn').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-secondary');
+    });
+    btn.classList.remove('btn-secondary');
+    btn.classList.add('btn-primary');
+
+    // Update hidden inputs
+    document.querySelectorAll('.nl-type-input').forEach(input => {
+        input.value = type;
+    });
+
+    // Update preview button URL
+    var previewBtn = document.getElementById('preview-btn');
+    previewBtn.setAttribute('hx-get',
+        '/admin/{{ tenant.tenant_id }}/send/preview?newsletter_type=' + type);
+    htmx.process(previewBtn);
+}
+</script>
 {% endblock %}

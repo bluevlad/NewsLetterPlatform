@@ -12,6 +12,7 @@ from sqlalchemy import (
     Text,
     Boolean,
     DateTime,
+    Date,
     Enum,
     Index,
     UniqueConstraint,
@@ -25,6 +26,13 @@ class VerificationType(PyEnum):
     """인증 유형"""
     SUBSCRIBE = "subscribe"
     UNSUBSCRIBE = "unsubscribe"
+
+
+class NewsletterType(PyEnum):
+    """뉴스레터 유형"""
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
 
 
 class Subscriber(Base):
@@ -57,6 +65,7 @@ class SendHistory(Base):
     tenant_id = Column(String(50), nullable=False, index=True)
     subscriber_id = Column(Integer, nullable=False)
     subject = Column(String(500))
+    newsletter_type = Column(String(20), default="daily", nullable=False)
     is_success = Column(Boolean, default=False)
     error_message = Column(Text)
     sent_at = Column(DateTime, default=datetime.utcnow)
@@ -64,6 +73,7 @@ class SendHistory(Base):
     __table_args__ = (
         Index("idx_send_history_tenant_date", "tenant_id", "sent_at"),
         Index("idx_send_history_subscriber", "subscriber_id"),
+        Index("idx_send_history_type", "tenant_id", "newsletter_type", "sent_at"),
     )
 
     def __repr__(self):
@@ -87,6 +97,27 @@ class CollectedData(Base):
 
     def __repr__(self):
         return f"<CollectedData(tenant={self.tenant_id}, type={self.data_type})>"
+
+
+class CollectedDataHistory(Base):
+    """일일 수집 데이터 이력 보관 (주간/월간 집계용)"""
+    __tablename__ = "collected_data_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(50), nullable=False, index=True)
+    data_type = Column(String(50), nullable=False)
+    data_json = Column(Text, nullable=False)
+    collected_date = Column(Date, nullable=False)
+    collected_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "data_type", "collected_date",
+                         name="uq_history_tenant_type_date"),
+        Index("idx_history_tenant_date", "tenant_id", "collected_date"),
+    )
+
+    def __repr__(self):
+        return f"<CollectedDataHistory(tenant={self.tenant_id}, type={self.data_type}, date={self.collected_date})>"
 
 
 class EmailVerification(Base):
