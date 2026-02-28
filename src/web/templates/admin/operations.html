@@ -1,0 +1,109 @@
+{% extends "admin/admin_base.html" %}
+
+{% block title %}Operations - {{ tenant.display_name }}{% endblock %}
+{% block page_title %}{{ tenant.display_name }} - Operations{% endblock %}
+
+{% block content %}
+<!-- Status -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Active Subscribers</div>
+        <div class="stat-value" style="color: var(--accent-color);">{{ active_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Collected Data</div>
+        <div class="stat-value" style="color: {% if has_data %}var(--action-color){% else %}var(--warning-color){% endif %};">
+            {{ data_info|length if has_data else 0 }}
+        </div>
+        <div class="stat-sub">data types</div>
+    </div>
+</div>
+
+<!-- Collected Data Info -->
+{% if data_info %}
+<div class="card mb-3">
+    <div class="card-header">
+        <h3>Collected Data</h3>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Data Type</th>
+                    <th>Collected At</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for d in data_info %}
+                <tr>
+                    <td><span class="badge badge-info">{{ d.type }}</span></td>
+                    <td class="text-sm text-muted">{{ d.collected_at }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+    <!-- Collect Trigger -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Collect Data</h3>
+        </div>
+        <p class="text-sm text-muted mb-2">Trigger data collection from the source API.</p>
+        <button class="btn btn-warning"
+                hx-post="/admin/{{ tenant.tenant_id }}/send/collect"
+                hx-target="#toast-container" hx-swap="beforeend"
+                hx-confirm="Run data collection for {{ tenant.display_name }}?">
+            Run Collect
+        </button>
+    </div>
+
+    <!-- Send Trigger -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Send Newsletter</h3>
+        </div>
+        <p class="text-sm text-muted mb-2">Send newsletter to all active subscribers ({{ active_count }}).</p>
+        <button class="btn btn-danger"
+                hx-post="/admin/{{ tenant.tenant_id }}/send/trigger"
+                hx-target="#toast-container" hx-swap="beforeend"
+                hx-confirm="Send newsletter to {{ active_count }} subscribers for {{ tenant.display_name }}? This cannot be undone.">
+            Send to All
+        </button>
+    </div>
+</div>
+
+<!-- Test Email -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h3>Test Email</h3>
+    </div>
+    <form hx-post="/admin/{{ tenant.tenant_id }}/send/test"
+          hx-target="#toast-container" hx-swap="beforeend"
+          class="flex items-center gap-1" style="flex-wrap: wrap;">
+        <input type="email" name="email" placeholder="test@example.com" required
+               class="form-input" style="flex:1; min-width:250px;">
+        <button type="submit" class="btn btn-primary btn-sm">Send Test</button>
+    </form>
+</div>
+
+<!-- Email Preview -->
+<div class="card">
+    <div class="card-header">
+        <h3>Email Preview</h3>
+        <button class="btn btn-secondary btn-sm"
+                hx-get="/admin/{{ tenant.tenant_id }}/send/preview"
+                hx-target="#preview-area" hx-swap="innerHTML">
+            Load Preview
+        </button>
+    </div>
+    <div id="preview-area">
+        <p class="text-muted text-sm" style="padding: 2rem; text-align: center;">
+            Click "Load Preview" to see the current newsletter.
+        </p>
+    </div>
+</div>
+{% endblock %}

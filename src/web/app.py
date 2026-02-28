@@ -5,12 +5,10 @@ NewsLetterPlatform 웹 애플리케이션
 
 import logging
 import threading
-from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..config import settings
@@ -19,6 +17,8 @@ from ..common.subscription.manager import SubscriptionManager
 from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
 from ..tenant.registry import get_registry
+from .shared import templates, templates_dir, get_db, get_tenant_or_404
+from .admin import admin_router
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +50,11 @@ class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
 # CSRF 미들웨어 적용
 app.add_middleware(CSRFOriginCheckMiddleware)
 
-# 웹 페이지 템플릿
-templates_dir = Path(__file__).parent / "templates"
-templates = Jinja2Templates(directory=str(templates_dir))
-
 # 구독 매니저
 subscription_manager = SubscriptionManager()
+
+# Admin 라우터 등록 (/{tenant_id} 보다 먼저)
+app.include_router(admin_router)
 
 
 def resolve_template(tenant_id: str, template_name: str) -> str:
@@ -68,27 +67,6 @@ def resolve_template(tenant_id: str, template_name: str) -> str:
     if override_path.exists():
         return f"overrides/{tenant_id}/{template_name}"
     return template_name
-
-
-def get_db():
-    """데이터베이스 세션"""
-    SessionLocal = get_session_factory()
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-def get_tenant_or_404(tenant_id: str):
-    """테넌트 조회, 없으면 404"""
-    if not tenant_id or len(tenant_id) > 64 or not tenant_id.replace("_", "").replace("-", "").isalnum():
-        raise HTTPException(status_code=400, detail="잘못된 테넌트 ID 형식입니다")
-    registry = get_registry()
-    tenant = registry.get(tenant_id)
-    if not tenant:
-        raise HTTPException(status_code=404, detail=f"테넌트를 찾을 수 없습니다: {tenant_id}")
-    return tenant
 
 
 # ==================== 랜딩 페이지 ====================

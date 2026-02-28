@@ -1,0 +1,74 @@
+{% extends "admin/admin_base.html" %}
+
+{% block title %}History - {{ tenant.display_name }}{% endblock %}
+{% block page_title %}{{ tenant.display_name }} - Send History{% endblock %}
+
+{% block content %}
+<!-- Daily Summary -->
+{% if daily_summary %}
+<div class="card mb-3">
+    <div class="card-header">
+        <h3>Daily Summary (Last 7 days)</h3>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Total</th>
+                    <th>Success</th>
+                    <th>Failed</th>
+                    <th>Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for d in daily_summary %}
+                <tr>
+                    <td>{{ d.date }}</td>
+                    <td>{{ d.total }}</td>
+                    <td style="color: var(--action-color);">{{ d.success }}</td>
+                    <td style="color: var(--danger-color);">{{ d.failed }}</td>
+                    <td>
+                        {% if d.total > 0 %}
+                        {{ (d.success / d.total * 100) | round(1) }}%
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Filters -->
+<div class="card">
+    <div class="card-header">
+        <h3>Send History</h3>
+    </div>
+
+    <div class="flex items-center gap-1 mb-2" style="flex-wrap: wrap;">
+        <div class="filter-tabs">
+            <a href="/admin/{{ tenant.tenant_id }}/history?status=all&date_from={{ date_from }}&date_to={{ date_to }}"
+               class="filter-tab {% if status_filter == 'all' %}active{% endif %}">All</a>
+            <a href="/admin/{{ tenant.tenant_id }}/history?status=success&date_from={{ date_from }}&date_to={{ date_to }}"
+               class="filter-tab {% if status_filter == 'success' %}active{% endif %}">Success</a>
+            <a href="/admin/{{ tenant.tenant_id }}/history?status=failed&date_from={{ date_from }}&date_to={{ date_to }}"
+               class="filter-tab {% if status_filter == 'failed' %}active{% endif %}">Failed</a>
+        </div>
+        <form class="flex items-center gap-1" method="get" action="/admin/{{ tenant.tenant_id }}/history">
+            <input type="hidden" name="status" value="{{ status_filter }}">
+            <input type="date" name="date_from" value="{{ date_from }}" class="form-input" style="width:150px;">
+            <span class="text-muted text-sm">~</span>
+            <input type="date" name="date_to" value="{{ date_to }}" class="form-input" style="width:150px;">
+            <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        </form>
+    </div>
+
+    <div id="history-table">
+        {% include "admin/_history_rows.html" %}
+    </div>
+</div>
+{% endblock %}

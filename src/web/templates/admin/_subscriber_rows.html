@@ -1,0 +1,66 @@
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for s in subscribers %}
+            <tr>
+                <td>{{ s.email }}</td>
+                <td class="text-muted">{{ s.name or '-' }}</td>
+                <td>
+                    {% if s.is_active %}
+                    <span class="badge badge-success">Active</span>
+                    {% else %}
+                    <span class="badge badge-danger">Inactive</span>
+                    {% endif %}
+                </td>
+                <td class="text-muted text-sm">{{ s.created_at.strftime('%Y-%m-%d %H:%M') if s.created_at else '-' }}</td>
+                <td>
+                    <button class="btn btn-sm {% if s.is_active %}btn-secondary{% else %}btn-primary{% endif %}"
+                            hx-post="/admin/{{ tenant.tenant_id }}/subscribers/{{ s.id }}/toggle"
+                            hx-target="#toast-container" hx-swap="beforeend"
+                            hx-confirm="{% if s.is_active %}{{ s.email }} 구독을 비활성화하시겠습니까?{% else %}{{ s.email }} 구독을 활성화하시겠습니까?{% endif %}">
+                        {% if s.is_active %}Deactivate{% else %}Activate{% endif %}
+                    </button>
+                </td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="5" class="text-muted text-sm" style="text-align:center; padding:2rem;">
+                    No subscribers found
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    <span class="page-info">{{ total }} results</span>
+    {% if page > 1 %}
+    <a href="/admin/{{ tenant.tenant_id }}/subscribers?page={{ page - 1 }}&status={{ status_filter }}&search={{ search }}" class="page-btn">&laquo; Prev</a>
+    {% endif %}
+
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="page-btn active">{{ p }}</span>
+        {% elif p <= 3 or p > total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+        <a href="/admin/{{ tenant.tenant_id }}/subscribers?page={{ p }}&status={{ status_filter }}&search={{ search }}" class="page-btn">{{ p }}</a>
+        {% elif p == 4 or p == total_pages - 2 %}
+        <span class="text-muted text-sm">...</span>
+        {% endif %}
+    {% endfor %}
+
+    {% if page < total_pages %}
+    <a href="/admin/{{ tenant.tenant_id }}/subscribers?page={{ page + 1 }}&status={{ status_filter }}&search={{ search }}" class="page-btn">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}

@@ -1,0 +1,61 @@
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Email</th>
+                <th>Subject</th>
+                <th>Status</th>
+                <th>Error</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for h in history %}
+            <tr>
+                <td class="text-sm">{{ h.sent_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td class="text-sm">{{ subscriber_map.get(h.subscriber_id, 'ID:' ~ h.subscriber_id) }}</td>
+                <td class="text-sm text-muted">{{ h.subject[:50] }}{% if h.subject and h.subject|length > 50 %}...{% endif %}</td>
+                <td>
+                    {% if h.is_success %}
+                    <span class="badge badge-success">OK</span>
+                    {% else %}
+                    <span class="badge badge-danger">FAIL</span>
+                    {% endif %}
+                </td>
+                <td class="text-sm" style="color: var(--danger-color); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    {{ h.error_message or '' }}
+                </td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="5" class="text-muted text-sm" style="text-align:center; padding:2rem;">
+                    No history found
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    <span class="page-info">{{ total }} results</span>
+    {% if page > 1 %}
+    <a href="/admin/{{ tenant.tenant_id }}/history?page={{ page - 1 }}&status={{ status_filter }}&date_from={{ date_from }}&date_to={{ date_to }}" class="page-btn">&laquo; Prev</a>
+    {% endif %}
+
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="page-btn active">{{ p }}</span>
+        {% elif p <= 3 or p > total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+        <a href="/admin/{{ tenant.tenant_id }}/history?page={{ p }}&status={{ status_filter }}&date_from={{ date_from }}&date_to={{ date_to }}" class="page-btn">{{ p }}</a>
+        {% elif p == 4 or p == total_pages - 2 %}
+        <span class="text-muted text-sm">...</span>
+        {% endif %}
+    {% endfor %}
+
+    {% if page < total_pages %}
+    <a href="/admin/{{ tenant.tenant_id }}/history?page={{ page + 1 }}&status={{ status_filter }}&date_from={{ date_from }}&date_to={{ date_to }}" class="page-btn">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}

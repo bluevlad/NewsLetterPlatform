@@ -3,12 +3,12 @@
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, and_
+from sqlalchemy import create_engine, and_, func, or_, Integer
 from sqlalchemy.orm import sessionmaker, Session
 
 from .models import (
@@ -107,6 +107,45 @@ class SubscriberRepository:
             and_(Subscriber.unsubscribe_token == token, Subscriber.is_active == True)
         ).first()
 
+    @staticmethod
+    def count_by_tenant(session: Session, tenant_id: str, active_only: bool = True) -> int:
+        """테넌트별 구독자 수"""
+        query = session.query(func.count(Subscriber.id)).filter(
+            Subscriber.tenant_id == tenant_id
+        )
+        if active_only:
+            query = query.filter(Subscriber.is_active == True)
+        return query.scalar() or 0
+
+    @staticmethod
+    def get_by_id(session: Session, subscriber_id: int) -> Optional[Subscriber]:
+        """ID로 구독자 조회"""
+        return session.query(Subscriber).filter(Subscriber.id == subscriber_id).first()
+
+    @staticmethod
+    def get_all_by_tenant(
+        session: Session,
+        tenant_id: str,
+        active_only: Optional[bool] = None,
+        search: str = "",
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[Subscriber], int]:
+        """테넌트별 구독자 목록 (페이지네이션, 검색)"""
+        query = session.query(Subscriber).filter(Subscriber.tenant_id == tenant_id)
+        if active_only is True:
+            query = query.filter(Subscriber.is_active == True)
+        elif active_only is False:
+            query = query.filter(Subscriber.is_active == False)
+        if search:
+            pattern = f"%{search}%"
+            query = query.filter(
+                or_(Subscriber.email.ilike(pattern), Subscriber.name.ilike(pattern))
+            )
+        total = query.count()
+        items = query.order_by(Subscriber.created_at.desc()).offset(offset).limit(limit).all()
+        return items, total
+
 
 class SendHistoryRepository:
     """발송 이력 저장소"""
@@ -158,6 +197,99 @@ class SendHistoryRepository:
             .all()
         )
         return {row[0] for row in rows}
+
+    @staticmethod
+    def get_today_stats(session: Session, tenant_id: str) -> dict:
+        """오늘 발송 통계: {total, success, failed}"""
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        rows = (
+            session.query(
+                SendHistory.is_success,
+                func.count(SendHistory.id),
+            )
+            .filter(
+                and_(
+                    SendHistory.tenant_id == tenant_id,
+                    SendHistory.sent_at >= today_start,
+                )
+            )
+            .group_by(SendHistory.is_success)
+            .all()
+        )
+        stats = {"total": 0, "success": 0, "failed": 0}
+        for is_success, cnt in rows:
+            if is_success:
+                stats["success"] = cnt
+            else:
+                stats["failed"] = cnt
+            stats["total"] += cnt
+        return stats
+
+    @staticmethod
+    def get_recent_errors(session: Session, tenant_id: str, limit: int = 10) -> list[SendHistory]:
+        """최근 발송 실패 이력"""
+        return (
+            session.query(SendHistory)
+            .filter(
+                and_(
+                    SendHistory.tenant_id == tenant_id,
+                    SendHistory.is_success == False,
+                )
+            )
+            .order_by(SendHistory.sent_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+    @staticmethod
+    def get_history_paginated(
+        session: Session,
+        tenant_id: str,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        success_only: Optional[bool] = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[SendHistory], int]:
+        """발송 이력 페이지네이션"""
+        query = session.query(SendHistory).filter(SendHistory.tenant_id == tenant_id)
+        if date_from:
+            query = query.filter(SendHistory.sent_at >= date_from)
+        if date_to:
+            query = query.filter(SendHistory.sent_at < date_to + timedelta(days=1))
+        if success_only is True:
+            query = query.filter(SendHistory.is_success == True)
+        elif success_only is False:
+            query = query.filter(SendHistory.is_success == False)
+        total = query.count()
+        items = query.order_by(SendHistory.sent_at.desc()).offset(offset).limit(limit).all()
+        return items, total
+
+    @staticmethod
+    def get_daily_summary(session: Session, tenant_id: str, days: int = 7) -> list[dict]:
+        """최근 N일 일별 발송 요약"""
+        since = datetime.utcnow() - timedelta(days=days)
+        rows = (
+            session.query(
+                func.date(SendHistory.sent_at).label("date"),
+                func.count(SendHistory.id).label("total"),
+                func.sum(func.cast(SendHistory.is_success, Integer)).label("success"),
+            )
+            .filter(
+                and_(
+                    SendHistory.tenant_id == tenant_id,
+                    SendHistory.sent_at >= since,
+                )
+            )
+            .group_by(func.date(SendHistory.sent_at))
+            .order_by(func.date(SendHistory.sent_at).desc())
+            .all()
+        )
+        return [
+            {"date": str(row.date), "total": row.total, "success": row.success or 0,
+             "failed": row.total - (row.success or 0)}
+            for row in rows
+        ]
 
 
 class CollectedDataRepository:

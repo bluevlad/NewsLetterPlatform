@@ -1,0 +1,79 @@
+{% extends "admin/admin_base.html" %}
+
+{% block title %}Scheduler{% endblock %}
+{% block page_title %}Scheduler Monitor{% endblock %}
+
+{% block content %}
+<!-- Health Status -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Scheduler Health</div>
+        <div class="stat-value">
+            {% if health_ok %}
+            <span style="color: var(--action-color);">Healthy</span>
+            {% else %}
+            <span style="color: var(--danger-color);">Unhealthy</span>
+            {% endif %}
+        </div>
+        <div class="stat-sub">
+            <span id="health-live"
+                  hx-get="/admin/api/health"
+                  hx-trigger="every 30s"
+                  hx-swap="innerHTML">
+            </span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Last Collect</div>
+        <div class="stat-value text-sm" style="font-size: 1rem;">{{ health_data.get('collect', 'N/A') }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Last Send</div>
+        <div class="stat-value text-sm" style="font-size: 1rem;">{{ health_data.get('send', 'N/A') }}</div>
+    </div>
+</div>
+
+<!-- Schedule Config per Tenant -->
+<div class="card">
+    <div class="card-header">
+        <h3>Schedule Configuration</h3>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Tenant</th>
+                    <th>Collect Time</th>
+                    <th>Send Time</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for info in schedule_info %}
+                <tr>
+                    <td>
+                        <span class="badge badge-info">{{ info.tenant.tenant_id }}</span>
+                        {{ info.tenant.display_name }}
+                    </td>
+                    <td>
+                        <span style="font-family: monospace; font-weight: 600;">{{ info.collect_time }}</span>
+                        <span class="text-muted text-xs">UTC</span>
+                    </td>
+                    <td>
+                        <span style="font-family: monospace; font-weight: 600;">{{ info.send_time }}</span>
+                        <span class="text-muted text-xs">UTC</span>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Health File Raw Data -->
+<div class="card mt-2">
+    <div class="card-header">
+        <h3>Health File Raw</h3>
+    </div>
+    <pre style="background: rgba(15,23,42,0.6); padding: 1rem; border-radius: 8px; font-size: 0.8rem; color: var(--text-muted); overflow-x: auto;">{{ health_data | tojson(indent=2) }}</pre>
+</div>
+{% endblock %}

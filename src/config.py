@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     verification_expiry_minutes: int = Field(default=10)
     max_verification_attempts: int = Field(default=5)
 
+    # Admin
+    admin_password: str = Field(default="", env="ADMIN_PASSWORD")
+    admin_session_hours: int = Field(default=24, env="ADMIN_SESSION_HOURS")
+
     class Config:
         env_file = Path(__file__).parent.parent / ".env"
         env_file_encoding = "utf-8"

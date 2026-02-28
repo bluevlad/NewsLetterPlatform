@@ -1,0 +1,63 @@
+{% extends "admin/admin_base.html" %}
+
+{% block title %}Subscribers - {{ tenant.display_name }}{% endblock %}
+{% block page_title %}{{ tenant.display_name }} - Subscribers{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total</div>
+        <div class="stat-value">{{ total_all }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Active</div>
+        <div class="stat-value" style="color: var(--action-color);">{{ active_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Inactive</div>
+        <div class="stat-value" style="color: var(--text-muted);">{{ inactive_count }}</div>
+    </div>
+</div>
+
+<!-- Add subscriber + Export -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h3>Add Subscriber</h3>
+        <a href="/admin/{{ tenant.tenant_id }}/subscribers/export" class="btn btn-secondary btn-sm">CSV Export</a>
+    </div>
+    <form hx-post="/admin/{{ tenant.tenant_id }}/subscribers/add"
+          hx-target="#toast-container" hx-swap="beforeend"
+          class="flex items-center gap-1" style="flex-wrap: wrap;">
+        <input type="email" name="email" placeholder="email@example.com" required class="form-input" style="flex:2; min-width:200px;">
+        <input type="text" name="name" placeholder="Name (optional)" class="form-input" style="flex:1; min-width:120px;">
+        <button type="submit" class="btn btn-primary btn-sm">Add</button>
+    </form>
+</div>
+
+<!-- Filter + Search -->
+<div class="card">
+    <div class="flex items-center justify-between mb-2" style="flex-wrap: wrap; gap: 0.75rem;">
+        <div class="filter-tabs">
+            <a href="/admin/{{ tenant.tenant_id }}/subscribers?status=all&search={{ search }}"
+               class="filter-tab {% if status_filter == 'all' %}active{% endif %}">All</a>
+            <a href="/admin/{{ tenant.tenant_id }}/subscribers?status=active&search={{ search }}"
+               class="filter-tab {% if status_filter == 'active' %}active{% endif %}">Active</a>
+            <a href="/admin/{{ tenant.tenant_id }}/subscribers?status=inactive&search={{ search }}"
+               class="filter-tab {% if status_filter == 'inactive' %}active{% endif %}">Inactive</a>
+        </div>
+        <input type="search" name="search" value="{{ search }}"
+               placeholder="Search email or name..."
+               class="form-input" style="width: 250px;"
+               hx-get="/admin/{{ tenant.tenant_id }}/subscribers/search?status={{ status_filter }}"
+               hx-trigger="keyup changed delay:300ms"
+               hx-target="#subscriber-table"
+               hx-swap="innerHTML"
+               hx-include="[name='search']">
+    </div>
+
+    <div id="subscriber-table">
+        {% include "admin/_subscriber_rows.html" %}
+    </div>
+</div>
+{% endblock %}

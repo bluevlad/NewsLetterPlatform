@@ -1,0 +1,77 @@
+{% extends "admin/admin_base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block topbar_right %}
+    <span id="health-badge"
+          hx-get="/admin/api/health"
+          hx-trigger="load, every 30s"
+          hx-swap="innerHTML">
+        Loading...
+    </span>
+{% endblock %}
+
+{% block content %}
+<!-- Tenant Stats Cards -->
+<div class="stats-grid">
+{% for ts in tenant_stats %}
+    <div class="stat-card">
+        <div class="stat-label">{{ ts.tenant.display_name }}</div>
+        <div class="stat-value" style="color: var(--accent-color);">{{ ts.subscribers }}</div>
+        <div class="stat-sub">Active subscribers</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">{{ ts.tenant.display_name }} - Today</div>
+        <div class="flex items-center gap-1">
+            <div class="stat-value" style="color: var(--action-color);">{{ ts.today.success }}</div>
+            {% if ts.today.failed > 0 %}
+            <div class="stat-value" style="color: var(--danger-color); font-size: 1.25rem;">/ {{ ts.today.failed }} fail</div>
+            {% endif %}
+        </div>
+        <div class="stat-sub">
+            {% if ts.today.total > 0 %}
+                Success rate: {{ ts.success_rate }}%
+            {% else %}
+                No sends today
+            {% endif %}
+        </div>
+    </div>
+{% endfor %}
+</div>
+
+<!-- Recent Errors -->
+<div class="card">
+    <div class="card-header">
+        <h3>Recent Errors</h3>
+        <span class="badge {% if recent_errors %}badge-danger{% else %}badge-success{% endif %}">
+            {{ recent_errors|length }} errors
+        </span>
+    </div>
+    {% if recent_errors %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Tenant</th>
+                    <th>Time</th>
+                    <th>Subject</th>
+                    <th>Error</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for err in recent_errors %}
+                <tr>
+                    <td><span class="badge badge-info">{{ err.tenant_id }}</span></td>
+                    <td class="text-muted text-sm">{{ err.sent_at.strftime('%m/%d %H:%M') }}</td>
+                    <td class="text-sm">{{ err.subject[:40] }}{% if err.subject|length > 40 %}...{% endif %}</td>
+                    <td class="text-sm" style="color: var(--danger-color);">{{ err.error_message[:60] }}{% if err.error_message and err.error_message|length > 60 %}...{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted text-sm" style="padding: 1rem 0;">No recent errors</p>
+    {% endif %}
+</div>
+{% endblock %}
