@@ -135,11 +135,15 @@ class AllergyInsightFormatter:
                         existing_articles.append(article)
                 existing["articles"] = existing_articles
 
-        # 기간 계산
-        today = date.today()
-        period_end = today - timedelta(days=today.weekday())
-        period_start = period_end - timedelta(days=7)
-        period_end = period_end - timedelta(days=1)
+        # 기간 계산: 실제 데이터 날짜 기준
+        if by_date:
+            sorted_dates = sorted(by_date.keys())
+            period_start = sorted_dates[0]
+            period_end = sorted_dates[-1]
+        else:
+            today = date.today()
+            period_end = today - timedelta(days=1)
+            period_start = today - timedelta(days=7)
 
         return {
             "report_date": datetime.now(),
@@ -360,11 +364,19 @@ class AllergyInsightFormatter:
                 "pub_date": news.get("pub_date", ""),
             })
 
-        # 기간 계산 (지난달 1일~말일)
-        today = date.today()
-        first_of_month = today.replace(day=1)
-        period_end = first_of_month - timedelta(days=1)
-        period_start = period_end.replace(day=1)
+        # 기간 계산: 실제 데이터 날짜 기준
+        if by_date:
+            sorted_dates = sorted(by_date.keys())
+            period_start = sorted_dates[0]
+            period_end = sorted_dates[-1]
+        else:
+            today = date.today()
+            if today.day == 1:
+                period_end = today - timedelta(days=1)
+                period_start = period_end.replace(day=1)
+            else:
+                period_start = today.replace(day=1)
+                period_end = today - timedelta(days=1)
 
         return {
             "report_date": datetime.now(),

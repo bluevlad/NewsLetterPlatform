@@ -32,16 +32,19 @@ def _get_period_range(newsletter_type: str) -> tuple[date, date]:
     """
     today = date.today()
     if newsletter_type == "weekly":
-        # 지난주 월~일
-        date_to = today - timedelta(days=today.weekday())  # 이번주 월요일
-        date_from = date_to - timedelta(days=7)  # 지난주 월요일
-        date_to = date_to - timedelta(days=1)  # 지난주 일요일
+        # 최근 7일 (어제까지)
+        date_to = today - timedelta(days=1)
+        date_from = today - timedelta(days=7)
         return date_from, date_to
     elif newsletter_type == "monthly":
-        # 지난달 1일~말일
-        first_of_this_month = today.replace(day=1)
-        date_to = first_of_this_month - timedelta(days=1)  # 지난달 말일
-        date_from = date_to.replace(day=1)  # 지난달 1일
+        if today.day == 1:
+            # 1일 발송: 지난달 1일~말일
+            date_to = today - timedelta(days=1)
+            date_from = date_to.replace(day=1)
+        else:
+            # 말일 발송: 이번달 1일~어제
+            date_from = today.replace(day=1)
+            date_to = today - timedelta(days=1)
         return date_from, date_to
     else:
         # daily: 오늘
@@ -486,9 +489,11 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
                     id=f"send_monthly_{tid}",
                     name=f"Send Monthly {tenant.display_name}",
                 )
+                day_label = mc.get('day_of_month', 1)
+                day_display = "말일" if str(day_label) == "last" else f"{day_label}일"
                 logger.info(
                     f"[{tid}] monthly 스케줄 등록: "
-                    f"매월 {mc.get('day_of_month', 1)}일 "
+                    f"매월 {day_display} "
                     f"수집 {mc.get('collect_hour', 7):02d}:{mc.get('collect_minute', 0):02d}, "
                     f"발송 {mc.get('send_hour', 10):02d}:{mc.get('send_minute', 0):02d}"
                 )

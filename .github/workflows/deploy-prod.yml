@@ -40,16 +40,32 @@ jobs:
           EDUFIT_SEND_HOUR=8
           EDUFIT_SEND_MINUTE=20
 
-          # AllergyInsight
+          # AllergyInsight (Daily)
           ALLERGY_COLLECT_HOUR=7
           ALLERGY_COLLECT_MINUTE=30
           ALLERGY_SEND_HOUR=8
           ALLERGY_SEND_MINUTE=30
 
+          # AllergyInsight (Weekly: 매주 금요일)
+          ALLERGY_WEEKLY_DAY_OF_WEEK=fri
+          ALLERGY_WEEKLY_COLLECT_HOUR=7
+          ALLERGY_WEEKLY_COLLECT_MINUTE=10
+          ALLERGY_WEEKLY_SEND_HOUR=9
+          ALLERGY_WEEKLY_SEND_MINUTE=30
+
+          # AllergyInsight (Monthly: 매월 말일)
+          ALLERGY_MONTHLY_DAY_OF_MONTH=last
+          ALLERGY_MONTHLY_COLLECT_HOUR=7
+          ALLERGY_MONTHLY_COLLECT_MINUTE=0
+          ALLERGY_MONTHLY_SEND_HOUR=10
+          ALLERGY_MONTHLY_SEND_MINUTE=0
+
           # Tenant API URLs
           EDUFIT_API_URL=http://host.docker.internal:9070/api/v1
           ALLERGY_INSIGHT_API_URL=http://host.docker.internal:9040
-          ALLERGY_INSIGHT_API_TOKEN=${{ secrets.ALLERGY_INSIGHT_API_TOKEN }}
+          ALLERGY_INSIGHT_ADMIN_NAME=${{ secrets.ALLERGY_INSIGHT_ADMIN_NAME }}
+          ALLERGY_INSIGHT_ADMIN_PHONE=${{ secrets.ALLERGY_INSIGHT_ADMIN_PHONE }}
+          ALLERGY_INSIGHT_ADMIN_PIN=${{ secrets.ALLERGY_INSIGHT_ADMIN_PIN }}
 
           # Web Server
           WEB_HOST=0.0.0.0
