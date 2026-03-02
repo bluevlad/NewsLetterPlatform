@@ -47,128 +47,25 @@ class AllergyInsightFormatter:
         }
 
     def format_weekly(self, history_data: list, collected_data: dict = None) -> dict:
-        """주간 요약 포매팅 - 7일간 일일 이력 데이터를 집계
+        """주간 통계 포매팅 - format_monthly와 동일한 통계 구조 반환
 
         Args:
             history_data: [{collected_date, data_type, data}, ...]
             collected_data: 추가 수집 데이터 (optional)
         """
-        from collections import defaultdict
-        from datetime import date, timedelta
-
-        # 일별로 그룹핑
-        by_date = defaultdict(dict)
-        for record in history_data:
-            d = record["collected_date"]
-            dtype = record["data_type"]
-            data = record["data"]
-            by_date[d][dtype] = data
-
-        # 뉴스/논문/기업 집계
-        all_top_news = []
-        all_company_news = []
-        all_papers = []
-        total_news_count = 0
-        total_paper_count = 0
-        total_company_count = 0
-        days_with_data = 0
-
-        for collected_date in sorted(by_date.keys()):
-            day_data = by_date[collected_date]
-            daily_report = day_data.get("daily_report", {})
-            if not daily_report:
-                continue
-
-            days_with_data += 1
-            day_stats = daily_report.get("stats", {})
-            total_news_count += day_stats.get("news_count", 0)
-            total_paper_count += day_stats.get("paper_count", 0)
-            total_company_count += day_stats.get("company_count", 0)
-
-            # 주요 뉴스 수집 (중복 제거: title 기준)
-            for news in daily_report.get("top_news", []):
-                all_top_news.append(news)
-
-            for company in daily_report.get("company_news", []):
-                all_company_news.append(company)
-
-            for paper in daily_report.get("papers", []):
-                all_papers.append(paper)
-
-        # 뉴스 중복 제거 (title 기준)
-        seen_titles = set()
-        unique_top_news = []
-        for news in all_top_news:
-            title = news.get("title", "")
-            if title and title not in seen_titles:
-                seen_titles.add(title)
-                unique_top_news.append(news)
-
-        # 중요도 순 정렬
-        unique_top_news.sort(
-            key=lambda x: x.get("importance_score", 0) or 0, reverse=True
-        )
-
-        # 논문 중복 제거
-        seen_paper_titles = set()
-        unique_papers = []
-        for paper in all_papers:
-            title = paper.get("title", "")
-            if title and title not in seen_paper_titles:
-                seen_paper_titles.add(title)
-                unique_papers.append(paper)
-
-        # 기업 뉴스 이름 기준 합치기
-        company_map = {}
-        for company in all_company_news:
-            name = company.get("name", "")
-            if name not in company_map:
-                company_map[name] = company.copy()
-            else:
-                existing = company_map[name]
-                existing_articles = existing.get("articles", [])
-                new_articles = company.get("articles", [])
-                # 제목 기준 중복 제거
-                existing_titles = {a.get("title", "") for a in existing_articles}
-                for article in new_articles:
-                    if article.get("title", "") not in existing_titles:
-                        existing_articles.append(article)
-                existing["articles"] = existing_articles
-
-        # 기간 계산: 실제 데이터 날짜 기준
-        if by_date:
-            sorted_dates = sorted(by_date.keys())
-            period_start = sorted_dates[0]
-            period_end = sorted_dates[-1]
-        else:
-            today = date.today()
-            period_end = today - timedelta(days=1)
-            period_start = today - timedelta(days=7)
-
-        return {
-            "report_date": datetime.now(),
-            "period_start": period_start,
-            "period_end": period_end,
-            "top_news": unique_top_news[:10],
-            "company_news": list(company_map.values()),
-            "papers": unique_papers[:10],
-            "stats": {
-                "news_count": total_news_count,
-                "paper_count": total_paper_count,
-                "company_count": total_company_count,
-                "total_count": total_news_count + total_paper_count + total_company_count,
-                "days_with_data": days_with_data,
-            },
-            "generated_at": datetime.now(),
-        }
+        return self._format_stats_report(history_data)
 
     def format_monthly(self, history_data: list, collected_data: dict = None) -> dict:
-        """월간 요약 포매팅 - 통계 중심 집계
+        """월간 통계 포매팅 - format_weekly와 동일한 통계 구조 반환
 
         Args:
             history_data: [{collected_date, data_type, data}, ...]
             collected_data: 추가 수집 데이터 (optional)
         """
+        return self._format_stats_report(history_data)
+
+    def _format_stats_report(self, history_data: list) -> dict:
+        """주간/월간 공통 통계 리포트 포매팅"""
         from collections import Counter, defaultdict
         from datetime import date, timedelta
 
@@ -371,12 +268,8 @@ class AllergyInsightFormatter:
             period_end = sorted_dates[-1]
         else:
             today = date.today()
-            if today.day == 1:
-                period_end = today - timedelta(days=1)
-                period_start = period_end.replace(day=1)
-            else:
-                period_start = today.replace(day=1)
-                period_end = today - timedelta(days=1)
+            period_end = today - timedelta(days=1)
+            period_start = today - timedelta(days=7)
 
         return {
             "report_date": datetime.now(),
