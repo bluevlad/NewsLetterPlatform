@@ -40,7 +40,7 @@ class AllergyInsightTenant(BaseTenant):
 
     @property
     def supported_frequencies(self) -> List[str]:
-        return ["daily", "weekly"]
+        return ["daily", "weekly", "monthly"]
 
     @property
     def schedule_config(self) -> Dict[str, int]:
@@ -61,6 +61,16 @@ class AllergyInsightTenant(BaseTenant):
             "send_minute": settings.allergy_weekly_send_minute,
         }
 
+    @property
+    def monthly_schedule_config(self) -> Dict[str, Any]:
+        return {
+            "day_of_month": settings.allergy_monthly_day_of_month,
+            "collect_hour": settings.allergy_monthly_collect_hour,
+            "collect_minute": settings.allergy_monthly_collect_minute,
+            "send_hour": settings.allergy_monthly_send_hour,
+            "send_minute": settings.allergy_monthly_send_minute,
+        }
+
     async def collect_data(self) -> Dict[str, Any]:
         return await self._collector.collect_all()
 
@@ -72,6 +82,8 @@ class AllergyInsightTenant(BaseTenant):
                                collected_data: Dict[str, Any] = None) -> Dict[str, Any]:
         if newsletter_type == "weekly":
             return self._formatter.format_weekly(history_data, collected_data)
+        if newsletter_type == "monthly":
+            return self._formatter.format_monthly(history_data, collected_data)
         return {}
 
     def generate_subject(self, report_date=None, newsletter_type: str = "daily") -> str:

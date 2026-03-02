@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AllergyInsight - 월간 통계 리포트</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; background-color: #f0f4f0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 700px; margin: 0 auto; background-color: #ffffff;">
+        <!-- Header -->
+        <tr>
+            <td style="background: linear-gradient(135deg, #1b5e20 0%, #0d3b0e 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">AllergyInsight</h1>
+                <p style="margin: 10px 0 0 0; color: #a5d6a7; font-size: 18px; font-weight: 600;">Monthly Statistics Report</p>
+                <p style="margin: 14px 0 0 0; color: #ffffff; font-size: 16px;">
+                    {{ period_start.strftime('%Y.%m.%d') }} ~ {{ period_end.strftime('%Y.%m.%d') }}
+                </p>
+            </td>
+        </tr>
+
+        <!-- Section 1: Monthly Summary -->
+        <tr>
+            <td style="padding: 30px 30px 10px 30px;">
+                <h2 style="margin: 0 0 18px 0; padding-bottom: 10px; border-bottom: 3px solid #1b5e20; color: #1b5e20; font-size: 19px;">
+                    1. Monthly Overview
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td width="25%" style="text-align: center; padding: 12px 4px;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr><td style="background-color: #e8f5e9; border-radius: 8px; padding: 16px 8px; text-align: center;">
+                                    <p style="margin: 0; color: #888888; font-size: 12px;">Data Days</p>
+                                    <p style="margin: 6px 0 0 0; color: #1b5e20; font-size: 28px; font-weight: 700;">{{ summary.days_with_data }}</p>
+                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">days</p>
+                                </td></tr>
+                            </table>
+                        </td>
+                        <td width="25%" style="text-align: center; padding: 12px 4px;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr><td style="background-color: #e8f5e9; border-radius: 8px; padding: 16px 8px; text-align: center;">
+                                    <p style="margin: 0; color: #888888; font-size: 12px;">News</p>
+                                    <p style="margin: 6px 0 0 0; color: #2e7d32; font-size: 28px; font-weight: 700;">{{ summary.total_news }}</p>
+                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">avg {{ summary.daily_avg_news }}/day</p>
+                                </td></tr>
+                            </table>
+                        </td>
+                        <td width="25%" style="text-align: center; padding: 12px 4px;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr><td style="background-color: #e3f2fd; border-radius: 8px; padding: 16px 8px; text-align: center;">
+                                    <p style="margin: 0; color: #888888; font-size: 12px;">Papers</p>
+                                    <p style="margin: 6px 0 0 0; color: #1565c0; font-size: 28px; font-weight: 700;">{{ summary.total_papers }}</p>
+                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">avg {{ summary.daily_avg_papers }}/day</p>
+                                </td></tr>
+                            </table>
+                        </td>
+                        <td width="25%" style="text-align: center; padding: 12px 4px;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr><td style="background-color: #fff3e0; border-radius: 8px; padding: 16px 8px; text-align: center;">
+                                    <p style="margin: 0; color: #888888; font-size: 12px;">Companies</p>
+                                    <p style="margin: 6px 0 0 0; color: #ef6c00; font-size: 28px; font-weight: 700;">{{ summary.total_companies }}</p>
+                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">tracked</p>
+                                </td></tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 10px;">
+                    <tr>
+                        <td style="text-align: center; padding: 8px; background-color: #fafafa; border-radius: 6px;">
+                            <span style="color: #666666; font-size: 13px;">
+                                Avg Importance Score: <strong style="color: #e53935;">{{ (summary.avg_importance * 100)|int }}%</strong>
+                            </span>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+
+        <!-- Section 2: Category Distribution -->
+        {% if category_distribution %}
+        <tr>
+            <td style="padding: 25px 30px 10px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #2e7d32; color: #2e7d32; font-size: 19px;">
+                    2. Category Distribution
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    {% for cat in category_distribution %}
+                    <tr>
+                        <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">{{ cat.name }}</td>
+                        <td style="padding: 6px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; border-radius: 4px;">
+                                <tr>
+                                    <td width="{{ cat.percent }}%" style="background-color: {{ cat.color }}; border-radius: 4px; height: 22px; font-size: 1px;">&nbsp;</td>
+                                    <td style="font-size: 1px;">&nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td width="90" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">{{ cat.count }}건 ({{ cat.percent }}%)</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Section 3: Hot Keywords TOP 5 -->
+        {% if top_keywords %}
+        <tr>
+            <td style="padding: 25px 30px 10px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #ef6c00; color: #ef6c00; font-size: 19px;">
+                    3. Hot Keywords TOP {{ top_keywords|length }}
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    {% for kw in top_keywords %}
+                    <tr>
+                        <td width="120" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">{{ kw.keyword }}</td>
+                        <td style="padding: 6px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; border-radius: 4px;">
+                                <tr>
+                                    <td width="{{ kw.percent }}%" style="background-color: #ef6c00; border-radius: 4px; height: 22px; font-size: 1px;">&nbsp;</td>
+                                    <td style="font-size: 1px;">&nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td width="90" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">{{ kw.count }}건 ({{ kw.percent }}%)</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Section 4: News vs Papers Ratio -->
+        {% if content_type_distribution %}
+        <tr>
+            <td style="padding: 25px 30px 10px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #37474f; color: #37474f; font-size: 19px;">
+                    4. News vs Papers
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    {% for ct in content_type_distribution %}
+                    <tr>
+                        <td width="60" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">{{ ct.name }}</td>
+                        <td style="padding: 6px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; border-radius: 4px;">
+                                <tr>
+                                    <td width="{{ ct.percent }}%" style="background-color: {{ ct.color }}; border-radius: 4px; height: 22px; font-size: 1px;">&nbsp;</td>
+                                    <td style="font-size: 1px;">&nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td width="90" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">{{ ct.count }}건 ({{ ct.percent }}%)</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Section 5: Importance Analysis -->
+        {% if importance_analysis %}
+        <tr>
+            <td style="padding: 25px 30px 10px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #e53935; color: #e53935; font-size: 19px;">
+                    5. Importance Analysis
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 14px;">
+                    <tr>
+                        <td style="text-align: center; padding: 16px; background-color: #ffebee; border-radius: 8px;">
+                            <p style="margin: 0; color: #888888; font-size: 12px;">Average Importance Score</p>
+                            <p style="margin: 8px 0 0 0; color: #e53935; font-size: 36px; font-weight: 700;">{{ (importance_analysis.avg_score * 100)|int }}%</p>
+                        </td>
+                    </tr>
+                </table>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">High (&ge;70%)</td>
+                        <td style="padding: 6px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; border-radius: 4px;">
+                                <tr>
+                                    <td width="{{ importance_analysis.high_percent }}%" style="background-color: #e53935; border-radius: 4px; height: 22px; font-size: 1px;">&nbsp;</td>
+                                    <td style="font-size: 1px;">&nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td width="90" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">{{ importance_analysis.high_count }}건 ({{ importance_analysis.high_percent }}%)</td>
+                    </tr>
+                    <tr>
+                        <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">Mid (40~70%)</td>
+                        <td style="padding: 6px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; border-radius: 4px;">
+                                <tr>
+                                    <td width="{{ importance_analysis.mid_percent }}%" style="background-color: #fb8c00; border-radius: 4px; height: 22px; font-size: 1px;">&nbsp;</td>
+                                    <td style="font-size: 1px;">&nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td width="90" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">{{ importance_analysis.mid_count }}건 ({{ importance_analysis.mid_percent }}%)</td>
+                    </tr>
+                    <tr>
+                        <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">Low (&lt;40%)</td>
+                        <td style="padding: 6px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; border-radius: 4px;">
+                                <tr>
+                                    <td width="{{ importance_analysis.low_percent }}%" style="background-color: #bdbdbd; border-radius: 4px; height: 22px; font-size: 1px;">&nbsp;</td>
+                                    <td style="font-size: 1px;">&nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td width="90" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">{{ importance_analysis.low_count }}건 ({{ importance_analysis.low_percent }}%)</td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Section 6: Top Journals -->
+        {% if top_journals %}
+        <tr>
+            <td style="padding: 25px 30px 10px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #1565c0; color: #1565c0; font-size: 19px;">
+                    6. Top Journals
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    {% for j in top_journals %}
+                    <tr>
+                        <td width="180" style="padding: 6px 8px 6px 0; color: #333333; font-size: 12px; font-weight: 600;">{{ j.journal[:30] }}{% if j.journal|length > 30 %}...{% endif %}</td>
+                        <td style="padding: 6px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; border-radius: 4px;">
+                                <tr>
+                                    <td width="{{ j.percent }}%" style="background-color: #1565c0; border-radius: 4px; height: 22px; font-size: 1px;">&nbsp;</td>
+                                    <td style="font-size: 1px;">&nbsp;</td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td width="80" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">{{ j.count }}건 ({{ j.percent }}%)</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Section 7: Top 3 Key News -->
+        {% if top_news %}
+        <tr>
+            <td style="padding: 25px 30px 10px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #1b5e20; color: #1b5e20; font-size: 19px;">
+                    7. Key News TOP 3
+                </h2>
+
+                {% for item in top_news %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 14px;">
+                    <tr>
+                        <td width="44" style="vertical-align: top; padding: 14px 10px 14px 0;">
+                            <table cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="width: 38px; height: 38px; border-radius: 50%; text-align: center; vertical-align: middle; font-size: 18px; font-weight: 700; color: #ffffff; background-color: {% if item.rank == 1 %}#f9a825{% elif item.rank == 2 %}#90a4ae{% else %}#8d6e63{% endif %};">
+                                        {{ item.rank }}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td style="background-color: #fafafa; border-radius: 8px; padding: 14px 16px;">
+                            <h3 style="margin: 0 0 6px 0; font-size: 15px; line-height: 1.4;">
+                                <a href="{{ item.link }}" style="color: #333333; text-decoration: none;">{{ item.title }}</a>
+                            </h3>
+                            <p style="margin: 0 0 8px 0; color: #888888; font-size: 11px;">
+                                {% if item.category %}[{{ item.category }}]{% endif %}
+                                {% if item.source %} {{ item.source }}{% endif %}
+                                {% if item.pub_date %} &middot; {{ item.pub_date }}{% endif %}
+                                {% if item.importance_score %}
+                                <span style="color: #e53935; margin-left: 6px;">Score {{ (item.importance_score * 100)|int }}%</span>
+                                {% endif %}
+                            </p>
+                            {% if item.summary %}
+                            <p style="margin: 0; color: #555555; font-size: 13px; line-height: 1.5;">
+                                {{ item.summary[:180] }}{% if item.summary|length > 180 %}...{% endif %}
+                            </p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+                {% endfor %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- No Data -->
+        {% if not summary or (summary.total_news == 0 and summary.total_papers == 0) %}
+        <tr>
+            <td style="padding: 40px 30px; text-align: center;">
+                <p style="color: #888888; font-size: 16px;">
+                    No data collected for this month.
+                </p>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Footer -->
+        <tr>
+            <td style="background-color: #f5f5f5; padding: 30px; text-align: center; border-top: 1px solid #eeeeee;">
+                <p style="margin: 0 0 10px 0; color: #888888; font-size: 12px;">
+                    This email was automatically generated by AllergyInsight.
+                </p>
+                <p style="margin: 0 0 15px 0; color: #aaaaaa; font-size: 11px;">
+                    <a href="__UNSUBSCRIBE_URL__" style="color: #aaaaaa; text-decoration: underline;">Unsubscribe</a>
+                </p>
+                <p style="margin: 0; color: #cccccc; font-size: 11px;">
+                    Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                </p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

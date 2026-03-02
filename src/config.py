@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     allergy_weekly_send_hour: int = Field(default=9, env="ALLERGY_WEEKLY_SEND_HOUR")
     allergy_weekly_send_minute: int = Field(default=30, env="ALLERGY_WEEKLY_SEND_MINUTE")
 
+    # 스케줄러 - AllergyInsight (Monthly: 매월 1일)
+    allergy_monthly_day_of_month: int = Field(default=1, env="ALLERGY_MONTHLY_DAY_OF_MONTH")
+    allergy_monthly_collect_hour: int = Field(default=7, env="ALLERGY_MONTHLY_COLLECT_HOUR")
+    allergy_monthly_collect_minute: int = Field(default=0, env="ALLERGY_MONTHLY_COLLECT_MINUTE")
+    allergy_monthly_send_hour: int = Field(default=10, env="ALLERGY_MONTHLY_SEND_HOUR")
+    allergy_monthly_send_minute: int = Field(default=0, env="ALLERGY_MONTHLY_SEND_MINUTE")
+
     # 테넌트 API URLs
     edufit_api_url: str = Field(
         default="http://localhost:9070/api/v1",
@@ -66,9 +73,17 @@ class Settings(BaseSettings):
         default="http://localhost:9040",
         env="ALLERGY_INSIGHT_API_URL"
     )
-    allergy_insight_api_token: str = Field(
+    allergy_insight_admin_name: str = Field(
         default="",
-        env="ALLERGY_INSIGHT_API_TOKEN"
+        env="ALLERGY_INSIGHT_ADMIN_NAME"
+    )
+    allergy_insight_admin_phone: str = Field(
+        default="",
+        env="ALLERGY_INSIGHT_ADMIN_PHONE"
+    )
+    allergy_insight_admin_pin: str = Field(
+        default="",
+        env="ALLERGY_INSIGHT_ADMIN_PIN"
     )
 
     # 웹 서버
