@@ -4,7 +4,7 @@ services:
   newsletterplatform-scheduler:
     build: .
     container_name: newsletterplatform-scheduler
-    restart: unless-stopped
+    restart: always
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -24,7 +24,7 @@ services:
   newsletterplatform-web:
     build: .
     container_name: newsletterplatform-web
-    restart: unless-stopped
+    restart: always
     ports:
       - "4050:4050"
     volumes:
