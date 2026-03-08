@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from ..config import settings
 from ..common.database.repository import get_session_factory
@@ -53,6 +54,11 @@ class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
 
 # CSRF 미들웨어 적용
 app.add_middleware(CSRFOriginCheckMiddleware)
+
+# Starlette SessionMiddleware (Google OAuth state 저장용)
+# secret_key: 앱 시작 시마다 새 키 생성 (in-memory 세션과 동일 lifecycle)
+import secrets as _secrets
+app.add_middleware(SessionMiddleware, secret_key=_secrets.token_urlsafe(32))
 
 # 구독 매니저
 subscription_manager = SubscriptionManager()
