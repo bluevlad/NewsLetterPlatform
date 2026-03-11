@@ -24,7 +24,7 @@
                 <td class="text-muted text-sm">{{ s.created_at.strftime('%Y-%m-%d %H:%M') if s.created_at else '-' }}</td>
                 <td>
                     <button class="btn btn-sm {% if s.is_active %}btn-secondary{% else %}btn-primary{% endif %}"
-                            hx-post="/admin/{{ tenant.tenant_id }}/subscribers/{{ s.id }}/toggle"
+                            hx-post="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers/{{ s.id }}/toggle"
                             hx-target="#toast-container" hx-swap="beforeend"
                             hx-confirm="{% if s.is_active %}{{ s.email }} 구독을 비활성화하시겠습니까?{% else %}{{ s.email }} 구독을 활성화하시겠습니까?{% endif %}">
                         {% if s.is_active %}Deactivate{% else %}Activate{% endif %}
@@ -46,21 +46,21 @@
 <div class="pagination">
     <span class="page-info">{{ total }} results</span>
     {% if page > 1 %}
-    <a href="/admin/{{ tenant.tenant_id }}/subscribers?page={{ page - 1 }}&status={{ status_filter }}&search={{ search }}" class="page-btn">&laquo; Prev</a>
+    <a href="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers?page={{ page - 1 }}&status={{ status_filter }}&search={{ search }}" class="page-btn">&laquo; Prev</a>
     {% endif %}
 
     {% for p in range(1, total_pages + 1) %}
         {% if p == page %}
         <span class="page-btn active">{{ p }}</span>
         {% elif p <= 3 or p > total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
-        <a href="/admin/{{ tenant.tenant_id }}/subscribers?page={{ p }}&status={{ status_filter }}&search={{ search }}" class="page-btn">{{ p }}</a>
+        <a href="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers?page={{ p }}&status={{ status_filter }}&search={{ search }}" class="page-btn">{{ p }}</a>
         {% elif p == 4 or p == total_pages - 2 %}
         <span class="text-muted text-sm">...</span>
         {% endif %}
     {% endfor %}
 
     {% if page < total_pages %}
-    <a href="/admin/{{ tenant.tenant_id }}/subscribers?page={{ page + 1 }}&status={{ status_filter }}&search={{ search }}" class="page-btn">Next &raquo;</a>
+    <a href="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers?page={{ page + 1 }}&status={{ status_filter }}&search={{ search }}" class="page-btn">Next &raquo;</a>
     {% endif %}
 </div>
 {% endif %}

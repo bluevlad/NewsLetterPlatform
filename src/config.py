@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     web_host: str = Field(default="0.0.0.0", env="WEB_HOST")
     web_port: int = Field(default=4050, env="WEB_PORT")
     web_base_url: str = Field(default="http://localhost:4050", env="WEB_BASE_URL")
+    root_path: str = Field(default="", env="ROOT_PATH")
 
     # 로깅
     log_level: str = Field(default="INFO", env="LOG_LEVEL")

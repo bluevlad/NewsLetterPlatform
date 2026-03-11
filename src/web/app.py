@@ -21,13 +21,17 @@ from ..tenant.registry import get_registry
 from .shared import templates, templates_dir, get_db, get_tenant_or_404
 from .admin import admin_router
 
+# 리버스 프록시 base path prefix
+_base = settings.root_path
+
 logger = logging.getLogger(__name__)
 
 # FastAPI 앱 생성
 app = FastAPI(
     title="NewsLetterPlatform",
     description="멀티테넌트 뉴스레터 통합 플랫폼",
-    version="1.0.0"
+    version="1.0.0",
+    root_path=settings.root_path,
 )
 
 class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
@@ -143,7 +147,7 @@ async def subscribe_submit(
 
         if email_sent:
             return RedirectResponse(
-                url=f"/{tenant_id}/verify/{verification_id}?email={email.strip().lower()}",
+                url=f"{_base}/{tenant_id}/verify/{verification_id}?email={email.strip().lower()}",
                 status_code=303
             )
         else:
@@ -218,7 +222,7 @@ async def verify_submit(
         ).start()
 
         return RedirectResponse(
-            url=f"/{tenant_id}/result?email={email}",
+            url=f"{_base}/{tenant_id}/result?email={email}",
             status_code=303
         )
 
@@ -296,7 +300,7 @@ async def unsubscribe_submit(
 
         if email_sent:
             return RedirectResponse(
-                url=f"/{tenant_id}/unsubscribe/verify/{verification_id}?email={email.strip().lower()}",
+                url=f"{_base}/{tenant_id}/unsubscribe/verify/{verification_id}?email={email.strip().lower()}",
                 status_code=303
             )
         else:
@@ -363,7 +367,7 @@ async def unsubscribe_verify_submit(
 
         db.commit()
         return RedirectResponse(
-            url=f"/{tenant_id}/unsubscribe/result?email={email}",
+            url=f"{_base}/{tenant_id}/unsubscribe/result?email={email}",
             status_code=303
         )
 

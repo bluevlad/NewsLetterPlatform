@@ -71,7 +71,7 @@
             <h3>Collect Data</h3>
         </div>
         <p class="text-sm text-muted mb-2">Trigger data collection from the source API.</p>
-        <form hx-post="/admin/{{ tenant.tenant_id }}/send/collect"
+        <form hx-post="{{ base_path }}/admin/{{ tenant.tenant_id }}/send/collect"
               hx-target="#toast-container" hx-swap="beforeend">
             <input type="hidden" name="newsletter_type" class="nl-type-input" value="daily">
             <button type="submit" class="btn btn-warning"
@@ -87,7 +87,7 @@
             <h3>Send Newsletter</h3>
         </div>
         <p class="text-sm text-muted mb-2">Send newsletter to all active subscribers ({{ active_count }}).</p>
-        <form hx-post="/admin/{{ tenant.tenant_id }}/send/trigger"
+        <form hx-post="{{ base_path }}/admin/{{ tenant.tenant_id }}/send/trigger"
               hx-target="#toast-container" hx-swap="beforeend">
             <input type="hidden" name="newsletter_type" class="nl-type-input" value="daily">
             <button type="submit" class="btn btn-danger"
@@ -103,7 +103,7 @@
     <div class="card-header">
         <h3>Test Email</h3>
     </div>
-    <form hx-post="/admin/{{ tenant.tenant_id }}/send/test"
+    <form hx-post="{{ base_path }}/admin/{{ tenant.tenant_id }}/send/test"
           hx-target="#toast-container" hx-swap="beforeend"
           class="flex items-center gap-1" style="flex-wrap: wrap;">
         <input type="hidden" name="newsletter_type" class="nl-type-input" value="daily">
@@ -118,7 +118,7 @@
     <div class="card-header">
         <h3>Email Preview</h3>
         <button class="btn btn-secondary btn-sm" id="preview-btn"
-                hx-get="/admin/{{ tenant.tenant_id }}/send/preview?newsletter_type=daily"
+                hx-get="{{ base_path }}/admin/{{ tenant.tenant_id }}/send/preview?newsletter_type=daily"
                 hx-target="#preview-area" hx-swap="innerHTML">
             Load Preview
         </button>
@@ -148,7 +148,7 @@ function selectNewsletterType(type, btn) {
     // Update preview button URL
     var previewBtn = document.getElementById('preview-btn');
     previewBtn.setAttribute('hx-get',
-        '/admin/{{ tenant.tenant_id }}/send/preview?newsletter_type=' + type);
+        '{{ base_path }}/admin/{{ tenant.tenant_id }}/send/preview?newsletter_type=' + type);
     htmx.process(previewBtn);
 }
 </script>

@@ -4,7 +4,7 @@
 {% block page_title %}Dashboard{% endblock %}
 {% block topbar_right %}
     <span id="health-badge"
-          hx-get="/admin/api/health"
+          hx-get="{{ base_path }}/admin/api/health"
           hx-trigger="load, every 30s"
           hx-swap="innerHTML">
         Loading...

@@ -49,6 +49,7 @@ services:
     environment:
       - TZ=Asia/Seoul
       - PYTHONUNBUFFERED=1
+      - ROOT_PATH=/newsletter
     command: ["python", "-m", "src.main", "--web"]
     networks:
       - unmong-network

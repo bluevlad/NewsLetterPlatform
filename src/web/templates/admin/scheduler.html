@@ -17,7 +17,7 @@
         </div>
         <div class="stat-sub">
             <span id="health-live"
-                  hx-get="/admin/api/health"
+                  hx-get="{{ base_path }}/admin/api/health"
                   hx-trigger="every 30s"
                   hx-swap="innerHTML">
             </span>

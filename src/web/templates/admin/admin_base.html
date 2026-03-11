@@ -256,34 +256,34 @@
 <body>
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <a href="/admin" style="text-decoration:none;">
+            <a href="{{ base_path }}/admin" style="text-decoration:none;">
                 <h2>NewsLetterPlatform</h2>
             </a>
             <p>Admin Dashboard</p>
         </div>
         <nav class="sidebar-nav">
             <div class="nav-section">General</div>
-            <a href="/admin" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
+            <a href="{{ base_path }}/admin" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
                 <span class="nav-icon">&#9632;</span> Dashboard
             </a>
-            <a href="/admin/scheduler" class="nav-link {% if active_page == 'scheduler' %}active{% endif %}">
+            <a href="{{ base_path }}/admin/scheduler" class="nav-link {% if active_page == 'scheduler' %}active{% endif %}">
                 <span class="nav-icon">&#9200;</span> Scheduler
             </a>
             {% for t in tenants %}
             <div class="nav-section">{{ t.display_name }}</div>
-            <a href="/admin/{{ t.tenant_id }}/subscribers" class="nav-link {% if active_page == 'subscribers' and active_tenant == t.tenant_id %}active{% endif %}">
+            <a href="{{ base_path }}/admin/{{ t.tenant_id }}/subscribers" class="nav-link {% if active_page == 'subscribers' and active_tenant == t.tenant_id %}active{% endif %}">
                 <span class="nav-icon">&#128101;</span> Subscribers
             </a>
-            <a href="/admin/{{ t.tenant_id }}/history" class="nav-link {% if active_page == 'history' and active_tenant == t.tenant_id %}active{% endif %}">
+            <a href="{{ base_path }}/admin/{{ t.tenant_id }}/history" class="nav-link {% if active_page == 'history' and active_tenant == t.tenant_id %}active{% endif %}">
                 <span class="nav-icon">&#128231;</span> History
             </a>
-            <a href="/admin/{{ t.tenant_id }}/send" class="nav-link {% if active_page == 'operations' and active_tenant == t.tenant_id %}active{% endif %}">
+            <a href="{{ base_path }}/admin/{{ t.tenant_id }}/send" class="nav-link {% if active_page == 'operations' and active_tenant == t.tenant_id %}active{% endif %}">
                 <span class="nav-icon">&#9881;</span> Operations
             </a>
             {% endfor %}
         </nav>
         <div class="sidebar-footer">
-            <form method="post" action="/admin/logout">
+            <form method="post" action="{{ base_path }}/admin/logout">
                 <button type="submit" class="logout-btn">Logout</button>
             </form>
         </div>

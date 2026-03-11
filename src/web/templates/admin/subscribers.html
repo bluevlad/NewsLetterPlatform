@@ -24,9 +24,9 @@
 <div class="card mb-3">
     <div class="card-header">
         <h3>Add Subscriber</h3>
-        <a href="/admin/{{ tenant.tenant_id }}/subscribers/export" class="btn btn-secondary btn-sm">CSV Export</a>
+        <a href="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers/export" class="btn btn-secondary btn-sm">CSV Export</a>
     </div>
-    <form hx-post="/admin/{{ tenant.tenant_id }}/subscribers/add"
+    <form hx-post="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers/add"
           hx-target="#toast-container" hx-swap="beforeend"
           class="flex items-center gap-1" style="flex-wrap: wrap;">
         <input type="email" name="email" placeholder="email@example.com" required class="form-input" style="flex:2; min-width:200px;">
@@ -39,17 +39,17 @@
 <div class="card">
     <div class="flex items-center justify-between mb-2" style="flex-wrap: wrap; gap: 0.75rem;">
         <div class="filter-tabs">
-            <a href="/admin/{{ tenant.tenant_id }}/subscribers?status=all&search={{ search }}"
+            <a href="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers?status=all&search={{ search }}"
                class="filter-tab {% if status_filter == 'all' %}active{% endif %}">All</a>
-            <a href="/admin/{{ tenant.tenant_id }}/subscribers?status=active&search={{ search }}"
+            <a href="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers?status=active&search={{ search }}"
                class="filter-tab {% if status_filter == 'active' %}active{% endif %}">Active</a>
-            <a href="/admin/{{ tenant.tenant_id }}/subscribers?status=inactive&search={{ search }}"
+            <a href="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers?status=inactive&search={{ search }}"
                class="filter-tab {% if status_filter == 'inactive' %}active{% endif %}">Inactive</a>
         </div>
         <input type="search" name="search" value="{{ search }}"
                placeholder="Search email or name..."
                class="form-input" style="width: 250px;"
-               hx-get="/admin/{{ tenant.tenant_id }}/subscribers/search?status={{ status_filter }}"
+               hx-get="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers/search?status={{ status_filter }}"
                hx-trigger="keyup changed delay:300ms"
                hx-target="#subscriber-table"
                hx-swap="innerHTML"

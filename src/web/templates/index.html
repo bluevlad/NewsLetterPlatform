@@ -8,7 +8,7 @@
 
     <div class="tenant-list">
         {% for tenant in tenants %}
-        <a href="/{{ tenant.tenant_id }}/subscribe" style="text-decoration: none;">
+        <a href="{{ base_path }}/{{ tenant.tenant_id }}/subscribe" style="text-decoration: none;">
             <div class="tenant-card" style="border-left: 3px solid {{ tenant.brand_config.primary_color }};">
                 <h3>{{ tenant.display_name }}</h3>
                 <p>{{ tenant.brand_config.description }}</p>

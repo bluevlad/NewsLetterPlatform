@@ -8,12 +8,16 @@ from pathlib import Path
 from fastapi import HTTPException
 from fastapi.templating import Jinja2Templates
 
+from ..config import settings
 from ..common.database.repository import get_session_factory
 from ..tenant.registry import get_registry
 
 # 웹 페이지 템플릿
 templates_dir = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
+
+# 리버스 프록시 base path를 모든 템플릿에서 사용 가능하게 설정
+templates.env.globals["base_path"] = settings.root_path
 
 
 def get_db():

@@ -51,14 +51,14 @@
 
     <div class="flex items-center gap-1 mb-2" style="flex-wrap: wrap;">
         <div class="filter-tabs">
-            <a href="/admin/{{ tenant.tenant_id }}/history?status=all&date_from={{ date_from }}&date_to={{ date_to }}"
+            <a href="{{ base_path }}/admin/{{ tenant.tenant_id }}/history?status=all&date_from={{ date_from }}&date_to={{ date_to }}"
                class="filter-tab {% if status_filter == 'all' %}active{% endif %}">All</a>
-            <a href="/admin/{{ tenant.tenant_id }}/history?status=success&date_from={{ date_from }}&date_to={{ date_to }}"
+            <a href="{{ base_path }}/admin/{{ tenant.tenant_id }}/history?status=success&date_from={{ date_from }}&date_to={{ date_to }}"
                class="filter-tab {% if status_filter == 'success' %}active{% endif %}">Success</a>
-            <a href="/admin/{{ tenant.tenant_id }}/history?status=failed&date_from={{ date_from }}&date_to={{ date_to }}"
+            <a href="{{ base_path }}/admin/{{ tenant.tenant_id }}/history?status=failed&date_from={{ date_from }}&date_to={{ date_to }}"
                class="filter-tab {% if status_filter == 'failed' %}active{% endif %}">Failed</a>
         </div>
-        <form class="flex items-center gap-1" method="get" action="/admin/{{ tenant.tenant_id }}/history">
+        <form class="flex items-center gap-1" method="get" action="{{ base_path }}/admin/{{ tenant.tenant_id }}/history">
             <input type="hidden" name="status" value="{{ status_filter }}">
             <input type="date" name="date_from" value="{{ date_from }}" class="form-input" style="width:150px;">
             <span class="text-muted text-sm">~</span>

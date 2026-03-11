@@ -12,6 +12,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from ...config import settings
 from ..shared import templates
 
+# 리버스 프록시 base path prefix
+_base = settings.root_path
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -52,7 +55,7 @@ def require_admin(request: Request) -> bool:
 def get_admin_or_redirect(request: Request):
     """인증 확인, 미인증 시 리다이렉트 응답 반환"""
     if not require_admin(request):
-        return RedirectResponse(url="/admin/login", status_code=303)
+        return RedirectResponse(url=f"{_base}/admin/login", status_code=303)
     return None
 
 
@@ -103,7 +106,7 @@ def _set_session_cookie(response: Response, token: str) -> Response:
 async def login_page(request: Request):
     """로그인 페이지"""
     if require_admin(request):
-        return RedirectResponse(url="/admin", status_code=303)
+        return RedirectResponse(url=f"{_base}/admin", status_code=303)
 
     error = request.query_params.get("error")
     error_messages = {
@@ -131,7 +134,7 @@ async def login_submit(request: Request, password: str = Form(...)):
 
     if secrets.compare_digest(password, settings.admin_password):
         token = create_session()
-        response = RedirectResponse(url="/admin", status_code=303)
+        response = RedirectResponse(url=f"{_base}/admin", status_code=303)
         _set_session_cookie(response, token)
         logger.info("Admin 로그인 성공 (비밀번호)")
         return response
@@ -150,7 +153,7 @@ async def logout(request: Request):
     token = request.cookies.get("admin_session")
     if token:
         delete_session(token)
-    response = RedirectResponse(url="/admin/login", status_code=303)
+    response = RedirectResponse(url=f"{_base}/admin/login", status_code=303)
     response.delete_cookie("admin_session")
     return response
 
@@ -161,7 +164,7 @@ async def logout(request: Request):
 async def google_login(request: Request):
     """Google OAuth 로그인 시작"""
     if not _is_google_oauth_configured():
-        return RedirectResponse(url="/admin/login", status_code=303)
+        return RedirectResponse(url=f"{_base}/admin/login", status_code=303)
 
     oauth = _get_oauth_client()
     redirect_uri = f"{settings.backend_url}/admin/auth/google/callback"
@@ -172,32 +175,32 @@ async def google_login(request: Request):
 async def google_callback(request: Request):
     """Google OAuth 콜백 처리"""
     if not _is_google_oauth_configured():
-        return RedirectResponse(url="/admin/login", status_code=303)
+        return RedirectResponse(url=f"{_base}/admin/login", status_code=303)
 
     try:
         oauth = _get_oauth_client()
         token_data = await oauth.google.authorize_access_token(request)
     except Exception as e:
         logger.error("Google OAuth 토큰 교환 실패: %s", e)
-        return RedirectResponse(url="/admin/login?error=oauth_failed", status_code=303)
+        return RedirectResponse(url=f"{_base}/admin/login?error=oauth_failed", status_code=303)
 
     user_info = token_data.get("userinfo")
     if not user_info:
         logger.error("Google OAuth: userinfo 없음")
-        return RedirectResponse(url="/admin/login?error=oauth_failed", status_code=303)
+        return RedirectResponse(url=f"{_base}/admin/login?error=oauth_failed", status_code=303)
 
     email = user_info.get("email", "").strip().lower()
     if not email:
-        return RedirectResponse(url="/admin/login?error=no_email", status_code=303)
+        return RedirectResponse(url=f"{_base}/admin/login?error=no_email", status_code=303)
 
     admin_emails = _get_super_admin_emails()
     if email not in admin_emails:
         logger.warning("Google OAuth 로그인 거부: %s (관리자 아님)", email)
-        return RedirectResponse(url="/admin/login?error=not_admin", status_code=303)
+        return RedirectResponse(url=f"{_base}/admin/login?error=not_admin", status_code=303)
 
     # 관리자 확인됨 - 세션 생성
     session_token = create_session()
-    response = RedirectResponse(url="/admin/", status_code=303)
+    response = RedirectResponse(url=f"{_base}/admin/", status_code=303)
     _set_session_cookie(response, session_token)
     logger.info("Admin Google OAuth 로그인 성공: %s", email)
     return response
