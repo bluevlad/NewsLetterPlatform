@@ -8,7 +8,7 @@ import threading
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -17,6 +17,7 @@ from ..common.database.repository import get_session_factory
 from ..common.subscription.manager import SubscriptionManager
 from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
+from ..common.scheduler.health import check_health
 from ..tenant.registry import get_registry
 from .shared import templates, templates_dir, get_db, get_tenant_or_404
 from .admin import admin_router
@@ -81,6 +82,18 @@ def resolve_template(tenant_id: str, template_name: str) -> str:
     if override_path.exists():
         return f"overrides/{tenant_id}/{template_name}"
     return template_name
+
+
+# ==================== Health Check ====================
+
+@app.get("/api/health", response_class=JSONResponse)
+async def api_health():
+    """공개 Health Check 엔드포인트 (QA Agent 등 외부 모니터링용)"""
+    healthy = check_health()
+    return JSONResponse(
+        content={"status": "ok" if healthy else "degraded"},
+        status_code=200 if healthy else 503,
+    )
 
 
 # ==================== 랜딩 페이지 ====================
