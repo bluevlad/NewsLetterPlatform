@@ -60,7 +60,7 @@ class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
 # CSRF 미들웨어 적용
 app.add_middleware(CSRFOriginCheckMiddleware)
 
-# Starlette SessionMiddleware (Google OAuth state 저장용)
+# Starlette SessionMiddleware
 # secret_key: 앱 시작 시마다 새 키 생성 (in-memory 세션과 동일 lifecycle)
 import secrets as _secrets
 app.add_middleware(SessionMiddleware, secret_key=_secrets.token_urlsafe(32))

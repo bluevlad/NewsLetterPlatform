@@ -18,8 +18,8 @@ jinja2>=3.1.0
 # HTTP Client
 httpx>=0.27.0
 
-# OAuth
-authlib>=1.3.0
+# Google Sign-In (ID Token 검증)
+google-auth>=2.28.0
 
 # Configuration
 pydantic>=2.5.0

@@ -1,5 +1,5 @@
 """
-Admin 인증 모듈 - 세션 기반 인증 + 로그인/로그아웃 + Google OAuth
+Admin 인증 모듈 - 세션 기반 인증 + 로그인/로그아웃 + Google Sign-In
 """
 
 import secrets
@@ -7,7 +7,7 @@ import time
 import logging
 
 from fastapi import APIRouter, Request, Form, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from ...config import settings
 from ..shared import templates
@@ -60,8 +60,8 @@ def get_admin_or_redirect(request: Request):
 
 
 def _is_google_oauth_configured() -> bool:
-    """Google OAuth 설정 여부 확인"""
-    return bool(settings.google_client_id and settings.google_client_secret)
+    """Google Sign-In 설정 여부 확인 (client_id만 필요)"""
+    return bool(settings.google_client_id)
 
 
 def _get_super_admin_emails() -> set[str]:
@@ -73,21 +73,6 @@ def _get_super_admin_emails() -> set[str]:
         for email in settings.super_admin_emails.split(",")
         if email.strip()
     }
-
-
-def _get_oauth_client():
-    """Authlib OAuth 클라이언트 (lazy init)"""
-    from authlib.integrations.starlette_client import OAuth
-
-    oauth = OAuth()
-    oauth.register(
-        name="google",
-        client_id=settings.google_client_id,
-        client_secret=settings.google_client_secret,
-        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
-    )
-    return oauth
 
 
 def _set_session_cookie(response: Response, token: str) -> Response:
@@ -113,12 +98,14 @@ async def login_page(request: Request):
         "not_admin": "해당 Google 계정은 관리자로 등록되어 있지 않습니다.",
         "oauth_failed": "Google 로그인에 실패했습니다. 다시 시도해주세요.",
         "no_email": "Google 계정에서 이메일 정보를 가져올 수 없습니다.",
+        "invalid_credential": "유효하지 않은 인증 정보입니다.",
     }
 
     return templates.TemplateResponse("admin/login.html", {
         "request": request,
         "error": error_messages.get(error),
         "google_oauth_enabled": _is_google_oauth_configured(),
+        "google_client_id": settings.google_client_id if _is_google_oauth_configured() else "",
     })
 
 
@@ -130,6 +117,7 @@ async def login_submit(request: Request, password: str = Form(...)):
             "request": request,
             "error": "관리자 비밀번호가 설정되지 않았습니다. ADMIN_PASSWORD 환경변수를 설정해주세요.",
             "google_oauth_enabled": _is_google_oauth_configured(),
+            "google_client_id": "",
         })
 
     if secrets.compare_digest(password, settings.admin_password):
@@ -144,6 +132,7 @@ async def login_submit(request: Request, password: str = Form(...)):
         "request": request,
         "error": "비밀번호가 일치하지 않습니다.",
         "google_oauth_enabled": _is_google_oauth_configured(),
+        "google_client_id": settings.google_client_id if _is_google_oauth_configured() else "",
     })
 
 
@@ -158,49 +147,52 @@ async def logout(request: Request):
     return response
 
 
-# ==================== Google OAuth ====================
+# ==================== Google Sign-In (ID Token 검증) ====================
 
-@router.get("/admin/auth/google/login")
-async def google_login(request: Request):
-    """Google OAuth 로그인 시작"""
+def _verify_google_id_token(credential: str) -> dict:
+    """Google ID Token 검증 후 사용자 정보 반환"""
+    from google.auth.transport import requests as google_requests
+    from google.oauth2 import id_token
+
+    idinfo = id_token.verify_oauth2_token(
+        credential,
+        google_requests.Request(),
+        settings.google_client_id,
+    )
+    if idinfo["iss"] not in ("accounts.google.com", "https://accounts.google.com"):
+        raise ValueError("Invalid issuer")
+    return idinfo
+
+
+@router.post("/admin/auth/google/verify")
+async def google_verify(request: Request):
+    """Google Sign-In ID Token 검증 → 세션 생성"""
     if not _is_google_oauth_configured():
-        return RedirectResponse(url=f"{_base}/admin/login", status_code=303)
+        return JSONResponse({"error": "Google 로그인이 설정되지 않았습니다."}, status_code=400)
 
-    oauth = _get_oauth_client()
-    redirect_uri = f"{settings.backend_url}/admin/auth/google/callback"
-    return await oauth.google.authorize_redirect(request, redirect_uri)
-
-
-@router.get("/admin/auth/google/callback")
-async def google_callback(request: Request):
-    """Google OAuth 콜백 처리"""
-    if not _is_google_oauth_configured():
-        return RedirectResponse(url=f"{_base}/admin/login", status_code=303)
+    body = await request.json()
+    credential = body.get("credential", "")
+    if not credential:
+        return JSONResponse({"error": "credential이 없습니다."}, status_code=400)
 
     try:
-        oauth = _get_oauth_client()
-        token_data = await oauth.google.authorize_access_token(request)
+        idinfo = _verify_google_id_token(credential)
     except Exception as e:
-        logger.error("Google OAuth 토큰 교환 실패: %s", e)
-        return RedirectResponse(url=f"{_base}/admin/login?error=oauth_failed", status_code=303)
+        logger.error("Google ID Token 검증 실패: %s", e)
+        return JSONResponse({"error": "유효하지 않은 인증 정보입니다."}, status_code=401)
 
-    user_info = token_data.get("userinfo")
-    if not user_info:
-        logger.error("Google OAuth: userinfo 없음")
-        return RedirectResponse(url=f"{_base}/admin/login?error=oauth_failed", status_code=303)
-
-    email = user_info.get("email", "").strip().lower()
+    email = idinfo.get("email", "").strip().lower()
     if not email:
-        return RedirectResponse(url=f"{_base}/admin/login?error=no_email", status_code=303)
+        return JSONResponse({"error": "이메일 정보를 가져올 수 없습니다."}, status_code=400)
 
     admin_emails = _get_super_admin_emails()
-    if email not in admin_emails:
-        logger.warning("Google OAuth 로그인 거부: %s (관리자 아님)", email)
-        return RedirectResponse(url=f"{_base}/admin/login?error=not_admin", status_code=303)
+    if admin_emails and email not in admin_emails:
+        logger.warning("Google Sign-In 로그인 거부: %s (관리자 아님)", email)
+        return JSONResponse({"error": "관리자 권한이 없는 계정입니다."}, status_code=403)
 
     # 관리자 확인됨 - 세션 생성
     session_token = create_session()
-    response = RedirectResponse(url=f"{_base}/admin/", status_code=303)
+    response = JSONResponse({"redirect": f"{_base}/admin/"})
     _set_session_cookie(response, session_token)
-    logger.info("Admin Google OAuth 로그인 성공: %s", email)
+    logger.info("Admin Google Sign-In 로그인 성공: %s", email)
     return response
