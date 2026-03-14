@@ -106,6 +106,17 @@ NewsLetterPlatform/
 - `.env` 로딩: pydantic-settings
 - 테넌트 설정: `config/tenants.yaml`
 
+## Help Page 관리
+
+> 작성 표준: [HELP_PAGE_GUIDE.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/documentation/HELP_PAGE_GUIDE.md)
+> HTML 템플릿: [help-page-template.html](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/documentation/templates/help-page-template.html)
+
+- **기능 추가/변경/삭제 시 반드시 헬프 페이지도 함께 업데이트**
+- 헬프 파일 위치: `src/web/static/help/`
+- 서비스 accent-color: `#f59e0b` (Amber)
+- 대상 가이드 파일:
+  - `admin-guide.html` — 관리자 가이드 (테넌트 관리, 뉴스레터 발송)
+
 ## Deployment
 
 - **CI/CD**: GitHub Actions (prod 브랜치 push 시 자동 배포)
