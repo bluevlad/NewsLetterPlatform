@@ -8,12 +8,12 @@ import threading
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from ..config import settings
-from ..common.database.repository import get_session_factory
+from ..common.database.repository import get_session_factory, SendHistoryRepository
 from ..common.subscription.manager import SubscriptionManager
 from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
@@ -81,6 +81,50 @@ def resolve_template(tenant_id: str, template_name: str) -> str:
     if override_path.exists():
         return f"overrides/{tenant_id}/{template_name}"
     return template_name
+
+
+# ==================== 공개 헬스체크 ====================
+
+@app.get("/api/health")
+async def api_health():
+    """공개 헬스체크 (인증 불요, 항상 200, 당일 발송 통계 포함)
+
+    QA Agent가 파싱하여 자체 판정:
+    - HTTP 연결 실패 → FAIL (서비스 다운)
+    - 200 + total=0 → WARN (당일 미발송)
+    - 200 + failed>0 → WARN (일부 발송 실패)
+    - 200 + failed=0, total>0 → PASS (정상)
+    """
+    try:
+        registry = get_registry()
+        tenants = registry.get_all()
+        SessionLocal = get_session_factory()
+        db = SessionLocal()
+        try:
+            tenants_stats = {}
+            total_all = 0
+            failed_all = 0
+            for tenant in tenants:
+                stats = SendHistoryRepository.get_today_stats(db, tenant.tenant_id)
+                tenants_stats[tenant.tenant_id] = stats
+                total_all += stats["total"]
+                failed_all += stats["failed"]
+
+            return JSONResponse({
+                "status": "ok",
+                "total": total_all,
+                "success": total_all - failed_all,
+                "failed": failed_all,
+                "tenants": tenants_stats,
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Health check 오류: {e}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=503,
+        )
 
 
 # ==================== 랜딩 페이지 ====================
