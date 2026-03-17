@@ -7,8 +7,11 @@ import logging
 import threading
 from urllib.parse import urlparse
 
+from pathlib import Path as _Path
+
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -68,6 +71,11 @@ app.add_middleware(SessionMiddleware, secret_key=_secrets.token_urlsafe(32))
 
 # 구독 매니저
 subscription_manager = SubscriptionManager()
+
+# 정적 파일 서빙
+_static_dir = _Path(__file__).parent / "static"
+if _static_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 # Admin 라우터 등록 (/{tenant_id} 보다 먼저)
 app.include_router(admin_router)
@@ -266,6 +274,42 @@ async def result_page(request: Request, tenant_id: str, email: str = ""):
 
 
 # ==================== 아카이브 ====================
+
+@app.get("/archive", response_class=HTMLResponse)
+async def archive_all(request: Request):
+    """전체 테넌트 뉴스레터 아카이브 통합 목록"""
+    registry = get_registry()
+    tenants = registry.get_all()
+    tenant_map = {t.tenant_id: t for t in tenants}
+
+    with get_session() as session:
+        archives = NewsletterArchiveRepository.get_all_list(session, limit=100)
+        # 테넌트 → 월별 그룹핑
+        grouped_by_tenant = {}
+        for archive in archives:
+            tid = archive.tenant_id
+            if tid not in grouped_by_tenant:
+                grouped_by_tenant[tid] = {}
+            month_key = archive.sent_date.strftime("%Y년 %m월")
+            if month_key not in grouped_by_tenant[tid]:
+                grouped_by_tenant[tid][month_key] = []
+            type_labels = {"daily": "일일", "weekly": "주간", "monthly": "월간"}
+            grouped_by_tenant[tid][month_key].append({
+                "id": archive.id,
+                "tenant_id": tid,
+                "date": archive.sent_date.strftime("%m/%d"),
+                "weekday": ["월", "화", "수", "목", "금", "토", "일"][archive.sent_date.weekday()],
+                "type": archive.newsletter_type,
+                "type_label": type_labels.get(archive.newsletter_type, archive.newsletter_type),
+                "subject": archive.subject or "",
+            })
+
+    return templates.TemplateResponse("archive_all.html", {
+        "request": request,
+        "grouped_by_tenant": grouped_by_tenant,
+        "tenant_map": tenant_map,
+    })
+
 
 @app.get("/{tenant_id}/archive", response_class=HTMLResponse)
 async def archive_list(request: Request, tenant_id: str):

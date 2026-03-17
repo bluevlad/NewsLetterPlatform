@@ -269,6 +269,9 @@
             <a href="{{ base_path }}/admin/scheduler" class="nav-link {% if active_page == 'scheduler' %}active{% endif %}">
                 <span class="nav-icon">&#9200;</span> Scheduler
             </a>
+            <a href="{{ base_path }}/admin/history" class="nav-link {% if active_page == 'history_all' %}active{% endif %}">
+                <span class="nav-icon">&#128202;</span> All History
+            </a>
             {% for t in tenants %}
             <div class="nav-section">{{ t.display_name }}</div>
             <a href="{{ base_path }}/admin/{{ t.tenant_id }}/subscribers" class="nav-link {% if active_page == 'subscribers' and active_tenant == t.tenant_id %}active{% endif %}">

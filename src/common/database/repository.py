@@ -316,6 +316,53 @@ class SendHistoryRepository:
         ]
 
     @staticmethod
+    def get_history_all_paginated(
+        session: Session,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        success_only: Optional[bool] = None,
+        tenant_filter: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[SendHistory], int]:
+        """전체 테넌트 발송 이력 페이지네이션"""
+        query = session.query(SendHistory)
+        if tenant_filter:
+            query = query.filter(SendHistory.tenant_id == tenant_filter)
+        if date_from:
+            query = query.filter(SendHistory.sent_at >= date_from)
+        if date_to:
+            query = query.filter(SendHistory.sent_at < date_to + timedelta(days=1))
+        if success_only is True:
+            query = query.filter(SendHistory.is_success == True)
+        elif success_only is False:
+            query = query.filter(SendHistory.is_success == False)
+        total = query.count()
+        items = query.order_by(SendHistory.sent_at.desc()).offset(offset).limit(limit).all()
+        return items, total
+
+    @staticmethod
+    def get_daily_summary_all(session: Session, days: int = 7) -> list[dict]:
+        """전체 테넌트 최근 N일 일별 발송 요약"""
+        since = datetime.utcnow() - timedelta(days=days)
+        rows = (
+            session.query(
+                func.date(SendHistory.sent_at).label("date"),
+                func.count(SendHistory.id).label("total"),
+                func.sum(func.cast(SendHistory.is_success, Integer)).label("success"),
+            )
+            .filter(SendHistory.sent_at >= since)
+            .group_by(func.date(SendHistory.sent_at))
+            .order_by(func.date(SendHistory.sent_at).desc())
+            .all()
+        )
+        return [
+            {"date": str(row.date), "total": row.total, "success": row.success or 0,
+             "failed": row.total - (row.success or 0)}
+            for row in rows
+        ]
+
+    @staticmethod
     def get_sent_subscriber_ids_for_period(
         session: Session, tenant_id: str,
         newsletter_type: str, period_start: datetime
@@ -547,6 +594,16 @@ class NewsletterArchiveRepository:
         return (
             session.query(NewsletterArchive)
             .filter(NewsletterArchive.tenant_id == tenant_id)
+            .order_by(NewsletterArchive.sent_date.desc(), NewsletterArchive.newsletter_type.desc())
+            .limit(limit)
+            .all()
+        )
+
+    @staticmethod
+    def get_all_list(session: Session, limit: int = 100) -> list[NewsletterArchive]:
+        """전체 테넌트 아카이브 목록 조회 (최신순)"""
+        return (
+            session.query(NewsletterArchive)
             .order_by(NewsletterArchive.sent_date.desc(), NewsletterArchive.newsletter_type.desc())
             .limit(limit)
             .all()

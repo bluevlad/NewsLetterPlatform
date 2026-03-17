@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NewsLetterPlatform - 뉴스레터 아카이브 가이드</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-color: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent-color: #f59e0b;
+            --border-color: rgba(148, 163, 184, 0.1);
+            --warning-color: #f59e0b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.7;
+            background-image: radial-gradient(ellipse at 50% 100%, hsla(38, 92%, 50%, 0.1), transparent 70%);
+            background-attachment: fixed;
+        }
+
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+        .back-link {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            color: var(--text-muted); text-decoration: none; font-size: 0.9rem;
+            margin-bottom: 2rem; transition: color 0.2s;
+        }
+        .back-link:hover { color: var(--accent-color); }
+
+        header {
+            text-align: center; margin-bottom: 3rem;
+            padding-bottom: 2rem; border-bottom: 1px solid var(--border-color);
+        }
+
+        .badge {
+            display: inline-block; padding: 0.25rem 0.75rem;
+            background: rgba(245, 158, 11, 0.2); color: var(--accent-color);
+            border-radius: 9999px; font-size: 0.75rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem;
+        }
+
+        h1 {
+            font-size: 2.5rem; font-weight: 700;
+            background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent; margin-bottom: 0.5rem;
+        }
+
+        header p { color: var(--text-muted); font-size: 1.1rem; }
+
+        h2 {
+            font-size: 1.5rem; color: var(--accent-color);
+            margin: 2.5rem 0 1rem 0; padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--accent-color);
+        }
+
+        h3 { font-size: 1.2rem; color: var(--text-color); margin: 1.5rem 0 0.75rem 0; }
+        p { margin-bottom: 1rem; }
+
+        .target-users { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+        .target-user-tag {
+            padding: 0.25rem 0.75rem; background: rgba(245, 158, 11, 0.15);
+            border-radius: 6px; font-size: 0.85rem; color: var(--accent-color);
+        }
+
+        .feature-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem; margin: 1.5rem 0;
+        }
+
+        .feature-card {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 1.25rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .feature-card:hover { transform: translateY(-2px); border-color: rgba(245, 158, 11, 0.3); }
+        .feature-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .feature-card h3 { font-size: 1rem; margin: 0.25rem 0; }
+        .feature-card p { font-size: 0.9rem; color: var(--text-muted); margin: 0; }
+
+        .steps { counter-reset: step; list-style: none; padding: 0; margin: 1.5rem 0; }
+        .steps li { position: relative; padding-left: 3rem; margin-bottom: 1.5rem; line-height: 1.6; }
+        .steps li::before {
+            counter-increment: step; content: counter(step);
+            position: absolute; left: 0; top: 0; width: 2rem; height: 2rem;
+            background: var(--accent-color); color: #0f172a; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 0.85rem;
+        }
+
+        .info-box {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0;
+        }
+        .info-box.highlight { border-left: 4px solid var(--accent-color); }
+        .info-box.warning { border-left: 4px solid var(--warning-color); background: rgba(245, 158, 11, 0.1); }
+        .info-box strong { display: block; margin-bottom: 0.5rem; color: var(--text-color); }
+        .info-box p { color: var(--text-muted); margin: 0; }
+
+        .faq-item {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 12px; margin-bottom: 1rem; overflow: hidden;
+        }
+        .faq-question { padding: 1rem 1.25rem; font-weight: 600; color: var(--text-color); }
+        .faq-answer { padding: 0 1.25rem 1rem 1.25rem; color: var(--text-muted); border-top: 1px solid var(--border-color); }
+
+        code {
+            background: rgba(245, 158, 11, 0.15); color: var(--accent-color);
+            padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85em;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+
+        footer {
+            text-align: center; padding: 2rem 0; margin-top: 3rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-muted); font-size: 0.85rem;
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 2rem; }
+            .feature-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+
+        <a href="/" class="back-link">&larr; 서비스로 돌아가기</a>
+
+        <header>
+            <span class="badge">USER GUIDE</span>
+            <h1>뉴스레터 아카이브 가이드</h1>
+            <p>발송된 뉴스레터를 언제든 다시 확인할 수 있는 아카이브 서비스</p>
+        </header>
+
+        <!-- 1. 서비스 소개 -->
+        <h2>1. 서비스 소개</h2>
+        <p>뉴스레터 아카이브는 발송 완료된 일일, 주간, 월간 뉴스레터를 웹에서 열람할 수 있는 서비스입니다. 구독자가 아니더라도 과거 뉴스레터를 확인하거나, 놓친 뉴스레터를 다시 읽을 수 있습니다.</p>
+        <h3>대상 사용자</h3>
+        <div class="target-users">
+            <span class="target-user-tag">뉴스레터 구독자</span>
+            <span class="target-user-tag">일반 방문자</span>
+        </div>
+
+        <!-- 2. 주요 기능 -->
+        <h2>2. 주요 기능</h2>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F4DA;</div>
+                <h3>통합 아카이브</h3>
+                <p>전체 테넌트(EduFit, AllergyInsight 등)의 뉴스레터를 한 화면에서 통합 조회합니다.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F4C5;</div>
+                <h3>월별 그룹핑</h3>
+                <p>뉴스레터가 월별로 자동 분류되어 원하는 시기의 콘텐츠를 빠르게 찾을 수 있습니다.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F3F7;</div>
+                <h3>유형별 구분</h3>
+                <p>일일, 주간, 월간 뉴스레터가 색상 배지로 구분되어 한눈에 유형을 파악할 수 있습니다.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#x1F4E8;</div>
+                <h3>원본 HTML 보기</h3>
+                <p>실제 발송된 이메일과 동일한 HTML 원본을 브라우저에서 그대로 확인합니다.</p>
+            </div>
+        </div>
+
+        <!-- 3. 사용 방법 -->
+        <h2>3. 사용 방법</h2>
+        <ol class="steps">
+            <li>
+                <strong>아카이브 페이지 접속</strong><br>
+                통합 아카이브(<code>/archive</code>)에 접속하면 전체 테넌트의 뉴스레터가 표시됩니다. 특정 테넌트의 아카이브만 보려면 <code>/{tenant_id}/archive</code>로 접속합니다.
+            </li>
+            <li>
+                <strong>원하는 뉴스레터 선택</strong><br>
+                월별로 그룹핑된 목록에서 날짜, 유형(일일/주간/월간), 제목을 확인하고 원하는 항목을 클릭합니다.
+            </li>
+            <li>
+                <strong>뉴스레터 열람</strong><br>
+                선택한 뉴스레터의 HTML 원본이 브라우저에 렌더링됩니다. 실제 이메일과 동일한 내용을 확인할 수 있습니다.
+            </li>
+            <li>
+                <strong>목록으로 돌아가기</strong><br>
+                브라우저의 뒤로가기 버튼으로 아카이브 목록으로 돌아갑니다.
+            </li>
+        </ol>
+
+        <!-- 4. 주의사항 -->
+        <h2>4. 주의사항</h2>
+
+        <div class="info-box highlight">
+            <strong>참고</strong>
+            <p>아카이브는 최근 발송된 뉴스레터부터 최대 100건(통합) 또는 50건(테넌트별)까지 표시됩니다.</p>
+        </div>
+
+        <div class="info-box highlight">
+            <strong>참고</strong>
+            <p>아카이브에서 열람하는 뉴스레터는 실제 발송된 이메일의 HTML 원본입니다. 이메일 클라이언트에 따라 실제 수신 시 보이는 화면과 약간 다를 수 있습니다.</p>
+        </div>
+
+        <!-- 5. FAQ -->
+        <h2>5. 자주 묻는 질문</h2>
+
+        <div class="faq-item">
+            <div class="faq-question">Q. 아카이브에서 뉴스레터가 보이지 않습니다</div>
+            <div class="faq-answer">아카이브 기능이 활성화된 이후 발송된 뉴스레터만 표시됩니다. 이전에 발송된 뉴스레터는 포함되지 않을 수 있습니다.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">Q. 통합 아카이브와 테넌트별 아카이브의 차이점은?</div>
+            <div class="faq-answer">통합 아카이브(<code>/archive</code>)는 모든 서비스의 뉴스레터를 한번에 표시합니다. 테넌트별 아카이브(<code>/{tenant}/archive</code>)는 해당 서비스의 뉴스레터만 표시합니다.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">Q. 일일, 주간, 월간 뉴스레터의 차이는?</div>
+            <div class="faq-answer">일일(Daily)은 매일 발송되는 최신 소식, 주간(Weekly)은 한 주간의 요약, 월간(Monthly)은 한 달간의 종합 분석 뉴스레터입니다.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">Q. 아카이브 뉴스레터를 다른 사람과 공유할 수 있나요?</div>
+            <div class="faq-answer">네, 뉴스레터 상세 페이지의 URL을 그대로 공유하면 됩니다. 별도 로그인 없이 누구나 열람 가능합니다.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">Q. 아카이브에서 구독 신청도 가능한가요?</div>
+            <div class="faq-answer">아카이브 목록 하단의 "구독 페이지로 돌아가기" 링크를 클릭하거나, 테넌트별 아카이브에서 해당 서비스의 구독 페이지로 이동할 수 있습니다.</div>
+        </div>
+
+        <footer>
+            <p>&copy; 2026 NewsLetterPlatform. All rights reserved.</p>
+        </footer>
+
+    </div>
+</body>
+</html>

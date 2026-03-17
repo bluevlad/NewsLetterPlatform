@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}NewsLetterPlatform - 뉴스레터 아카이브{% endblock %}
+{% block header_subtitle %}뉴스레터 아카이브{% endblock %}
+
+{% block content %}
+<style>
+    .container {
+        max-width: 640px;
+        justify-content: flex-start;
+        padding-top: 3rem;
+    }
+
+    .tenant-section {
+        margin-bottom: 2rem;
+    }
+
+    .tenant-label {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-color);
+        margin-bottom: 0.75rem;
+        padding-left: 0.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .tenant-label .dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .archive-section {
+        margin-bottom: 1.25rem;
+        margin-left: 0.5rem;
+    }
+
+    .month-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 0.75rem;
+        padding-left: 0.25rem;
+    }
+
+    .archive-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.25rem;
+        background: rgba(15, 23, 42, 0.5);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        margin-bottom: 0.5rem;
+        text-decoration: none;
+        color: var(--text-color);
+        transition: all 0.2s;
+    }
+
+    .archive-item:hover {
+        border-color: var(--accent-color);
+        transform: translateX(4px);
+        text-decoration: none;
+    }
+
+    .archive-date {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-color);
+        min-width: 60px;
+    }
+
+    .archive-weekday {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        font-weight: 400;
+    }
+
+    .archive-badge {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        flex-shrink: 0;
+    }
+
+    .badge-daily {
+        background: rgba(16, 185, 129, 0.2);
+        color: #10b981;
+    }
+
+    .badge-weekly {
+        background: rgba(56, 189, 248, 0.2);
+        color: #38bdf8;
+    }
+
+    .badge-monthly {
+        background: rgba(245, 158, 11, 0.2);
+        color: #f59e0b;
+    }
+
+    .archive-subject {
+        flex: 1;
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .archive-arrow {
+        color: var(--text-muted);
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: var(--text-muted);
+    }
+
+    .empty-state .icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+</style>
+
+<div class="card">
+    {% if grouped_by_tenant %}
+        {% for tenant_id, months in grouped_by_tenant.items() %}
+        {% set tenant = tenant_map.get(tenant_id) %}
+        <div class="tenant-section">
+            <div class="tenant-label">
+                {% if tenant %}
+                <span class="dot" style="background: {{ tenant.brand_config.primary_color }};"></span>
+                {{ tenant.display_name }}
+                {% else %}
+                {{ tenant_id }}
+                {% endif %}
+            </div>
+            {% for month, items in months.items() %}
+            <div class="archive-section">
+                <div class="month-label">{{ month }}</div>
+                {% for item in items %}
+                <a href="{{ base_path }}/{{ item.tenant_id }}/archive/{{ item.id }}" class="archive-item">
+                    <span class="archive-date">{{ item.date }} <span class="archive-weekday">({{ item.weekday }})</span></span>
+                    <span class="archive-badge badge-{{ item.type }}">{{ item.type_label }}</span>
+                    <span class="archive-subject">{{ item.subject }}</span>
+                    <span class="archive-arrow">&#x203A;</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <div class="icon">&#x1F4ED;</div>
+            <p>아직 발송된 뉴스레터가 없습니다.</p>
+        </div>
+    {% endif %}
+</div>
+
+<div class="text-center" style="margin-top: 1.5rem;">
+    <a href="{{ base_path }}/" style="color: var(--text-muted); font-size: 0.9rem;">&#x2190; 메인으로 돌아가기</a>
+</div>
+{% endblock %}
