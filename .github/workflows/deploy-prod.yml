@@ -40,6 +40,20 @@ jobs:
           EDUFIT_SEND_HOUR=8
           EDUFIT_SEND_MINUTE=20
 
+          # EduFit (Weekly: 매주 금요일, 일일 발송 10분 후)
+          EDUFIT_WEEKLY_DAY_OF_WEEK=fri
+          EDUFIT_WEEKLY_COLLECT_HOUR=8
+          EDUFIT_WEEKLY_COLLECT_MINUTE=0
+          EDUFIT_WEEKLY_SEND_HOUR=8
+          EDUFIT_WEEKLY_SEND_MINUTE=30
+
+          # EduFit (Monthly: 매월 말일, 일일 발송 10분 후)
+          EDUFIT_MONTHLY_DAY_OF_MONTH=last
+          EDUFIT_MONTHLY_COLLECT_HOUR=8
+          EDUFIT_MONTHLY_COLLECT_MINUTE=0
+          EDUFIT_MONTHLY_SEND_HOUR=8
+          EDUFIT_MONTHLY_SEND_MINUTE=30
+
           # AllergyInsight (Daily)
           ALLERGY_COLLECT_HOUR=7
           ALLERGY_COLLECT_MINUTE=30
