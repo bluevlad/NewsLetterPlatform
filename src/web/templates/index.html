@@ -17,6 +17,36 @@
         {% endfor %}
     </div>
 
+    <div class="quick-links">
+        <h3 style="font-size: 1rem; color: var(--text-muted); margin: 0 0 0.75rem 0; font-weight: 500;">바로가기</h3>
+        <div class="quick-links-grid">
+            <div class="quick-link-card">
+                <span class="quick-link-icon">&#x1F4DA;</span>
+                <a href="{{ base_path }}/archive" class="quick-link-text">
+                    <strong>뉴스레터 아카이브</strong>
+                    <span>지난 뉴스레터 모아보기</span>
+                </a>
+                <a href="{{ base_path }}/static/help/archive-guide.html" class="quick-link-help" title="도움말">?</a>
+            </div>
+            <div class="quick-link-card">
+                <span class="quick-link-icon">&#x1F4E8;</span>
+                <a href="{{ base_path }}/admin/history" class="quick-link-text">
+                    <strong>발송 이력</strong>
+                    <span>뉴스레터 발송 현황 확인</span>
+                </a>
+                <a href="{{ base_path }}/static/help/history-guide.html" class="quick-link-help" title="도움말">?</a>
+            </div>
+            <div class="quick-link-card">
+                <span class="quick-link-icon">&#x2699;&#xFE0F;</span>
+                <a href="{{ base_path }}/admin" class="quick-link-text">
+                    <strong>관리자</strong>
+                    <span>뉴스레터 관리 및 운영</span>
+                </a>
+                <a href="{{ base_path }}/static/help/admin-guide.html" class="quick-link-help" title="도움말">?</a>
+            </div>
+        </div>
+    </div>
+
     <div class="features">
         <div class="feature-item">
             <span class="feature-icon">&#x1F4CA;</span>
