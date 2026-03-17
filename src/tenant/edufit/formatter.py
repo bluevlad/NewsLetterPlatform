@@ -206,12 +206,11 @@ class EduFitFormatter:
         # 학원 랭킹
         academy_ranking = self._format_academy_ranking(academy_stats)
 
-        # 기간 계산
+        # 기간 계산 (금요일 발송 기준: 이번 주 월~금)
         from datetime import date, timedelta
         today = date.today()
-        period_end = today - timedelta(days=today.weekday())
-        period_start = period_end - timedelta(days=7)
-        period_end = period_end - timedelta(days=1)
+        period_start = today - timedelta(days=today.weekday())  # 월요일
+        period_end = today  # 오늘 (금요일)
 
         return {
             "stats": stats,
@@ -267,11 +266,11 @@ class EduFitFormatter:
         academy_ranking = self._format_academy_ranking(academy_stats)
         academy_list = self._format_academy_list(academies, academy_stats)
 
-        from datetime import date, timedelta
+        # 기간 계산 (말일 발송 기준: 이번 달 전체)
+        from datetime import date
         today = date.today()
-        first_of_month = today.replace(day=1)
-        period_end = first_of_month - timedelta(days=1)
-        period_start = period_end.replace(day=1)
+        period_start = today.replace(day=1)  # 이번 달 1일
+        period_end = today  # 오늘 (말일)
 
         return {
             "stats": stats,

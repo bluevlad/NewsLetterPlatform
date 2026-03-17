@@ -32,9 +32,9 @@ def _get_period_range(newsletter_type: str) -> tuple[date, date]:
     """
     today = date.today()
     if newsletter_type == "weekly":
-        # 최근 7일 (어제까지)
-        date_to = today - timedelta(days=1)
-        date_from = today - timedelta(days=7)
+        # 이번 주 월요일~오늘 (금요일 발송 기준)
+        date_from = today - timedelta(days=today.weekday())  # 월요일
+        date_to = today
         return date_from, date_to
     elif newsletter_type == "monthly":
         if today.day == 1:
@@ -42,9 +42,9 @@ def _get_period_range(newsletter_type: str) -> tuple[date, date]:
             date_to = today - timedelta(days=1)
             date_from = date_to.replace(day=1)
         else:
-            # 말일 발송: 이번달 1일~어제
+            # 말일 발송: 이번달 1일~오늘
             date_from = today.replace(day=1)
-            date_to = today - timedelta(days=1)
+            date_to = today
         return date_from, date_to
     else:
         # daily: 오늘
