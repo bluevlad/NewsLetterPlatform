@@ -18,6 +18,7 @@ from ..common.subscription.manager import SubscriptionManager
 from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
 from ..common.scheduler.health import check_health
+from ..common.database.repository import get_session, NewsletterArchiveRepository
 from ..tenant.registry import get_registry
 from .shared import templates, templates_dir, get_db, get_tenant_or_404
 from .admin import admin_router
@@ -262,6 +263,57 @@ async def result_page(request: Request, tenant_id: str, email: str = ""):
         "tenant": tenant,
         "email": email,
     })
+
+
+# ==================== 아카이브 ====================
+
+@app.get("/{tenant_id}/archive", response_class=HTMLResponse)
+async def archive_list(request: Request, tenant_id: str):
+    """뉴스레터 아카이브 목록"""
+    tenant = get_tenant_or_404(tenant_id)
+
+    with get_session() as session:
+        archives = NewsletterArchiveRepository.get_list(session, tenant_id, limit=50)
+        # 월별 그룹핑
+        grouped = {}
+        for archive in archives:
+            month_key = archive.sent_date.strftime("%Y년 %m월")
+            if month_key not in grouped:
+                grouped[month_key] = []
+            type_labels = {"daily": "일일", "weekly": "주간", "monthly": "월간"}
+            grouped[month_key].append({
+                "id": archive.id,
+                "date": archive.sent_date.strftime("%m/%d"),
+                "weekday": ["월", "화", "수", "목", "금", "토", "일"][archive.sent_date.weekday()],
+                "type": archive.newsletter_type,
+                "type_label": type_labels.get(archive.newsletter_type, archive.newsletter_type),
+                "subject": archive.subject or "",
+            })
+
+    return templates.TemplateResponse("archive_list.html", {
+        "request": request,
+        "tenant": tenant,
+        "grouped": grouped,
+    })
+
+
+@app.get("/{tenant_id}/archive/{archive_id}", response_class=HTMLResponse)
+async def archive_detail(request: Request, tenant_id: str, archive_id: int):
+    """뉴스레터 아카이브 상세 (HTML 원본 렌더링)"""
+    tenant = get_tenant_or_404(tenant_id)
+
+    with get_session() as session:
+        archive = NewsletterArchiveRepository.get_by_id(session, archive_id)
+        if not archive or archive.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail="아카이브를 찾을 수 없습니다")
+
+        # 구독해지 링크를 아카이브 안내로 대체
+        html = archive.html_content.replace(
+            "__UNSUBSCRIBE_URL__",
+            f"{_base}/{tenant_id}/archive"
+        )
+
+        return HTMLResponse(content=html)
 
 
 # ==================== 구독 해지 플로우 ====================

@@ -13,7 +13,8 @@ from apscheduler.triggers.cron import CronTrigger
 
 from ..database.repository import (
     get_session, CollectedDataRepository,
-    SubscriberRepository, SendHistoryRepository
+    SubscriberRepository, SendHistoryRepository,
+    NewsletterArchiveRepository
 )
 from ..delivery.gmail_sender import get_sender
 from ..template.renderer import get_renderer
@@ -161,6 +162,15 @@ def run_send_job(tenant_id: str, newsletter_type: str = "daily") -> None:
         except Exception as e:
             logger.error(f"[{tenant_id}]{type_label} 템플릿 렌더링 실패: {e}")
             return
+
+        # 아카이브 저장 (구독자별 개인화 전 원본 HTML)
+        try:
+            NewsletterArchiveRepository.save(
+                session, tenant_id, newsletter_type, subject, html_content
+            )
+            logger.info(f"[{tenant_id}]{type_label} 아카이브 저장 완료")
+        except Exception as e:
+            logger.warning(f"[{tenant_id}]{type_label} 아카이브 저장 실패 (발송은 계속): {e}")
 
         # 구독자 조회
         subscribers = SubscriberRepository.get_all_active(session, tenant_id)

@@ -120,6 +120,30 @@ class CollectedDataHistory(Base):
         return f"<CollectedDataHistory(tenant={self.tenant_id}, type={self.data_type}, date={self.collected_date})>"
 
 
+class NewsletterArchive(Base):
+    """뉴스레터 아카이브 - 발송된 뉴스레터 HTML 보관"""
+    __tablename__ = "newsletter_archives"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(50), nullable=False, index=True)
+    newsletter_type = Column(String(20), nullable=False)
+    subject = Column(String(500))
+    html_content = Column(Text, nullable=False)
+    sent_date = Column(Date, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "newsletter_type", "sent_date",
+            name="uq_archive_tenant_type_date"
+        ),
+        Index("idx_archive_tenant_date", "tenant_id", "sent_date"),
+    )
+
+    def __repr__(self):
+        return f"<NewsletterArchive(tenant={self.tenant_id}, type={self.newsletter_type}, date={self.sent_date})>"
+
+
 class EmailVerification(Base):
     """이메일 인증 코드"""
     __tablename__ = "email_verifications"

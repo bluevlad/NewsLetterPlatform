@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 from .models import (
     Base, Subscriber, SendHistory, CollectedData,
     CollectedDataHistory, EmailVerification, VerificationType,
-    NewsletterType
+    NewsletterType, NewsletterArchive
 )
 
 
@@ -502,6 +502,62 @@ class CollectedDataRepository:
             }
             for record in records
         ]
+
+
+class NewsletterArchiveRepository:
+    """뉴스레터 아카이브 저장소"""
+
+    @staticmethod
+    def save(session: Session, tenant_id: str, newsletter_type: str,
+             subject: str, html_content: str, sent_date: date = None) -> NewsletterArchive:
+        """아카이브 저장 (같은 tenant/type/date는 덮어쓰기)"""
+        if sent_date is None:
+            sent_date = date.today()
+
+        existing = session.query(NewsletterArchive).filter(
+            and_(
+                NewsletterArchive.tenant_id == tenant_id,
+                NewsletterArchive.newsletter_type == newsletter_type,
+                NewsletterArchive.sent_date == sent_date,
+            )
+        ).first()
+
+        if existing:
+            existing.subject = subject
+            existing.html_content = html_content
+            existing.created_at = datetime.utcnow()
+            session.flush()
+            return existing
+
+        archive = NewsletterArchive(
+            tenant_id=tenant_id,
+            newsletter_type=newsletter_type,
+            subject=subject,
+            html_content=html_content,
+            sent_date=sent_date,
+        )
+        session.add(archive)
+        session.flush()
+        return archive
+
+    @staticmethod
+    def get_list(session: Session, tenant_id: str,
+                 limit: int = 50) -> list[NewsletterArchive]:
+        """아카이브 목록 조회 (최신순)"""
+        return (
+            session.query(NewsletterArchive)
+            .filter(NewsletterArchive.tenant_id == tenant_id)
+            .order_by(NewsletterArchive.sent_date.desc(), NewsletterArchive.newsletter_type.desc())
+            .limit(limit)
+            .all()
+        )
+
+    @staticmethod
+    def get_by_id(session: Session, archive_id: int) -> Optional[NewsletterArchive]:
+        """ID로 아카이브 조회"""
+        return session.query(NewsletterArchive).filter(
+            NewsletterArchive.id == archive_id
+        ).first()
 
 
 class EmailVerificationRepository:
