@@ -11,9 +11,13 @@ Data Sources:
   - academies: List[AcademyResponse] (id, name, name_en, code, is_active)
 """
 
+import json
 import logging
 from datetime import datetime
 from typing import Any, Dict
+from urllib.parse import quote
+
+from .config import REPORT_BASE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +133,6 @@ class EduFitFormatter:
     @staticmethod
     def _format_academy_list(academies: list, academy_stats: list) -> list:
         """등록 학원 목록을 통계와 결합"""
-        # academy_stats를 이름 기준 딕셔너리로
         stats_map = {a.get("academyName", ""): a for a in academy_stats}
 
         result = []
@@ -151,31 +154,29 @@ class EduFitFormatter:
         return result
 
     def format_weekly(self, history_data: list, collected_data: dict = None) -> dict:
-        """주간 요약 포매팅
-
-        Args:
-            history_data: 7일간 일일 수집 이력 [{collected_date, data_type, data}, ...]
-            collected_data: 추가 수집된 주간 요약 데이터
-        """
+        """주간 요약 포매팅"""
         collected_data = collected_data or {}
 
-        # 이력에서 일별 통계 집계
         daily_stats = self._aggregate_daily_stats(history_data)
 
-        # 주간 요약 데이터 (API에서 직접 수집된 것 우선)
         weekly_summary = collected_data.get("weekly_summary", {})
         weekly_ranking = collected_data.get("weekly_ranking", [])
         analysis_summary = collected_data.get("analysis_summary", {})
         academy_stats = collected_data.get("academy_stats", [])
         academies = collected_data.get("academies", [])
 
-        # 이력 기반 집계
         total_mentions_sum = sum(d.get("total_mentions", 0) for d in daily_stats)
         days_count = len(daily_stats)
 
+        # 감성 집계
+        total_positive = sum(d.get("positive", 0) for d in daily_stats)
+        total_negative = sum(d.get("negative", 0) for d in daily_stats)
+        total_mentions = weekly_summary.get("totalMentions", 0) or total_mentions_sum
+        total_neutral = max(0, total_mentions - total_positive - total_negative)
+
         stats = {
             "total_teachers": weekly_summary.get("totalTeachers", 0),
-            "total_mentions": weekly_summary.get("totalMentions", 0) or total_mentions_sum,
+            "total_mentions": total_mentions,
             "avg_sentiment": weekly_summary.get("avgSentimentScore", 0),
             "total_recommendations": (
                 weekly_summary.get("totalRecommendations", 0)
@@ -183,25 +184,16 @@ class EduFitFormatter:
             ),
             "days_count": days_count,
             "mention_change_rate": weekly_summary.get("mentionChangeRate", 0),
+            "positive": total_positive,
+            "negative": total_negative,
+            "neutral": total_neutral,
         }
 
         if stats["avg_sentiment"] and stats["avg_sentiment"] <= 1:
             stats["avg_sentiment"] = round(stats["avg_sentiment"] * 100, 1)
 
         # TOP 강사
-        top_teachers = []
-        for teacher in weekly_ranking[:5]:
-            sentiment = teacher.get("avgSentimentScore", 0) or 0
-            if sentiment <= 1:
-                sentiment = round(sentiment * 100, 1)
-            top_teachers.append({
-                "name": teacher.get("teacherName", ""),
-                "academy": teacher.get("academyName", ""),
-                "mention_count": teacher.get("mentionCount", 0),
-                "sentiment_score": sentiment,
-                "recommendation_count": teacher.get("recommendationCount", 0),
-                "top_keywords": teacher.get("topKeywords", []),
-            })
+        top_teachers = self._format_teachers(weekly_ranking, limit=5)
 
         # 학원 랭킹
         academy_ranking = self._format_academy_ranking(academy_stats)
@@ -209,8 +201,11 @@ class EduFitFormatter:
         # 기간 계산 (금요일 발송 기준: 이번 주 월~금)
         from datetime import date, timedelta
         today = date.today()
-        period_start = today - timedelta(days=today.weekday())  # 월요일
-        period_end = today  # 오늘 (금요일)
+        period_start = today - timedelta(days=today.weekday())
+        period_end = today
+
+        # 차트 URL 생성
+        charts = self._generate_charts(daily_stats, top_teachers)
 
         return {
             "stats": stats,
@@ -219,6 +214,8 @@ class EduFitFormatter:
             "daily_stats": daily_stats,
             "period_start": period_start,
             "period_end": period_end,
+            "charts": charts,
+            "report_url": f"{REPORT_BASE_URL}/weekly",
             "report_date": datetime.now(),
             "generated_at": datetime.now(),
         }
@@ -238,30 +235,27 @@ class EduFitFormatter:
         total_mentions_sum = sum(d.get("total_mentions", 0) for d in daily_stats)
         days_count = len(daily_stats)
 
+        # 감성 집계
+        total_positive = sum(d.get("positive", 0) for d in daily_stats)
+        total_negative = sum(d.get("negative", 0) for d in daily_stats)
+        total_mentions = analysis_summary.get("totalMentions", 0) or total_mentions_sum
+        total_neutral = max(0, total_mentions - total_positive - total_negative)
+
         stats = {
             "total_teachers": analysis_summary.get("totalTeachers", 0),
-            "total_mentions": analysis_summary.get("totalMentions", 0) or total_mentions_sum,
+            "total_mentions": total_mentions,
             "avg_sentiment": analysis_summary.get("avgSentimentScore", 0),
             "total_recommendations": analysis_summary.get("totalRecommendations", 0),
             "days_count": days_count,
+            "positive": total_positive,
+            "negative": total_negative,
+            "neutral": total_neutral,
         }
 
         if stats["avg_sentiment"] and stats["avg_sentiment"] <= 1:
             stats["avg_sentiment"] = round(stats["avg_sentiment"] * 100, 1)
 
-        top_teachers = []
-        for teacher in weekly_ranking[:10]:
-            sentiment = teacher.get("avgSentimentScore", 0) or 0
-            if sentiment <= 1:
-                sentiment = round(sentiment * 100, 1)
-            top_teachers.append({
-                "name": teacher.get("teacherName", ""),
-                "academy": teacher.get("academyName", ""),
-                "mention_count": teacher.get("mentionCount", 0),
-                "sentiment_score": sentiment,
-                "recommendation_count": teacher.get("recommendationCount", 0),
-                "top_keywords": teacher.get("topKeywords", []),
-            })
+        top_teachers = self._format_teachers(weekly_ranking, limit=10)
 
         academy_ranking = self._format_academy_ranking(academy_stats)
         academy_list = self._format_academy_list(academies, academy_stats)
@@ -269,8 +263,11 @@ class EduFitFormatter:
         # 기간 계산 (말일 발송 기준: 이번 달 전체)
         from datetime import date
         today = date.today()
-        period_start = today.replace(day=1)  # 이번 달 1일
-        period_end = today  # 오늘 (말일)
+        period_start = today.replace(day=1)
+        period_end = today
+
+        # 차트 URL 생성
+        charts = self._generate_charts(daily_stats, top_teachers)
 
         return {
             "stats": stats,
@@ -280,9 +277,29 @@ class EduFitFormatter:
             "daily_stats": daily_stats,
             "period_start": period_start,
             "period_end": period_end,
+            "charts": charts,
+            "report_url": f"{REPORT_BASE_URL}/monthly",
             "report_date": datetime.now(),
             "generated_at": datetime.now(),
         }
+
+    @staticmethod
+    def _format_teachers(ranking: list, limit: int = 5) -> list:
+        """강사 랭킹 데이터 포매팅"""
+        teachers = []
+        for teacher in ranking[:limit]:
+            sentiment = teacher.get("avgSentimentScore", 0) or 0
+            if sentiment <= 1:
+                sentiment = round(sentiment * 100, 1)
+            teachers.append({
+                "name": teacher.get("teacherName", ""),
+                "academy": teacher.get("academyName", ""),
+                "mention_count": teacher.get("mentionCount", 0),
+                "sentiment_score": sentiment,
+                "recommendation_count": teacher.get("recommendationCount", 0),
+                "top_keywords": teacher.get("topKeywords", []),
+            })
+        return teachers
 
     @staticmethod
     def _aggregate_daily_stats(history_data: list) -> list:
@@ -304,15 +321,105 @@ class EduFitFormatter:
                 "total_mentions": daily_report.get("totalMentions", 0),
                 "total_teachers": daily_report.get("totalTeachers", 0),
                 "avg_sentiment": daily_report.get("avgSentimentScore", 0),
+                "positive": daily_report.get("totalPositive", 0),
+                "negative": daily_report.get("totalNegative", 0),
             })
         return daily_stats
+
+    @staticmethod
+    def _build_quickchart_url(config: dict, width: int = 560, height: int = 200) -> str:
+        """QuickChart.io 차트 이미지 URL 생성"""
+        chart_json = json.dumps(config, separators=(",", ":"), ensure_ascii=False)
+        return f"https://quickchart.io/chart?w={width}&h={height}&bkg=%231e293b&c={quote(chart_json)}"
+
+    def _generate_charts(self, daily_stats: list, top_teachers: list) -> dict:
+        """QuickChart URL 생성"""
+        charts = {}
+
+        # 1. 일별 언급 추이 라인 차트
+        if daily_stats:
+            labels = []
+            data = []
+            for d in daily_stats:
+                dt = d.get("date", "")
+                if hasattr(dt, "strftime"):
+                    labels.append(dt.strftime("%m/%d"))
+                else:
+                    labels.append(str(dt)[-5:])
+                data.append(d.get("total_mentions", 0))
+
+            config = {
+                "type": "line",
+                "data": {
+                    "labels": labels,
+                    "datasets": [{
+                        "data": data,
+                        "borderColor": "#10b981",
+                        "backgroundColor": "rgba(16,185,129,0.15)",
+                        "fill": True,
+                        "tension": 0.3,
+                        "pointRadius": 5,
+                        "pointBackgroundColor": "#10b981",
+                        "borderWidth": 2,
+                    }],
+                },
+                "options": {
+                    "plugins": {"legend": {"display": False}},
+                    "scales": {
+                        "y": {
+                            "ticks": {"color": "#94a3b8", "stepSize": 1},
+                            "grid": {"color": "rgba(148,163,184,0.15)"},
+                        },
+                        "x": {
+                            "ticks": {"color": "#94a3b8"},
+                            "grid": {"display": False},
+                        },
+                    },
+                },
+            }
+            charts["trend_url"] = self._build_quickchart_url(config)
+
+        # 2. 강사별 언급수 가로 바 차트
+        if top_teachers:
+            names = [t.get("name", "")[:6] for t in top_teachers[:5]]
+            counts = [t.get("mention_count", 0) for t in top_teachers[:5]]
+            colors = ["#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#d1fae5"]
+
+            config = {
+                "type": "bar",
+                "data": {
+                    "labels": names,
+                    "datasets": [{
+                        "data": counts,
+                        "backgroundColor": colors[: len(counts)],
+                        "borderRadius": 4,
+                        "barThickness": 20,
+                    }],
+                },
+                "options": {
+                    "indexAxis": "y",
+                    "plugins": {"legend": {"display": False}},
+                    "scales": {
+                        "x": {
+                            "ticks": {"color": "#94a3b8", "stepSize": 1},
+                            "grid": {"color": "rgba(148,163,184,0.15)"},
+                        },
+                        "y": {
+                            "ticks": {"color": "#f1f5f9", "font": {"size": 13}},
+                            "grid": {"display": False},
+                        },
+                    },
+                },
+            }
+            charts["teacher_bar_url"] = self._build_quickchart_url(config, height=160)
+
+        return charts
 
     @staticmethod
     def _extract_highlights(daily_report: dict, weekly_ranking: list, analysis_summary: dict) -> list:
         """데이터에서 주요 하이라이트 자동 생성"""
         highlights = []
 
-        # 일일 리포트에서 언급 많은 강사
         teacher_summaries = daily_report.get("teacherSummaries", [])
         if teacher_summaries:
             top = teacher_summaries[0]
@@ -321,17 +428,15 @@ class EduFitFormatter:
             if name and mentions > 0:
                 highlights.append(f"{name} 강사 오늘 최다 언급 ({mentions}건)")
 
-        # 추천 수 하이라이트 (EduFit 전용)
         total_recs = analysis_summary.get("totalRecommendations", 0)
         if total_recs > 0:
             highlights.append(f"누적 추천 {total_recs}건 달성")
 
-        # 주간 랭킹에서 감성 점수 높은 강사
         if weekly_ranking:
             best_sentiment = max(
                 weekly_ranking[:5],
                 key=lambda t: t.get("avgSentimentScore", 0) or 0,
-                default=None
+                default=None,
             )
             if best_sentiment:
                 name = best_sentiment.get("teacherName", "")
@@ -341,7 +446,6 @@ class EduFitFormatter:
                 if name:
                     highlights.append(f"{name} 강사 감성 점수 {score}%로 최상위")
 
-            # 1위 강사 언급량
             top_ranked = weekly_ranking[0]
             name = top_ranked.get("teacherName", "")
             mentions = top_ranked.get("mentionCount", 0)

@@ -9,6 +9,8 @@ DISPLAY_NAME = "EduFit 강사·학원 분석 브리핑"
 EMAIL_SUBJECT_PREFIX = "[EduFit]"
 EMAIL_TEMPLATE = "edufit/daily_report.html"
 
+REPORT_BASE_URL = "https://insight.unmong.com/edufit"
+
 BRAND_CONFIG = BrandConfig(
     primary_color="#10b981",
     primary_color_dark="#059669",

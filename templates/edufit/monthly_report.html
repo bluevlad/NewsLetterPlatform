@@ -14,15 +14,28 @@
                     <!-- Header -->
                     <tr>
                         <td style="padding: 32px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 16px 16px 0 0; border: 1px solid rgba(148, 163, 184, 0.1); border-bottom: none;">
-                            <h1 style="margin: 0; font-size: 28px; font-weight: 700; color: #10b981;">
-                                EduFit
-                            </h1>
-                            <p style="margin: 8px 0 0 0; color: #f59e0b; font-size: 16px; font-weight: 600;">
-                                월간 분석 브리핑
-                            </p>
-                            <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 14px;">
-                                {{ period_start | format_date('%Y.%m.%d') }} ~ {{ period_end | format_date('%Y.%m.%d') }}
-                            </p>
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                                <tr>
+                                    <td>
+                                        <h1 style="margin: 0; font-size: 28px; font-weight: 700; color: #10b981;">
+                                            EduFit
+                                        </h1>
+                                        <p style="margin: 8px 0 0 0; color: #f59e0b; font-size: 16px; font-weight: 600;">
+                                            월간 분석 브리핑
+                                        </p>
+                                        <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 14px;">
+                                            {{ period_start | format_date('%Y.%m.%d') }} ~ {{ period_end | format_date('%Y.%m.%d') }}
+                                        </p>
+                                    </td>
+                                    {% if report_url %}
+                                    <td align="right" valign="top">
+                                        <a href="{{ report_url }}" style="display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #f59e0b, #d97706); color: #ffffff; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+                                            &#x1F4CA; 웹에서 보기
+                                        </a>
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                            </table>
                         </td>
                     </tr>
 
@@ -36,37 +49,107 @@
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td style="padding: 8px 32px 20px 32px;">
+                                    <td style="padding: 8px 32px 4px 32px;">
                                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                             <tr>
                                                 <td width="25%" align="center" style="padding: 8px;">
-                                                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: #10b981;">{{ stats.total_teachers | format_number }}</p>
-                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">총 강사</p>
+                                                    <p style="margin: 0; font-size: 28px; font-weight: 700; color: #38bdf8;">{{ stats.total_mentions | format_number }}</p>
+                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">총 언급</p>
                                                 </td>
                                                 <td width="25%" align="center" style="padding: 8px;">
-                                                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: #34d399;">{{ stats.total_mentions | format_number }}</p>
-                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">총 언급수</p>
+                                                    <p style="margin: 0; font-size: 28px; font-weight: 700; color: #10b981;">{{ stats.positive | format_number }}</p>
+                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">긍정 언급</p>
                                                 </td>
                                                 <td width="25%" align="center" style="padding: 8px;">
-                                                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: #f59e0b;">{{ stats.avg_sentiment | format_percent }}</p>
-                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">평균 감성</p>
+                                                    <p style="margin: 0; font-size: 28px; font-weight: 700; color: #f1f5f9;">{{ stats.total_teachers | format_number }}</p>
+                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">언급 강사</p>
                                                 </td>
                                                 <td width="25%" align="center" style="padding: 8px;">
-                                                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: #fb923c;">{{ stats.total_recommendations | format_number }}</p>
-                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">추천 수</p>
+                                                    <p style="margin: 0; font-size: 28px; font-weight: 700; color: #fb923c;">{{ stats.total_recommendations | format_number }}</p>
+                                                    <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">총 추천</p>
                                                 </td>
                                             </tr>
                                         </table>
-                                        {% if stats.days_count > 0 %}
-                                        <p style="margin: 8px 0 0 0; font-size: 13px; color: #94a3b8; text-align: center;">
+                                    </td>
+                                </tr>
+                                <!-- Sentiment Distribution Bar -->
+                                {% if stats.total_mentions > 0 %}
+                                <tr>
+                                    <td style="padding: 8px 32px 12px 32px;">
+                                        <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8;">감성 분포</p>
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                                            <tr>
+                                                <td style="padding: 0;">
+                                                    <div style="height: 10px; border-radius: 5px; overflow: hidden; background: #334155;">
+                                                        {% set pos_pct = ((stats.positive / stats.total_mentions) * 100) | round(0) | int if stats.total_mentions > 0 else 0 %}
+                                                        {% set neg_pct = ((stats.negative / stats.total_mentions) * 100) | round(0) | int if stats.total_mentions > 0 else 0 %}
+                                                        <div style="display: flex; height: 100%;">
+                                                            {% if pos_pct > 0 %}<div style="width: {{ pos_pct }}%; background: #10b981;"></div>{% endif %}
+                                                            <div style="flex: 1; background: #475569;"></div>
+                                                            {% if neg_pct > 0 %}<div style="width: {{ neg_pct }}%; background: #ef4444;"></div>{% endif %}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 6px 0 0 0;">
+                                                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                                                        <tr>
+                                                            <td style="font-size: 11px; color: #10b981;">&#9679; 긍정 {{ stats.positive }}건</td>
+                                                            <td align="center" style="font-size: 11px; color: #94a3b8;">&#9679; 중립 {{ stats.neutral }}건</td>
+                                                            <td align="right" style="font-size: 11px; color: #ef4444;">&#9679; 부정 {{ stats.negative }}건</td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% if stats.days_count > 0 %}
+                                <tr>
+                                    <td style="padding: 0 32px 16px 32px;">
+                                        <p style="margin: 0; font-size: 13px; color: #94a3b8; text-align: center;">
                                             {{ stats.days_count }}일간 데이터 집계
                                         </p>
-                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Daily Trend Chart (QuickChart) -->
+                    {% if charts and charts.trend_url %}
+                    <tr>
+                        <td style="padding: 0 1px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.6); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
+                                <tr>
+                                    <td style="padding: 24px 32px;">
+                                        <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;">&#x1F4C8; 일별 언급 추이</h2>
+                                        <img src="{{ charts.trend_url }}" width="560" style="width: 100%; max-width: 560px; height: auto; border-radius: 8px;" alt="일별 언급 추이 차트">
                                     </td>
                                 </tr>
                             </table>
                         </td>
                     </tr>
+                    {% endif %}
+
+                    <!-- Teacher Bar Chart (QuickChart) -->
+                    {% if charts and charts.teacher_bar_url %}
+                    <tr>
+                        <td style="padding: 0 1px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.6); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
+                                <tr>
+                                    <td style="padding: 24px 32px;">
+                                        <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;">&#x1F3AF; 강사별 언급수</h2>
+                                        <img src="{{ charts.teacher_bar_url }}" width="560" style="width: 100%; max-width: 560px; height: auto; border-radius: 8px;" alt="강사별 언급수 차트">
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {% endif %}
 
                     <!-- Top Teachers -->
                     {% if top_teachers %}
@@ -85,17 +168,18 @@
                                                         <tr>
                                                             <td>
                                                                 <p style="margin: 0; font-size: 15px; font-weight: 600; color: #f1f5f9;">
-                                                                    {{ loop.index }}. {{ teacher.name }}
+                                                                    {% if loop.index == 1 %}&#x1F947;{% elif loop.index == 2 %}&#x1F948;{% elif loop.index == 3 %}&#x1F949;{% else %}{{ loop.index }}.{% endif %}
+                                                                    {{ teacher.name }}
                                                                 </p>
                                                                 <p style="margin: 4px 0 0 0; font-size: 13px; color: #94a3b8;">
                                                                     {{ teacher.academy }}
                                                                 </p>
                                                             </td>
                                                             <td align="right" style="white-space: nowrap;">
-                                                                <p style="margin: 0; font-size: 13px; color: #10b981;">
-                                                                    언급 {{ teacher.mention_count }}회
+                                                                <p style="margin: 0; font-size: 14px; font-weight: 600; color: #38bdf8;">
+                                                                    {{ teacher.mention_count }}회
                                                                 </p>
-                                                                <p style="margin: 4px 0 0 0; font-size: 13px; color: {% if teacher.sentiment_score >= 70 %}#10b981{% elif teacher.sentiment_score >= 40 %}#f59e0b{% else %}#ef4444{% endif %};">
+                                                                <p style="margin: 4px 0 0 0; font-size: 12px; color: {% if teacher.sentiment_score >= 70 %}#10b981{% elif teacher.sentiment_score >= 40 %}#f59e0b{% else %}#94a3b8{% endif %};">
                                                                     감성 {{ teacher.sentiment_score | format_percent }}
                                                                 </p>
                                                                 {% if teacher.recommendation_count > 0 %}
@@ -124,7 +208,7 @@
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.6); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
                                 <tr>
                                     <td style="padding: 24px 32px;">
-                                        <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;">학원별 월간 분석</h2>
+                                        <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;">&#x1F3EB; 학원별 월간 분석</h2>
 
                                         {% for academy in academy_list %}
                                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 10px; background: rgba(15, 23, 42, 0.5); border-radius: 8px; border-left: 3px solid {% if loop.index <= 3 %}#a78bfa{% else %}#475569{% endif %};">
@@ -218,11 +302,18 @@
                     <!-- Footer -->
                     <tr>
                         <td style="padding: 24px 32px; background: rgba(30, 41, 59, 0.5); border-radius: 0 0 16px 16px; border: 1px solid rgba(148, 163, 184, 0.1); border-top: none;">
+                            {% if report_url %}
+                            <p style="margin: 0 0 16px 0; text-align: center;">
+                                <a href="{{ report_url }}" style="display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #f59e0b, #d97706); color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+                                    &#x1F4CA; 상세 리포트 보기
+                                </a>
+                            </p>
+                            {% endif %}
                             <p style="margin: 0 0 12px 0; text-align: center;">
                                 <a href="__UNSUBSCRIBE_URL__" style="color: #94a3b8; font-size: 12px; text-decoration: underline;">구독 해지</a>
                             </p>
                             <p style="margin: 0; font-size: 12px; color: #64748b; text-align: center;">
-                                &copy; 2025 EduFit 강사·학원 분석 브리핑<br>
+                                &copy; 2025 EduFit 강사&middot;학원 분석 브리핑<br>
                                 이 메일은 자동 발송되었습니다.<br>
                                 <span style="color: #475569;">Generated at {{ generated_at | format_date('%Y-%m-%d %H:%M') }}</span>
                             </p>
