@@ -11,6 +11,7 @@ from pathlib import Path as _Path
 
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy import text
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -20,8 +21,7 @@ from ..common.database.repository import get_session_factory
 from ..common.subscription.manager import SubscriptionManager
 from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
-from ..common.scheduler.health import check_health
-from ..common.database.repository import get_session, NewsletterArchiveRepository
+from ..common.database.repository import get_session, SendHistoryRepository, NewsletterArchiveRepository
 from ..tenant.registry import get_registry
 from .shared import templates, templates_dir, get_db, get_tenant_or_404
 from .admin import admin_router
@@ -97,12 +97,46 @@ def resolve_template(tenant_id: str, template_name: str) -> str:
 
 @app.get("/api/health", response_class=JSONResponse)
 async def api_health():
-    """공개 Health Check 엔드포인트 (QA Agent 등 외부 모니터링용)"""
-    healthy = check_health()
-    return JSONResponse(
-        content={"status": "ok" if healthy else "degraded"},
-        status_code=200 if healthy else 503,
-    )
+    """Liveness 엔드포인트 — 앱 프로세스 응답 + DB 연결 확인"""
+    try:
+        with get_session() as session:
+            session.execute(text("SELECT 1"))
+        return JSONResponse(content={"status": "ok"}, status_code=200)
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return JSONResponse(
+            content={"status": "unhealthy", "error": str(e)},
+            status_code=503,
+        )
+
+
+@app.get("/api/health/scheduler", response_class=JSONResponse)
+async def api_health_scheduler():
+    """Readiness 엔드포인트 — 당일 발송 통계 기반 스케줄러 상태"""
+    try:
+        registry = get_registry()
+        total = 0
+        failed = 0
+        tenant_stats = {}
+
+        with get_session() as session:
+            for tid in registry.get_all():
+                stats = SendHistoryRepository.get_today_stats(session, tid)
+                tenant_stats[tid] = stats
+                total += stats["total"]
+                failed += stats["failed"]
+
+        return JSONResponse(content={
+            "total": total,
+            "failed": failed,
+            "tenants": tenant_stats,
+        })
+    except Exception as e:
+        logger.error(f"Scheduler health check failed: {e}")
+        return JSONResponse(
+            content={"total": 0, "failed": 0, "error": str(e)},
+            status_code=503,
+        )
 
 
 # ==================== 랜딩 페이지 ====================
