@@ -120,7 +120,7 @@ async def api_health_scheduler():
         tenant_stats = {}
 
         with get_session() as session:
-            for tid in registry.get_all():
+            for tid in registry.get_active_ids():
                 stats = SendHistoryRepository.get_today_stats(session, tid)
                 tenant_stats[tid] = stats
                 total += stats["total"]
