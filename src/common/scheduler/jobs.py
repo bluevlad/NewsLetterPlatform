@@ -179,10 +179,10 @@ def run_send_job(tenant_id: str, newsletter_type: str = "daily") -> None:
             logger.warning(f"[{tenant_id}] 등록된 구독자가 없습니다.")
             return
 
-        # 중복 방지: 주기별 발송 완료된 구독자 조회
+        # 중복 방지: 주기별 발송 완료된 구독자 조회 (newsletter_type별 분리)
         if newsletter_type == "daily":
             sent_ids = SendHistoryRepository.get_sent_today_subscriber_ids(
-                session, tenant_id
+                session, tenant_id, newsletter_type="daily"
             )
         else:
             period_start = _get_period_start_for_dedup(newsletter_type)
@@ -359,7 +359,9 @@ def send_welcome_newsletter(tenant_id: str, email: str) -> bool:
                 logger.warning(f"[{tenant_id}] 구독자를 찾을 수 없습니다: {email}")
                 return False
 
-            if SendHistoryRepository.already_sent_today(session, tenant_id, subscriber.id):
+            if SendHistoryRepository.already_sent_today(
+                session, tenant_id, subscriber.id, newsletter_type="daily"
+            ):
                 logger.info(f"[{tenant_id}] 이미 오늘 발송됨, 웰컴 건너뜀: {email}")
                 return True
 
@@ -401,6 +403,116 @@ def send_welcome_newsletter(tenant_id: str, email: str) -> bool:
     except Exception as e:
         logger.exception(f"[{tenant_id}] 웰컴 뉴스레터 발송 중 오류: {e}")
         return False
+
+
+def run_adhoc_send(
+    tenant_id: str,
+    subject: str,
+    html_content: str,
+    subscriber_ids: list[int] | None = None,
+) -> dict:
+    """긴급/이벤트성 뉴스레터 즉시 발송 (adhoc)
+
+    - daily/weekly/monthly 중복 체크와 완전히 분리
+    - 같은 날 동일 제목의 adhoc은 중복 방지
+    - subscriber_ids가 None이면 전체 활성 구독자에게 발송
+
+    Returns:
+        {"total": int, "success": int, "failed": int, "skipped": int}
+    """
+    logger.info(f"[{tenant_id}][adhoc] 긴급/이벤트 뉴스레터 발송 시작: {subject}")
+
+    sender = get_sender()
+    if not sender.is_configured:
+        logger.warning(f"[{tenant_id}][adhoc] Gmail 설정이 완료되지 않아 발송을 건너뜁니다.")
+        return {"total": 0, "success": 0, "failed": 0, "skipped": 0}
+
+    result = {"total": 0, "success": 0, "failed": 0, "skipped": 0}
+
+    with get_session() as session:
+        # 아카이브 저장
+        try:
+            NewsletterArchiveRepository.save(
+                session, tenant_id, "adhoc", subject, html_content
+            )
+            logger.info(f"[{tenant_id}][adhoc] 아카이브 저장 완료")
+        except Exception as e:
+            logger.warning(f"[{tenant_id}][adhoc] 아카이브 저장 실패 (발송은 계속): {e}")
+
+        # 구독자 조회
+        if subscriber_ids:
+            subscribers = [
+                SubscriberRepository.get_by_id(session, sid)
+                for sid in subscriber_ids
+            ]
+            subscribers = [s for s in subscribers if s and s.is_active]
+        else:
+            subscribers = SubscriberRepository.get_all_active(session, tenant_id)
+
+        if not subscribers:
+            logger.warning(f"[{tenant_id}][adhoc] 발송 대상 구독자가 없습니다.")
+            return result
+
+        result["total"] = len(subscribers)
+
+        # adhoc 중복 방지: 오늘 같은 adhoc 타입으로 이미 발송된 구독자
+        sent_ids = SendHistoryRepository.get_sent_today_subscriber_ids(
+            session, tenant_id, newsletter_type="adhoc"
+        )
+
+        registry = get_registry()
+        tenant = registry.get(tenant_id)
+        display_name = tenant.display_name if tenant else tenant_id
+
+        messages = []
+        target_subscribers = []
+        for subscriber in subscribers:
+            if subscriber.id in sent_ids:
+                logger.debug(f"[{tenant_id}][adhoc] 이미 발송됨: {subscriber.email}")
+                result["skipped"] += 1
+                continue
+
+            unsubscribe_url = (
+                f"{settings.web_base_url}/{tenant_id}"
+                f"/unsubscribe/token/{subscriber.unsubscribe_token}"
+            )
+            subscriber_html = html_content.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
+
+            messages.append({
+                "recipient": subscriber.email,
+                "subject": subject,
+                "html_content": subscriber_html,
+                "sender_name": display_name,
+            })
+            target_subscribers.append(subscriber)
+
+        if not messages:
+            logger.info(f"[{tenant_id}][adhoc] 발송 대상이 없습니다 (모두 발송 완료).")
+            return result
+
+        # 배치 발송
+        send_results = sender.send_batch_efficient(messages)
+
+        for subscriber, send_result in zip(target_subscribers, send_results):
+            SendHistoryRepository.create(
+                session, tenant_id, subscriber.id,
+                subject, send_result.success, send_result.error_message,
+                newsletter_type="adhoc"
+            )
+            if send_result.success:
+                result["success"] += 1
+            else:
+                result["failed"] += 1
+                logger.error(
+                    f"[{tenant_id}][adhoc] 발송 실패: {subscriber.email} - {send_result.error_message}"
+                )
+
+    logger.info(
+        f"[{tenant_id}][adhoc] 발송 완료: "
+        f"성공 {result['success']}/{result['total']}건, "
+        f"실패 {result['failed']}건, 스킵 {result['skipped']}건"
+    )
+    return result
 
 
 def register_all_jobs(scheduler: BlockingScheduler) -> None:

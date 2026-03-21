@@ -189,7 +189,8 @@ class SendHistoryRepository:
         return history
 
     @staticmethod
-    def already_sent_today(session: Session, tenant_id: str, subscriber_id: int) -> bool:
+    def already_sent_today(session: Session, tenant_id: str, subscriber_id: int,
+                           newsletter_type: str = "daily") -> bool:
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         return (
             session.query(SendHistory)
@@ -197,6 +198,7 @@ class SendHistoryRepository:
                 and_(
                     SendHistory.tenant_id == tenant_id,
                     SendHistory.subscriber_id == subscriber_id,
+                    SendHistory.newsletter_type == newsletter_type,
                     SendHistory.sent_at >= today_start,
                     SendHistory.is_success == True
                 )
@@ -205,14 +207,16 @@ class SendHistoryRepository:
         )
 
     @staticmethod
-    def get_sent_today_subscriber_ids(session: Session, tenant_id: str) -> set[int]:
-        """당일 발송 완료된 구독자 ID 일괄 조회 (N+1 방지)"""
+    def get_sent_today_subscriber_ids(session: Session, tenant_id: str,
+                                      newsletter_type: str = "daily") -> set[int]:
+        """당일 발송 완료된 구독자 ID 일괄 조회 (N+1 방지, newsletter_type별 분리)"""
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         rows = (
             session.query(SendHistory.subscriber_id)
             .filter(
                 and_(
                     SendHistory.tenant_id == tenant_id,
+                    SendHistory.newsletter_type == newsletter_type,
                     SendHistory.sent_at >= today_start,
                     SendHistory.is_success == True
                 )

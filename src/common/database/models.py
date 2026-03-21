@@ -33,6 +33,7 @@ class NewsletterType(PyEnum):
     DAILY = "daily"
     WEEKLY = "weekly"
     MONTHLY = "monthly"
+    ADHOC = "adhoc"
 
 
 class Subscriber(Base):

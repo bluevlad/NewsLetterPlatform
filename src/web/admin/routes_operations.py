@@ -15,7 +15,7 @@ from ...common.database.repository import (
 )
 from ...common.delivery.gmail_sender import get_sender
 from ...common.template.renderer import get_renderer
-from ...common.scheduler.jobs import run_collect_job, run_send_job
+from ...common.scheduler.jobs import run_collect_job, run_send_job, run_adhoc_send
 from ...tenant.registry import get_registry
 from ..shared import templates, get_tenant_or_404
 from .auth import get_admin_or_redirect
@@ -261,4 +261,27 @@ async def trigger_send(request: Request, tenant_id: str,
     return templates.TemplateResponse("admin/_toast.html", {
         "request": request, "level": "info",
         "message": f"Newsletter ({newsletter_type}) send started for {tenant_id}",
+    })
+
+
+@router.post("/admin/{tenant_id}/send/adhoc", response_class=HTMLResponse)
+async def trigger_adhoc_send(request: Request, tenant_id: str,
+                             subject: str = Form(...),
+                             html_content: str = Form(...)):
+    """긴급/이벤트성 뉴스레터 즉시 발송 (adhoc)"""
+    redirect = get_admin_or_redirect(request)
+    if redirect:
+        return redirect
+
+    get_tenant_or_404(tenant_id)
+
+    def _run():
+        result = run_adhoc_send(tenant_id, subject, html_content)
+        logger.info(f"[{tenant_id}][adhoc] 발송 결과: {result}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    return templates.TemplateResponse("admin/_toast.html", {
+        "request": request, "level": "info",
+        "message": f"Adhoc newsletter send started for {tenant_id}",
     })
