@@ -3,6 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 > 도메인/URL/포트 규칙: [Claude-Opus-bluevlad/standards/infrastructure/DOMAIN_MANAGEMENT.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/infrastructure/DOMAIN_MANAGEMENT.md) — `https://도메인:포트` 사용 금지
+> 발송 유형 분리: [Claude-Opus-bluevlad/standards/newsletterplatform/SEND_TYPE_SEPARATION.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/newsletterplatform/SEND_TYPE_SEPARATION.md) — **메일 발송 관련 수정 시 반드시 참조**
 
 ## Project Overview
 
@@ -44,9 +45,9 @@ pip install -r requirements.txt
 # 실행 모드
 python -m src.main              # 스케줄러 모드 (기본)
 python -m src.main --web        # 웹 서버 모드
-python -m src.main --run-once   # 1회 실행 (수집 → 발송)
+python -m src.main --run-once   # 1회 실행 (수집 → 발송, manual 모드)
 python -m src.main --collect-only  # 수집만
-python -m src.main --send-only     # 발송만
+python -m src.main --send-only     # 발송만 (manual 모드 — 자동발송 이력에 영향 없음)
 
 # Docker
 docker compose up -d            # 개발

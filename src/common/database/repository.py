@@ -4,7 +4,7 @@
 
 import json
 import logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
@@ -13,6 +13,23 @@ from sqlalchemy import create_engine, and_, func, or_, text, Integer
 from sqlalchemy.orm import sessionmaker, Session
 
 logger = logging.getLogger(__name__)
+
+# KST (UTC+9)
+_KST = timezone(timedelta(hours=9))
+
+
+def _today_start_utc() -> datetime:
+    """KST 기준 오늘 자정을 naive UTC datetime으로 반환
+
+    컨테이너 TZ=Asia/Seoul 환경에서 datetime.utcnow()를 사용하면
+    UTC 자정(=KST 09:00)이 경계가 되어 전일 09:00~당일 08:59 KST가
+    같은 "오늘"로 묶이는 문제가 있다.
+    KST 자정을 UTC로 환산(전일 15:00 UTC)하여 올바른 경계를 사용한다.
+    """
+    now_kst = datetime.now(_KST)
+    midnight_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+    midnight_utc = midnight_kst.astimezone(timezone.utc)
+    return midnight_utc.replace(tzinfo=None)
 
 from .models import (
     Base, Subscriber, SendHistory, CollectedData,
@@ -191,7 +208,7 @@ class SendHistoryRepository:
     @staticmethod
     def already_sent_today(session: Session, tenant_id: str, subscriber_id: int,
                            newsletter_type: str = "daily") -> bool:
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = _today_start_utc()
         return (
             session.query(SendHistory)
             .filter(
@@ -210,7 +227,7 @@ class SendHistoryRepository:
     def get_sent_today_subscriber_ids(session: Session, tenant_id: str,
                                       newsletter_type: str = "daily") -> set[int]:
         """당일 발송 완료된 구독자 ID 일괄 조회 (N+1 방지, newsletter_type별 분리)"""
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = _today_start_utc()
         rows = (
             session.query(SendHistory.subscriber_id)
             .filter(
@@ -229,7 +246,7 @@ class SendHistoryRepository:
     @staticmethod
     def get_today_stats(session: Session, tenant_id: str) -> dict:
         """오늘 발송 통계: {total, success, failed}"""
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = _today_start_utc()
         rows = (
             session.query(
                 SendHistory.is_success,

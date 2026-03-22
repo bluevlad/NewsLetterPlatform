@@ -112,15 +112,15 @@ def main():
         for tid in target_ids:
             run_collect_job(tid, nl_type)
     elif args.send_only:
-        logger.info(f"발송만 실행: {target_ids} (type={nl_type})")
+        logger.info(f"발송만 실행 (manual): {target_ids} (type={nl_type})")
         for tid in target_ids:
-            run_send_job(tid, nl_type)
+            run_send_job(tid, nl_type, manual=True)
     elif args.run_once:
-        logger.info(f"즉시 실행 모드: {target_ids} (type={nl_type})")
+        logger.info(f"즉시 실행 모드 (manual): {target_ids} (type={nl_type})")
         for tid in target_ids:
             run_collect_job(tid, nl_type)
         for tid in target_ids:
-            run_send_job(tid, nl_type)
+            run_send_job(tid, nl_type, manual=True)
     else:
         run_scheduler()
 

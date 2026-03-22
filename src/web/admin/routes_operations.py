@@ -245,7 +245,7 @@ async def trigger_collect(request: Request, tenant_id: str,
 @router.post("/admin/{tenant_id}/send/trigger", response_class=HTMLResponse)
 async def trigger_send(request: Request, tenant_id: str,
                        newsletter_type: str = Form(default="daily")):
-    """발송 트리거"""
+    """수동 발송 트리거 (manual 모드 — 자동 발송 이력에 영향 없음)"""
     redirect = get_admin_or_redirect(request)
     if redirect:
         return redirect
@@ -255,12 +255,13 @@ async def trigger_send(request: Request, tenant_id: str,
     threading.Thread(
         target=run_send_job,
         args=(tenant_id, newsletter_type),
+        kwargs={"manual": True},
         daemon=True,
     ).start()
 
     return templates.TemplateResponse("admin/_toast.html", {
         "request": request, "level": "info",
-        "message": f"Newsletter ({newsletter_type}) send started for {tenant_id}",
+        "message": f"Newsletter ({newsletter_type}) manual send started for {tenant_id}",
     })
 
 
