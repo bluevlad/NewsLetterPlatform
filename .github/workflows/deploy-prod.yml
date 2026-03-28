@@ -76,6 +76,7 @@ jobs:
 
           # Tenant API URLs
           EDUFIT_API_URL=http://host.docker.internal:9070/api/v1
+          EDUFIT_JWT_SECRET=${{ secrets.EDUFIT_JWT_SECRET }}
           ALLERGY_INSIGHT_API_URL=http://host.docker.internal:9040
           ALLERGY_INSIGHT_ADMIN_NAME=${{ secrets.ALLERGY_INSIGHT_ADMIN_NAME }}
           ALLERGY_INSIGHT_ADMIN_PHONE=${{ secrets.ALLERGY_INSIGHT_ADMIN_PHONE }}

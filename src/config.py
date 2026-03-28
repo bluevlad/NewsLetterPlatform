@@ -69,6 +69,10 @@ class Settings(BaseSettings):
         default="http://localhost:9070/api/v1",
         env="EDUFIT_API_URL"
     )
+    edufit_jwt_secret: str = Field(
+        default="",
+        env="EDUFIT_JWT_SECRET"
+    )
     allergy_insight_api_url: str = Field(
         default="http://localhost:9040",
         env="ALLERGY_INSIGHT_API_URL"

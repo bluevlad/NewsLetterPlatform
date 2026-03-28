@@ -189,8 +189,74 @@ class EduFitCollector:
         logger.info(f"EduFit 주간 데이터 수집 완료: {list(result.keys())}")
         return result
 
+    def _generate_service_token(self) -> str:
+        """EduFit 인증용 JWT 서비스 토큰 생성"""
+        import jwt as pyjwt
+        from datetime import datetime, timedelta, timezone
+
+        secret = settings.edufit_jwt_secret
+        if not secret:
+            logger.warning("EDUFIT_JWT_SECRET이 설정되지 않았습니다.")
+            return ""
+
+        payload = {
+            "sub": "newsletter-platform@service",
+            "email": "newsletter-platform@service",
+            "role": "super_admin",
+            "auth_type": "service",
+            "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+            "type": "access",
+        }
+        return pyjwt.encode(payload, secret, algorithm="HS256")
+
+    async def _get_authenticated(self, path: str, params: dict = None) -> Any:
+        """인증이 필요한 API GET 요청"""
+        url = f"{self.api_base_url}{path}"
+        token = self._generate_service_token()
+        if not token:
+            raise RuntimeError("서비스 토큰 생성 실패")
+
+        async def _request():
+            async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+                response = await client.get(
+                    url, params=params,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                response.raise_for_status()
+                return response.json()
+
+        return await retry_async(_request)
+
+    async def collect_newsletter_html(self, year: int, month: int, days: int = 30) -> str:
+        """EduFit 월간 뉴스레터 pre-rendered HTML 수집
+        - GET /newsletter/html?year=YYYY&month=MM&days=DD (인증 필요)
+        """
+        try:
+            data = await self._get_authenticated(
+                "/newsletter/html",
+                params={"year": year, "month": month, "days": days},
+            )
+            html = data.get("html", "") if isinstance(data, dict) else ""
+            if html:
+                logger.info(f"EduFit 월간 뉴스레터 HTML 수집 완료: {year}년 {month}월")
+            else:
+                logger.warning(f"EduFit 월간 뉴스레터 HTML이 비어있습니다: {year}년 {month}월")
+            return html
+        except Exception as e:
+            logger.error(f"EduFit 월간 뉴스레터 HTML 수집 실패: {e}")
+            return ""
+
     async def collect_monthly_data(self) -> Dict[str, Any]:
-        """월간 요약 뉴스레터용 데이터 수집"""
+        """월간 요약 뉴스레터용 데이터 수집 — EduFit newsletter API에서 pre-rendered HTML 사용"""
+        from datetime import date as date_cls
+        today = date_cls.today()
+
+        html = await self.collect_newsletter_html(today.year, today.month)
+        if html:
+            return {"prerendered_html": html}
+
+        # fallback: 기존 방식으로 수집
+        logger.warning("EduFit 월간 뉴스레터 HTML 수집 실패, 기존 방식으로 fallback")
         result = {}
 
         analysis_summary = await self.collect_analysis_summary()
@@ -213,5 +279,5 @@ class EduFitCollector:
         if weekly_ranking:
             result["weekly_ranking"] = weekly_ranking
 
-        logger.info(f"EduFit 월간 데이터 수집 완료: {list(result.keys())}")
+        logger.info(f"EduFit 월간 데이터 수집 완료 (fallback): {list(result.keys())}")
         return result

@@ -224,6 +224,11 @@ class EduFitFormatter:
         """월간 요약 포매팅"""
         collected_data = collected_data or {}
 
+        # pre-rendered HTML이 있으면 패스스루
+        prerendered = collected_data.get("prerendered_html", "")
+        if prerendered:
+            return {"prerendered_html": prerendered}
+
         daily_stats = self._aggregate_daily_stats(history_data)
 
         weekly_summary = collected_data.get("weekly_summary", {})

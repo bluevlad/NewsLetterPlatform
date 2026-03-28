@@ -176,12 +176,17 @@ def run_send_job(
         if context is None:
             return
 
-        # HTML 렌더링
-        try:
-            html_content = renderer.render(template_name, context)
-        except Exception as e:
-            logger.error(f"{log_prefix} 템플릿 렌더링 실패: {e}")
-            return
+        # pre-rendered HTML이 있으면 템플릿 렌더링 스킵
+        if "prerendered_html" in context:
+            html_content = context["prerendered_html"]
+            logger.info(f"{log_prefix} pre-rendered HTML 사용 (템플릿 렌더링 스킵)")
+        else:
+            # HTML 렌더링
+            try:
+                html_content = renderer.render(template_name, context)
+            except Exception as e:
+                logger.error(f"{log_prefix} 템플릿 렌더링 실패: {e}")
+                return
 
         # 아카이브 저장 (수동 발송은 아카이브 생략 — 동일 날짜 중복 방지)
         if not manual:
