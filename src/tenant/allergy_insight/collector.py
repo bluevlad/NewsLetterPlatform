@@ -4,7 +4,8 @@ AllergyInsight Backend API v2.0.0 호출
 
 API Endpoints:
   - POST /api/auth/simple/login → JWT 토큰 획득
-  - GET  /api/admin/news → 뉴스 목록 (Bearer 인증)
+  - GET  /api/public/analytics/news/recent → 최신 뉴스 (공개, 필터링 적용)
+  - GET  /api/admin/news → 뉴스 전체 목록 (Bearer 인증, 주간/월간용)
   - GET  /api/admin/news/stats → 뉴스 통계 (Bearer 인증)
   - GET  /api/papers → 논문 목록 (공개)
 """
@@ -68,8 +69,24 @@ class AllergyInsightCollector:
 
         return await retry_async(_request)
 
+    async def _collect_recent_news(
+        self, days: int = 1, max_age_days: int = 2, limit: int = 10
+    ) -> list[dict]:
+        """최신 뉴스 수집 (일일용) - GET /api/public/analytics/news/recent
+
+        Backend에서 is_processed=TRUE, is_relevant=TRUE 필터 및
+        published_at DESC 정렬이 적용된 공개 API.
+        """
+        path = (
+            f"/api/public/analytics/news/recent"
+            f"?days={days}&max_age_days={max_age_days}&limit={limit}"
+        )
+        data = await self._get(path, auth_required=False)
+        items = data if isinstance(data, list) else data.get("items", [])
+        return items
+
     async def _collect_news(self, page_size: int = 100) -> list[dict]:
-        """뉴스 목록 수집 - GET /api/admin/news"""
+        """뉴스 전체 목록 수집 (주간/월간용) - GET /api/admin/news"""
         data = await self._get(f"/api/admin/news?page=1&page_size={page_size}")
         return data.get("items", [])
 
@@ -187,28 +204,33 @@ class AllergyInsightCollector:
         return result
 
     async def collect_daily_report(self) -> Dict:
-        """일일 리포트 수집 — 로그인 후 뉴스+논문+통계 조합"""
+        """일일 리포트 수집 — 최신 뉴스(공개 API) + 통계/논문 조합"""
         try:
-            # 1. JWT 토큰 획득
-            await self._login()
+            # 1. 최신 뉴스 수집 (공개 API — 인증 불필요)
+            #    Backend에서 is_processed, is_relevant 필터 +
+            #    published_at DESC 정렬 + max_age_days 적용
+            raw_recent_news = await self._collect_recent_news(
+                days=1, max_age_days=2, limit=10
+            )
 
-            # 2. 데이터 수집
-            raw_news = await self._collect_news()
-            raw_stats = await self._collect_news_stats()
+            # 2. 논문 수집 (공개 API — 인증 불필요)
             raw_papers = await self._collect_papers()
 
-            # 3. 포맷 변환
-            news_items = self._transform_news(raw_news)
+            # 3. 통계 수집 (인증 필요 — 실패 시 기본값 사용)
+            raw_stats = {}
+            try:
+                await self._login()
+                raw_stats = await self._collect_news_stats()
+            except Exception as e:
+                logger.warning(f"뉴스 통계 수집 실패 (기본값 사용): {e}")
+
+            # 4. 포맷 변환
+            news_items = self._transform_news(raw_recent_news)
             paper_items = self._transform_papers(raw_papers)
 
-            # 중요도 순 정렬 (top_news)
-            scored = [n for n in news_items if n.get("importance_score")]
-            unscored = [n for n in news_items if not n.get("importance_score")]
-            scored.sort(
-                key=lambda x: x.get("importance_score", 0) or 0,
-                reverse=True,
-            )
-            top_news = scored + unscored
+            # API 응답이 이미 published_at DESC + importance 2차 정렬이므로
+            # 순서를 그대로 유지
+            top_news = news_items
 
             # 뉴스 그룹 (카테고리별)
             news_groups = self._build_news_groups(news_items)
@@ -221,7 +243,7 @@ class AllergyInsightCollector:
             report = {
                 "report_date": now,
                 "generated_at": now,
-                "top_news": top_news[:20],
+                "top_news": top_news,
                 "news_groups": news_groups,
                 "papers": paper_items[:20],
                 "company_news": company_news,
@@ -240,7 +262,7 @@ class AllergyInsightCollector:
 
             logger.info(
                 f"AllergyInsight 일일 리포트 수집 완료: "
-                f"뉴스 {len(news_items)}건, 논문 {len(paper_items)}건, "
+                f"최신 뉴스 {len(news_items)}건, 논문 {len(paper_items)}건, "
                 f"기업 {len(company_news)}건"
             )
             return report
