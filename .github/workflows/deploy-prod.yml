@@ -85,8 +85,8 @@ jobs:
           # Web Server
           WEB_HOST=0.0.0.0
           WEB_PORT=4050
-          WEB_BASE_URL=https://insight.unmong.com/newsletter
-          CSRF_ALLOWED_HOSTS=insight.unmong.com
+          WEB_BASE_URL=https://newsletter.unmong.com
+          CSRF_ALLOWED_HOSTS=newsletter.unmong.com
 
           # Logging
           LOG_LEVEL=INFO
