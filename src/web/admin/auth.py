@@ -101,12 +101,15 @@ async def login_page(request: Request):
         "invalid_credential": "유효하지 않은 인증 정보입니다.",
     }
 
-    return templates.TemplateResponse("admin/login.html", {
+    response = templates.TemplateResponse("admin/login.html", {
         "request": request,
         "error": error_messages.get(error),
         "google_oauth_enabled": _is_google_oauth_configured(),
         "google_client_id": settings.google_client_id if _is_google_oauth_configured() else "",
     })
+    # Google Identity Services 팝업이 postMessage로 credential을 전달할 수 있도록 허용
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    return response
 
 
 @router.post("/admin/login")
