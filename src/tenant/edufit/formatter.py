@@ -9,6 +9,8 @@ Data Sources:
   - analysis_summary: AnalysisSummary (totalMentions, totalRecommendations, totalTeachers, avgSentimentScore)
   - academy_stats: List[AcademyStats] (academyName, totalMentions, totalTeachersMentioned, avgSentimentScore, topTeacherName)
   - academies: List[AcademyResponse] (id, name, name_en, code, is_active)
+  - news: {total, articles[]} — 네이버/구글 뉴스 기사 목록
+  - source_stats: {distribution[], sentiment_by_source{}} — 소스 유형별 통계
 """
 
 import json
@@ -101,6 +103,12 @@ class EduFitFormatter:
             "total_teachers_mentioned": sum(a.get("totalTeachersMentioned", 0) for a in academy_stats),
         }
 
+        # 뉴스 기사
+        news_articles = self._format_news_articles(collected_data.get("news", {}))
+
+        # 소스별 통계
+        source_stats = self._format_source_stats(collected_data.get("source_stats", {}))
+
         return {
             "stats": stats,
             "top_teachers": top_teachers,
@@ -109,6 +117,8 @@ class EduFitFormatter:
             "academy_ranking": academy_ranking,
             "academy_list": academy_list,
             "academy_summary": academy_summary,
+            "news_articles": news_articles,
+            "source_stats": source_stats,
             "report_date": datetime.now(),
             "generated_at": datetime.now(),
         }
@@ -207,6 +217,12 @@ class EduFitFormatter:
         # 차트 URL 생성
         charts = self._generate_charts(daily_stats, top_teachers)
 
+        # 뉴스 기사
+        news_articles = self._format_news_articles(collected_data.get("news", {}))
+
+        # 소스별 통계
+        source_stats = self._format_source_stats(collected_data.get("source_stats", {}))
+
         return {
             "stats": stats,
             "top_teachers": top_teachers,
@@ -215,6 +231,8 @@ class EduFitFormatter:
             "period_start": period_start,
             "period_end": period_end,
             "charts": charts,
+            "news_articles": news_articles,
+            "source_stats": source_stats,
             "report_url": f"{REPORT_BASE_URL}/weekly",
             "report_date": datetime.now(),
             "generated_at": datetime.now(),
@@ -419,6 +437,40 @@ class EduFitFormatter:
             charts["teacher_bar_url"] = self._build_quickchart_url(config, height=160)
 
         return charts
+
+    @staticmethod
+    def _format_news_articles(news_data: dict) -> list:
+        """뉴스 API 응답을 템플릿용으로 변환"""
+        if not news_data:
+            return []
+        articles = news_data.get("articles", [])
+        result = []
+        for article in articles:
+            published = article.get("published_at", "")
+            if published and " " in published:
+                published = published.split(" ")[0]  # 날짜만
+            result.append({
+                "title": article.get("title", ""),
+                "url": article.get("url", ""),
+                "source_name": article.get("source_name", ""),
+                "published_at": published,
+                "mention_count": article.get("mention_count", 0),
+            })
+        return result
+
+    @staticmethod
+    def _format_source_stats(stats_data: dict) -> dict:
+        """소스별 통계를 템플릿용으로 변환"""
+        if not stats_data:
+            return {}
+        distribution = stats_data.get("distribution", [])
+        sentiment = stats_data.get("sentiment_by_source", {})
+        return {
+            "total_posts": stats_data.get("total_posts", 0),
+            "total_mentions": stats_data.get("total_mentions", 0),
+            "distribution": distribution,
+            "sentiment_by_source": sentiment,
+        }
 
     @staticmethod
     def _extract_highlights(daily_report: dict, weekly_ranking: list, analysis_summary: dict) -> list:

@@ -9,6 +9,8 @@ API Endpoints:
   - GET /analysis/summary       → 분석 요약 (AnalysisSummary)
   - GET /analysis/academy-stats → 학원 통계 (List[AcademyStats])
   - GET /academies              → 등록 학원 목록 (List[AcademyResponse])
+  - GET /news/recent            → 최근 뉴스 기사 (네이버/구글 뉴스)
+  - GET /news/source-stats      → 소스 유형별 언급 통계
 
 Note: /weekly/current 엔드포인트 없음 → ISO week 직접 계산
 """
@@ -131,6 +133,27 @@ class EduFitCollector:
             logger.error(f"EduFit 학원 목록 수집 실패: {e}")
             return []
 
+    async def collect_news_articles(self, days: int = 1, limit: int = 10) -> Dict:
+        """최근 뉴스 기사 수집 - GET /news/recent"""
+        try:
+            data = await self._get("/news/recent", {"days": days, "limit": limit})
+            articles = data.get("articles", []) if isinstance(data, dict) else []
+            logger.info(f"EduFit 뉴스 기사 수집 완료: {len(articles)}건")
+            return data if isinstance(data, dict) else {}
+        except Exception as e:
+            logger.error(f"EduFit 뉴스 기사 수집 실패: {e}")
+            return {}
+
+    async def collect_source_stats(self, days: int = 1) -> Dict:
+        """소스 유형별 언급 통계 수집 - GET /news/source-stats"""
+        try:
+            data = await self._get("/news/source-stats", {"days": days})
+            logger.info("EduFit 소스별 통계 수집 완료")
+            return data if isinstance(data, dict) else {}
+        except Exception as e:
+            logger.error(f"EduFit 소스별 통계 수집 실패: {e}")
+            return {}
+
     async def collect_all(self) -> Dict[str, Any]:
         """전체 데이터 수집 (개별 에러 처리)"""
         result = {}
@@ -159,6 +182,14 @@ class EduFitCollector:
         if academies:
             result["academies"] = academies
 
+        news = await self.collect_news_articles(days=1, limit=5)
+        if news:
+            result["news"] = news
+
+        source_stats = await self.collect_source_stats(days=1)
+        if source_stats:
+            result["source_stats"] = source_stats
+
         logger.info(f"EduFit 전체 수집 완료: {list(result.keys())}")
         return result
 
@@ -185,6 +216,14 @@ class EduFitCollector:
         academies = await self.collect_academies()
         if academies:
             result["academies"] = academies
+
+        news = await self.collect_news_articles(days=7, limit=10)
+        if news:
+            result["news"] = news
+
+        source_stats = await self.collect_source_stats(days=7)
+        if source_stats:
+            result["source_stats"] = source_stats
 
         logger.info(f"EduFit 주간 데이터 수집 완료: {list(result.keys())}")
         return result
