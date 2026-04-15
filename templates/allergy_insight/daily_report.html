@@ -35,13 +35,56 @@
                     <tr>
                         <td style="background-color: #e8f5e9; border-radius: 8px; padding: 15px; text-align: center;">
                             <span style="color: #2e7d32; font-weight: 600; font-size: 14px;">
-                                📰 뉴스 {{ stats.news_count }}건 &nbsp;|&nbsp; 📊 동향분석 {{ stats.trend_company_count }}건 &nbsp;|&nbsp; 📚 논문 {{ stats.paper_count }}건
+                                📰 뉴스 {{ stats.news_count }}건 &nbsp;|&nbsp; 📊 동향분석 {{ stats.trend_company_count }}건 &nbsp;|&nbsp; 📚 논문 {{ stats.paper_count }}건{% if stats.drug_count and stats.drug_count > 0 %} &nbsp;|&nbsp; 💊 약물 {{ stats.drug_count }}건{% endif %}
                             </span>
                         </td>
                     </tr>
                 </table>
             </td>
         </tr>
+
+        <!-- 🎯 오늘의 핵심 헤드라인 (Phase 1 신규, Top 5 · 1기업 1헤드라인) -->
+        {% if top_headlines %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #2e7d32; color: #1b5e20; font-size: 18px;">
+                    🎯 오늘의 핵심 헤드라인
+                </h2>
+
+                {% for item in top_headlines %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 14px;">
+                    <tr>
+                        <td style="background-color: #f1f8e9; border-left: 4px solid {{ item.category_color or '#2e7d32' }}; border-radius: 0 8px 8px 0; padding: 16px 18px;">
+                            <p style="margin: 0 0 6px 0;">
+                                {% if item.category %}
+                                <span style="display: inline-block; background-color: {{ item.category_color or '#2e7d32' }}; color: #ffffff; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; margin-right: 6px;">{{ item.category }}</span>
+                                {% endif %}
+                                {% if item.company_name %}
+                                <span style="display: inline-block; color: #1b5e20; font-size: 12px; font-weight: 600;">{{ item.company_name }}</span>
+                                {% endif %}
+                                {% if item.importance_level %}
+                                <span style="color: #e53935; font-size: 11px; font-weight: 600; margin-left: 6px;">중요도 {{ item.importance_level }}</span>
+                                {% endif %}
+                            </p>
+                            <h3 style="margin: 0 0 8px 0; font-size: 16px; line-height: 1.4;">
+                                <a href="{{ item.url or item.link }}" style="color: #222222; text-decoration: none;">{{ item.title }}</a>
+                            </h3>
+                            {% if item.summary %}
+                            <p style="margin: 0 0 8px 0; color: #555555; font-size: 13px; line-height: 1.6;">
+                                {{ item.summary[:200] }}{% if item.summary|length > 200 %}...{% endif %}
+                            </p>
+                            {% endif %}
+                            <p style="margin: 0; color: #888888; font-size: 11px;">
+                                {% if item.source %}{{ item.source }}{% endif %}
+                                {% if item.published_at %} · {{ item.published_at }}{% endif %}
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                {% endfor %}
+            </td>
+        </tr>
+        {% endif %}
 
         <!-- TOP News -->
         <tr>
@@ -84,6 +127,47 @@
                 {% endif %}
             </td>
         </tr>
+
+        <!-- 📊 산업·기업 동향 (Phase 1 신규, company_digest) -->
+        {% if company_digest %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #37474f; color: #263238; font-size: 18px;">
+                    📊 산업·기업 동향 <span style="color: #888888; font-size: 13px; font-weight: normal; margin-left: 8px;">지난 7일</span>
+                </h2>
+
+                {% for company in company_digest %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
+                    <tr>
+                        <td style="background-color: #fafafa; border-left: 4px solid #546e7a; border-radius: 0 8px 8px 0; padding: 14px 16px;">
+                            <p style="margin: 0 0 6px 0;">
+                                <span style="font-size: 15px; font-weight: 700; color: #263238;">{{ company.company_name }}</span>
+                                <span style="color: #888888; font-size: 12px; margin-left: 8px;">지난 7일 {{ company.count_7d }}건</span>
+                                {% if company.avg_importance %}
+                                <span style="color: #e53935; font-size: 11px; margin-left: 6px;">평균 중요도 {{ (company.avg_importance * 100)|int }}%</span>
+                                {% endif %}
+                            </p>
+                            {% if company.representative %}
+                            <h4 style="margin: 6px 0 4px 0; font-size: 14px; font-weight: 500;">
+                                <a href="{{ company.representative.url }}" style="color: #333333; text-decoration: none;">{{ company.representative.title }}</a>
+                            </h4>
+                            {% if company.representative.summary %}
+                            <p style="margin: 4px 0 6px 0; color: #555555; font-size: 13px; line-height: 1.5;">
+                                {{ company.representative.summary[:160] }}{% if company.representative.summary|length > 160 %}...{% endif %}
+                            </p>
+                            {% endif %}
+                            <p style="margin: 0; color: #888888; font-size: 11px;">
+                                {% if company.representative.published_at %}{{ company.representative.published_at }}{% endif %}
+                                {% if company.categories %} · {{ company.categories|join(', ') }}{% endif %}
+                            </p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+                {% endfor %}
+            </td>
+        </tr>
+        {% endif %}
 
         <!-- 기업 동향 분석 -->
         {% if company_news %}
@@ -236,6 +320,93 @@
         </tr>
         {% endfor %}
 
+        <!-- 💊 약물·처방제 업데이트 (Phase 1 신규, drug_updates) -->
+        {% if drug_updates and drug_updates.total and drug_updates.total > 0 %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid {{ drug_section_color }}; color: {{ drug_section_color }}; font-size: 18px;">
+                    💊 약물·처방제 업데이트 <span style="color: #888888; font-size: 13px; font-weight: normal; margin-left: 8px;">({{ drug_updates.total }}건)</span>
+                </h2>
+
+                {% if drug_updates.new_approvals %}
+                <p style="margin: 8px 0 8px 0; color: {{ drug_section_color }}; font-size: 14px; font-weight: 600;">🆕 신규 승인 ({{ drug_updates.new_approvals|length }}건)</p>
+                {% for drug in drug_updates.new_approvals[:10] %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 8px;">
+                    <tr>
+                        <td style="background-color: {{ drug_section_bg }}; border-radius: 6px; padding: 10px 14px;">
+                            <p style="margin: 0 0 4px 0;">
+                                <a href="{{ drug.url }}" style="color: #222222; text-decoration: none; font-size: 14px; font-weight: 600;">{{ drug.brand or drug.name }}{% if drug.brand and drug.name and drug.brand != drug.name %} ({{ drug.name }}){% endif %}</a>
+                            </p>
+                            <p style="margin: 0; color: #555555; font-size: 11px;">
+                                {% if drug.source %}{{ drug.source }}{% endif %}
+                                {% if drug.product_type %} · {{ drug.product_type }}{% endif %}
+                                {% if drug.epc_class %} · {{ drug.epc_class }}{% endif %}
+                                {% if drug.approved_at %} · {{ drug.approved_at }}{% endif %}
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                {% endfor %}
+                {% endif %}
+
+                {% if drug_updates.label_changes %}
+                <p style="margin: 14px 0 8px 0; color: {{ drug_section_color }}; font-size: 14px; font-weight: 600;">📝 라벨 변경 ({{ drug_updates.label_changes|length }}건)</p>
+                {% for drug in drug_updates.label_changes[:10] %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 8px;">
+                    <tr>
+                        <td style="background-color: {{ drug_section_bg }}; border-radius: 6px; padding: 10px 14px;">
+                            <p style="margin: 0 0 4px 0;">
+                                <a href="{{ drug.url }}" style="color: #222222; text-decoration: none; font-size: 14px; font-weight: 600;">{{ drug.brand or drug.name }}</a>
+                                {% if drug.change_field %}<span style="color: #888888; font-size: 11px; margin-left: 6px;">[{{ drug.change_field }}]</span>{% endif %}
+                            </p>
+                            {% if drug.change_summary %}
+                            <p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;">{{ drug.change_summary }}</p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+                {% endfor %}
+                {% endif %}
+
+                {% if drug_updates.blackbox_warnings %}
+                <p style="margin: 14px 0 8px 0; color: #c62828; font-size: 14px; font-weight: 600;">⚠ 블랙박스 경고 추가 ({{ drug_updates.blackbox_warnings|length }}건)</p>
+                {% for drug in drug_updates.blackbox_warnings[:5] %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 8px;">
+                    <tr>
+                        <td style="background-color: #ffebee; border-left: 4px solid #c62828; border-radius: 0 6px 6px 0; padding: 10px 14px;">
+                            <p style="margin: 0 0 4px 0;">
+                                <a href="{{ drug.url }}" style="color: #222222; text-decoration: none; font-size: 14px; font-weight: 600;">{{ drug.brand or drug.name }}</a>
+                            </p>
+                            {% if drug.change_summary %}
+                            <p style="margin: 0; color: #c62828; font-size: 12px; line-height: 1.5;">{{ drug.change_summary }}</p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+                {% endfor %}
+                {% endif %}
+
+                {% if drug_updates.recalls %}
+                <p style="margin: 14px 0 8px 0; color: #b71c1c; font-size: 14px; font-weight: 600;">🚫 회수 ({{ drug_updates.recalls|length }}건)</p>
+                {% for drug in drug_updates.recalls[:5] %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 8px;">
+                    <tr>
+                        <td style="background-color: #ffebee; border-left: 4px solid #b71c1c; border-radius: 0 6px 6px 0; padding: 10px 14px;">
+                            <p style="margin: 0 0 4px 0;">
+                                <a href="{{ drug.url }}" style="color: #222222; text-decoration: none; font-size: 14px; font-weight: 600;">{{ drug.brand or drug.name }}</a>
+                            </p>
+                            {% if drug.change_summary %}
+                            <p style="margin: 0; color: #b71c1c; font-size: 12px; line-height: 1.5;">{{ drug.change_summary }}</p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+                {% endfor %}
+                {% endif %}
+            </td>
+        </tr>
+        {% endif %}
+
         <!-- Papers Section -->
         {% if papers %}
         <tr>
@@ -264,6 +435,57 @@
                 {% if papers|length > 5 %}
                 <p style="margin: 5px 0 0 0; color: #888888; font-size: 12px; font-style: italic;">
                     외 {{ papers|length - 5 }}건의 논문이 있습니다...
+                </p>
+                {% endif %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- 📈 주간 브리핑 메트릭 (Phase 1 신규, 월요일 daily 또는 weekly/monthly 발송 시) -->
+        {% if weekly_metrics and (weekly_metrics.top_keywords or weekly_metrics.top_companies or weekly_metrics.category_trend_7d or weekly_metrics.drug_updates_summary) %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #5e35b1; color: #4527a0; font-size: 18px;">
+                    📈 주간 브리핑 메트릭
+                    {% if weekly_metrics.period %}
+                    <span style="color: #888888; font-size: 12px; font-weight: normal; margin-left: 8px;">{{ weekly_metrics.period.start }} ~ {{ weekly_metrics.period.end }}</span>
+                    {% endif %}
+                </h2>
+
+                {% if weekly_metrics.top_keywords %}
+                <p style="margin: 8px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">🔥 급상승 키워드</p>
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 12px;">
+                    {% for kw in weekly_metrics.top_keywords[:10] %}
+                    <tr>
+                        <td style="padding: 6px 12px; background-color: #ede7f6; border-radius: 4px; margin-bottom: 4px;">
+                            <span style="color: #4527a0; font-size: 13px; font-weight: 500;">{{ kw.keyword }}</span>
+                            <span style="color: #888888; font-size: 11px; margin-left: 6px;">{{ kw.count }}건</span>
+                            {% if kw.delta_pct is defined and kw.delta_pct %}<span style="color: #e53935; font-size: 11px; margin-left: 4px;">+{{ kw.delta_pct }}%</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+
+                {% if weekly_metrics.top_companies %}
+                <p style="margin: 10px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">🏢 기업 언급 Top</p>
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 12px;">
+                    {% for c in weekly_metrics.top_companies[:10] %}
+                    <tr>
+                        <td style="padding: 4px 0; color: #263238; font-size: 13px;">
+                            <span style="display: inline-block; width: 20px; color: #888888; font-size: 11px;">{{ loop.index }}.</span>
+                            {{ c.company_name }} <span style="color: #888888; font-size: 11px;">({{ c.count }}건)</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+
+                {% if weekly_metrics.drug_updates_summary %}
+                {% set ds = weekly_metrics.drug_updates_summary %}
+                <p style="margin: 10px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">💊 주간 약물 요약</p>
+                <p style="margin: 0; color: #555555; font-size: 12px;">
+                    신규 {{ ds.new_count or 0 }}건 · 라벨 변경 {{ ds.label_change_count or 0 }}건 · 경고 {{ ds.warning_count or 0 }}건 · 회수 {{ ds.recall_count or 0 }}건
                 </p>
                 {% endif %}
             </td>

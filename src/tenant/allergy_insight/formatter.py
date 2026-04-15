@@ -7,14 +7,32 @@ import logging
 from datetime import datetime
 from typing import Any, Dict
 
+from .config import DRUG_SECTION_BG, DRUG_SECTION_COLOR
+
 logger = logging.getLogger(__name__)
+
+
+def _empty_drug_updates() -> Dict[str, Any]:
+    """drug_updates 기본값 (total=0 이면 템플릿이 섹션 숨김)."""
+    return {
+        "new_approvals": [],
+        "label_changes": [],
+        "blackbox_warnings": [],
+        "recalls": [],
+        "total": 0,
+    }
 
 
 class AllergyInsightFormatter:
     """AllergyInsight API 응답 → 템플릿 컨텍스트 변환"""
 
     def format(self, collected_data: Dict[str, Any]) -> Dict[str, Any]:
-        """수집 데이터를 템플릿 변수로 변환"""
+        """수집 데이터를 템플릿 변수로 변환.
+
+        Phase 1 전환 동안 기존 키(top_news/company_news/news_groups/papers)와
+        신규 재구성 키(top_headlines/company_digest/drug_updates/weekly_metrics)를
+        모두 컨텍스트에 싣는다. 템플릿에서 `{% if %}` 가드로 실존 여부를 분기한다.
+        """
         daily_report = collected_data.get("daily_report", {})
 
         if not daily_report:
@@ -30,16 +48,36 @@ class AllergyInsightFormatter:
             default=datetime.now(),
         )
 
+        drug_updates = daily_report.get("drug_updates") or _empty_drug_updates()
+        # 방어: 백엔드가 배열만 주고 total 누락한 경우 재계산
+        if "total" not in drug_updates:
+            drug_updates["total"] = (
+                len(drug_updates.get("new_approvals", []))
+                + len(drug_updates.get("label_changes", []))
+                + len(drug_updates.get("blackbox_warnings", []))
+                + len(drug_updates.get("recalls", []))
+            )
+
         return {
             "report_date": report_date,
+            # 기존 Phase 0 키 (유지)
             "top_news": daily_report.get("top_news", []),
             "company_news": daily_report.get("company_news", []),
             "news_groups": daily_report.get("news_groups", []),
             "papers": daily_report.get("papers", []),
+            # 신규 Phase 1 키
+            "top_headlines": daily_report.get("top_headlines", []),
+            "company_digest": daily_report.get("company_digest", []),
+            "drug_updates": drug_updates,
+            "weekly_metrics": daily_report.get("weekly_metrics") or {},
+            # 브랜드 토큰 (약물 섹션 전용 컬러)
+            "drug_section_color": DRUG_SECTION_COLOR,
+            "drug_section_bg": DRUG_SECTION_BG,
             "stats": daily_report.get("stats", {
                 "news_count": 0,
                 "paper_count": 0,
                 "company_count": 0,
+                "drug_count": 0,
                 "total_count": 0,
                 "trend_company_count": 0,
             }),
@@ -51,20 +89,22 @@ class AllergyInsightFormatter:
 
         Args:
             history_data: [{collected_date, data_type, data}, ...]
-            collected_data: 추가 수집 데이터 (optional)
+            collected_data: 추가 수집 데이터 (optional). weekly_metrics 키가 있으면 전달.
         """
-        return self._format_stats_report(history_data)
+        return self._format_stats_report(history_data, collected_data)
 
     def format_monthly(self, history_data: list, collected_data: dict = None) -> dict:
         """월간 통계 포매팅 - format_weekly와 동일한 통계 구조 반환
 
         Args:
             history_data: [{collected_date, data_type, data}, ...]
-            collected_data: 추가 수집 데이터 (optional)
+            collected_data: 추가 수집 데이터 (optional). weekly_metrics 키가 있으면 전달.
         """
-        return self._format_stats_report(history_data)
+        return self._format_stats_report(history_data, collected_data)
 
-    def _format_stats_report(self, history_data: list) -> dict:
+    def _format_stats_report(
+        self, history_data: list, collected_data: dict = None
+    ) -> dict:
         """주간/월간 공통 통계 리포트 포매팅"""
         from collections import Counter, defaultdict
         from datetime import date, timedelta
@@ -271,6 +311,9 @@ class AllergyInsightFormatter:
             period_end = today - timedelta(days=1)
             period_start = today - timedelta(days=7)
 
+        # Phase 1: weekly_metrics 패스스루 (collected_data에 있으면)
+        weekly_metrics = (collected_data or {}).get("weekly_metrics") or {}
+
         return {
             "report_date": datetime.now(),
             "period_start": period_start,
@@ -291,6 +334,9 @@ class AllergyInsightFormatter:
             "importance_analysis": importance_analysis,
             "top_journals": top_journals,
             "top_news": top_news,
+            "weekly_metrics": weekly_metrics,
+            "drug_section_color": DRUG_SECTION_COLOR,
+            "drug_section_bg": DRUG_SECTION_BG,
         }
 
     @staticmethod
@@ -305,18 +351,27 @@ class AllergyInsightFormatter:
 
     @staticmethod
     def _empty_context() -> Dict[str, Any]:
-        """데이터 없을 시 빈 기본값"""
+        """데이터 없을 시 빈 기본값 (신규 Phase 1 키 포함)."""
         now = datetime.now()
         return {
             "report_date": now,
+            # 기존 Phase 0 키
             "top_news": [],
             "company_news": [],
             "news_groups": [],
             "papers": [],
+            # 신규 Phase 1 키
+            "top_headlines": [],
+            "company_digest": [],
+            "drug_updates": _empty_drug_updates(),
+            "weekly_metrics": {},
+            "drug_section_color": DRUG_SECTION_COLOR,
+            "drug_section_bg": DRUG_SECTION_BG,
             "stats": {
                 "news_count": 0,
                 "paper_count": 0,
                 "company_count": 0,
+                "drug_count": 0,
                 "total_count": 0,
                 "trend_company_count": 0,
             },
