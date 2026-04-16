@@ -29,9 +29,9 @@ class AllergyInsightFormatter:
     def format(self, collected_data: Dict[str, Any]) -> Dict[str, Any]:
         """수집 데이터를 템플릿 변수로 변환.
 
-        Phase 1 전환 동안 기존 키(top_news/company_news/news_groups/papers)와
-        신규 재구성 키(top_headlines/company_digest/drug_updates/weekly_metrics)를
-        모두 컨텍스트에 싣는다. 템플릿에서 `{% if %}` 가드로 실존 여부를 분기한다.
+        Phase 1 전환 완료: top_headlines/company_digest/drug_updates/weekly_metrics
+        키만 사용. 기존 Phase 0 키(top_news/company_news/news_groups) 제거.
+        Spec: NEWSLETTER_REDESIGN_SPEC §4.3
         """
         daily_report = collected_data.get("daily_report", {})
 
@@ -60,17 +60,11 @@ class AllergyInsightFormatter:
 
         return {
             "report_date": report_date,
-            # 기존 Phase 0 키 (유지)
-            "top_news": daily_report.get("top_news", []),
-            "company_news": daily_report.get("company_news", []),
-            "news_groups": daily_report.get("news_groups", []),
-            "papers": daily_report.get("papers", []),
-            # 신규 Phase 1 키
             "top_headlines": daily_report.get("top_headlines", []),
             "company_digest": daily_report.get("company_digest", []),
+            "papers": daily_report.get("papers", []),
             "drug_updates": drug_updates,
             "weekly_metrics": daily_report.get("weekly_metrics") or {},
-            # 브랜드 토큰 (약물 섹션 전용 컬러)
             "drug_section_color": DRUG_SECTION_COLOR,
             "drug_section_bg": DRUG_SECTION_BG,
             "stats": daily_report.get("stats", {
@@ -117,11 +111,10 @@ class AllergyInsightFormatter:
             data = record["data"]
             by_date[d][dtype] = data
 
-        # 원시 데이터 수집
-        all_top_news = []
-        all_news_groups = []
+        # 원시 데이터 수집 (Phase 1: top_headlines + company_digest 경로)
+        all_headlines = []
         all_papers = []
-        all_company_news = []
+        all_company_digest = []
         total_news_count = 0
         total_paper_count = 0
         total_company_count = 0
@@ -139,14 +132,20 @@ class AllergyInsightFormatter:
             total_paper_count += day_stats.get("paper_count", 0)
             total_company_count += day_stats.get("company_count", 0)
 
-            for news in daily_report.get("top_news", []):
-                all_top_news.append(news)
+            # Phase 1 키 우선, Phase 0 키 폴백 (과거 히스토리 데이터 호환)
+            headlines = daily_report.get("top_headlines", [])
+            if headlines:
+                all_headlines.extend(headlines)
+            else:
+                for news in daily_report.get("top_news", []):
+                    all_headlines.append(news)
 
-            for group in daily_report.get("news_groups", []):
-                all_news_groups.append(group)
-
-            for company in daily_report.get("company_news", []):
-                all_company_news.append(company)
+            digest = daily_report.get("company_digest", [])
+            if digest:
+                all_company_digest.extend(digest)
+            else:
+                for company in daily_report.get("company_news", []):
+                    all_company_digest.append(company)
 
             for paper in daily_report.get("papers", []):
                 all_papers.append(paper)
@@ -154,19 +153,11 @@ class AllergyInsightFormatter:
         # 뉴스 중복 제거 (title 기준)
         seen_titles = set()
         unique_news = []
-        for news in all_top_news:
+        for news in all_headlines:
             title = news.get("title", "")
             if title and title not in seen_titles:
                 seen_titles.add(title)
                 unique_news.append(news)
-
-        # news_groups 내 개별 뉴스도 추가 (중복 제거)
-        for group in all_news_groups:
-            for item in group.get("items", []):
-                title = item.get("title", "")
-                if title and title not in seen_titles:
-                    seen_titles.add(title)
-                    unique_news.append(item)
 
         # 논문 중복 제거
         seen_paper_titles = set()
@@ -177,10 +168,10 @@ class AllergyInsightFormatter:
                 seen_paper_titles.add(title)
                 unique_papers.append(paper)
 
-        # 기업 뉴스 이름 기준 합치기
+        # 기업 이름 수집
         company_names = set()
-        for company in all_company_news:
-            name = company.get("name", "")
+        for item in all_company_digest:
+            name = item.get("company_name") or item.get("name", "")
             if name:
                 company_names.add(name)
 
@@ -351,18 +342,13 @@ class AllergyInsightFormatter:
 
     @staticmethod
     def _empty_context() -> Dict[str, Any]:
-        """데이터 없을 시 빈 기본값 (신규 Phase 1 키 포함)."""
+        """데이터 없을 시 빈 기본값 (Phase 1 키만)."""
         now = datetime.now()
         return {
             "report_date": now,
-            # 기존 Phase 0 키
-            "top_news": [],
-            "company_news": [],
-            "news_groups": [],
-            "papers": [],
-            # 신규 Phase 1 키
             "top_headlines": [],
             "company_digest": [],
+            "papers": [],
             "drug_updates": _empty_drug_updates(),
             "weekly_metrics": {},
             "drug_section_color": DRUG_SECTION_COLOR,
