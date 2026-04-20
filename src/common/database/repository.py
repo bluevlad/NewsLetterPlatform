@@ -34,7 +34,7 @@ def _today_start_utc() -> datetime:
 from .models import (
     Base, Subscriber, SendHistory, CollectedData,
     CollectedDataHistory, EmailVerification, VerificationType,
-    NewsletterType, NewsletterArchive
+    NewsletterType, NewsletterArchive, SentArticle
 )
 
 
@@ -691,3 +691,86 @@ class EmailVerificationRepository:
         if verification_type:
             query = query.filter(EmailVerification.verification_type == verification_type)
         query.delete()
+
+
+class SentArticleRepository:
+    """발송 기사 이력 저장소 (교차일 dedup 용)
+
+    동일 테넌트에서 최근 N일 내 이미 발송된 기사 ID 를 조회하여
+    수집/선정 단계에서 제외(exclude_ids)하기 위한 저장소.
+    `UNIQUE(tenant_id, article_id, section, sent_date)` 로 멱등 보장.
+    """
+
+    @staticmethod
+    def list_recent_article_ids(session: Session, tenant_id: str,
+                                days: int = 7) -> list[int]:
+        """최근 N일(KST 기준) 내 해당 테넌트에서 발송된 article_id 목록.
+
+        Returns:
+            중복 제거된 article_id 리스트 (sent_at DESC 순).
+        """
+        cutoff = _today_start_utc() - timedelta(days=days)
+        rows = (
+            session.query(SentArticle.article_id)
+            .filter(
+                and_(
+                    SentArticle.tenant_id == tenant_id,
+                    SentArticle.sent_at >= cutoff,
+                )
+            )
+            .order_by(SentArticle.sent_at.desc())
+            .distinct()
+            .all()
+        )
+        return [row[0] for row in rows]
+
+    @staticmethod
+    def record_sent_articles(session: Session, tenant_id: str,
+                             sent_date: date,
+                             entries: list[tuple[int, Optional[str], str]]) -> int:
+        """발송된 기사 이력을 기록 (멱등: 중복 키는 무시).
+
+        Args:
+            entries: [(article_id, article_url, section), ...]
+
+        Returns:
+            실제로 신규 INSERT 된 건수.
+        """
+        if not entries:
+            return 0
+
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+        payload = [
+            {
+                "tenant_id": tenant_id,
+                "article_id": aid,
+                "article_url": url,
+                "section": section,
+                "sent_date": sent_date,
+            }
+            for aid, url, section in entries
+            if aid is not None and section
+        ]
+        if not payload:
+            return 0
+        stmt = sqlite_insert(SentArticle).values(payload)
+        stmt = stmt.on_conflict_do_nothing(
+            index_elements=["tenant_id", "article_id", "section", "sent_date"]
+        )
+        result = session.execute(stmt)
+        return result.rowcount or 0
+
+    @staticmethod
+    def purge_older_than(session: Session, days: int = 90) -> int:
+        """보존 기간(기본 90일) 초과 이력 삭제. 주간 cron 용.
+
+        Returns:
+            삭제된 행 수.
+        """
+        cutoff = _today_start_utc() - timedelta(days=days)
+        deleted = (
+            session.query(SentArticle)
+            .filter(SentArticle.sent_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        return int(deleted or 0)
