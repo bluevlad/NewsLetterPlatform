@@ -86,6 +86,17 @@
         </tr>
         {% endif %}
 
+        <!-- 헤드라인 전용 empty state (headlines 비어있으나 타 섹션 존재 시) -->
+        {% if not top_headlines and (company_digest or papers) %}
+        <tr>
+            <td style="padding: 0 30px 20px 30px;">
+                <p style="margin: 0; color: #888888; font-size: 13px; text-align: center; background-color: #fafafa; padding: 14px; border-radius: 6px;">
+                    오늘은 새로 선정된 핵심 헤드라인이 없습니다. 아래 기업 동향과 논문을 확인해 주세요.
+                </p>
+            </td>
+        </tr>
+        {% endif %}
+
         <!-- 📊 산업·기업 동향 (Phase 1, company_digest) -->
         {% if company_digest %}
         <tr>

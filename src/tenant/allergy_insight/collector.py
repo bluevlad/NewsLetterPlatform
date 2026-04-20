@@ -137,7 +137,7 @@ class AllergyInsightCollector:
             raw = await self._get(
                 "/api/public/analytics/headlines/today",
                 auth_required=False,
-                params={"limit": limit, "one_per_company": "true"},
+                params={"limit": limit, "one_per_company": "true", "fallback_days": "1,2"},
             )
             body = self._unwrap(raw)
             headlines = body.get("headlines", []) or []
