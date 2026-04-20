@@ -4,7 +4,6 @@ AllergyInsight Backend API v2.0.0 호출
 
 API Endpoints:
   - POST /api/auth/simple/login → JWT 토큰 획득
-  - GET  /api/public/analytics/news/recent → 최신 뉴스 (공개, P4에서 deprecate 예정)
   - GET  /api/admin/news → 뉴스 전체 목록 (Bearer 인증, 주간/월간용)
   - GET  /api/admin/news/stats → 뉴스 통계 (Bearer 인증)
   - GET  /api/papers → 논문 목록 (공개)
@@ -107,22 +106,6 @@ class AllergyInsightCollector:
             inner = payload.get("data")
             return inner if isinstance(inner, dict) else {}
         return payload if isinstance(payload, dict) else {}
-
-    async def _collect_recent_news(
-        self, days: int = 1, max_age_days: int = 2, limit: int = 10
-    ) -> list[dict]:
-        """최신 뉴스 수집 (일일용) - GET /api/public/analytics/news/recent
-
-        Backend에서 is_processed=TRUE, is_relevant=TRUE 필터 및
-        published_at DESC 정렬이 적용된 공개 API.
-        """
-        path = (
-            f"/api/public/analytics/news/recent"
-            f"?days={days}&max_age_days={max_age_days}&limit={limit}"
-        )
-        data = await self._get(path, auth_required=False)
-        items = data if isinstance(data, list) else data.get("items", [])
-        return items
 
     async def _collect_news(self, page_size: int = 100) -> list[dict]:
         """뉴스 전체 목록 수집 (주간/월간용) - GET /api/admin/news"""
@@ -419,7 +402,6 @@ class AllergyInsightCollector:
         """일일 리포트 수집.
 
         Phase 1 전환 완료: 신규 재구성 섹션(top_headlines/company_digest)을 주 경로로 사용.
-        기존 _collect_recent_news 메서드는 제거하지 않지만 daily 플로우에서는 미사용.
         Spec: NEWSLETTER_REDESIGN_SPEC §4.2
 
         Args:
