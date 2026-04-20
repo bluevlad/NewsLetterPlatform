@@ -14,7 +14,7 @@ from apscheduler.triggers.cron import CronTrigger
 from ..database.repository import (
     get_session, CollectedDataRepository,
     SubscriberRepository, SendHistoryRepository,
-    NewsletterArchiveRepository
+    NewsletterArchiveRepository, SentArticleRepository
 )
 from ..delivery.gmail_sender import get_sender
 from ..template.renderer import get_renderer
@@ -90,7 +90,22 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
 
     try:
         if newsletter_type == "daily":
-            collected = asyncio.run(tenant.collect_data())
+            # dedup 활성 테넌트는 최근 발송 이력을 exclude_ids 로 전달하여
+            # 수집/선정 단계에서 원천 제외.
+            recent_ids: list[int] = []
+            if tenant.dedup_recent_days:
+                with get_session() as session:
+                    recent_ids = SentArticleRepository.list_recent_article_ids(
+                        session, tenant_id, days=tenant.dedup_recent_days
+                    )
+                if recent_ids:
+                    logger.info(
+                        f"[{tenant_id}] dedup: 최근 {tenant.dedup_recent_days}일 "
+                        f"발송 기사 {len(recent_ids)}건 제외 대상"
+                    )
+            collected = asyncio.run(
+                tenant.collect_data(exclude_ids=recent_ids or None)
+            )
         else:
             # weekly/monthly: 요약 데이터 수집
             date_from, date_to = _get_period_range(newsletter_type)
@@ -284,6 +299,25 @@ def run_send_job(
                     logger.error(
                         f"{log_prefix} 재시도 발송 실패: {subscriber.email} - {retry_result.error_message}"
                     )
+
+        # dedup: 발송 성공 기사 이력 기록 (자동 daily 발송만, 수동은 제외)
+        if (
+            sent_count >= 1
+            and not manual
+            and newsletter_type == "daily"
+            and tenant.dedup_recent_days
+        ):
+            try:
+                entries = tenant.extract_sent_article_entries(context)
+                if entries:
+                    inserted = SentArticleRepository.record_sent_articles(
+                        session, tenant_id, date.today(), entries
+                    )
+                    logger.info(
+                        f"{log_prefix} sent_articles 기록: {inserted}/{len(entries)}건"
+                    )
+            except Exception as e:
+                logger.warning(f"{log_prefix} sent_articles 기록 실패: {e}")
 
     logger.info(f"{log_prefix} 뉴스레터 발송 완료: {sent_count}/{len(messages)}건")
     update_health("send")

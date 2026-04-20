@@ -80,6 +80,26 @@ class AllergyInsightCollector:
 
         return await retry_async(_request)
 
+    async def _post(
+        self,
+        path: str,
+        auth_required: bool = True,
+        json_body: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """API POST 요청 (3회 재시도). 대량 exclude_ids 전달 등 GET 길이 한계 대응용."""
+        url = f"{self.api_base_url}{path}"
+        headers = {}
+        if auth_required and self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        async def _request():
+            async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+                response = await client.post(url, headers=headers, json=json_body)
+                response.raise_for_status()
+                return response.json()
+
+        return await retry_async(_request)
+
     @staticmethod
     def _unwrap(payload: Any) -> Dict[str, Any]:
         """{ data: ..., meta: ... } 래핑된 응답에서 data 본체만 추출. 래핑이 없으면 원본 유지."""
@@ -126,24 +146,59 @@ class AllergyInsightCollector:
     # Spec: NEWSLETTER_REDESIGN_SPEC.md §3.2, §4.1
     # ─────────────────────────────────────────────────────────────
 
-    async def _collect_headlines_today(self, limit: int = 5) -> Dict[str, Any]:
+    # GET URL 대략 안전선 — 1800 bytes 초과 예상 시 POST alias 로 전환.
+    _GET_EXCLUDE_IDS_BUDGET = 1800
+
+    async def _collect_headlines_today(
+        self,
+        limit: int = 5,
+        exclude_ids: Optional[list[int]] = None,
+    ) -> Dict[str, Any]:
         """오늘의 핵심 헤드라인 Top-N 수집 (1기업 1헤드라인).
+
+        exclude_ids: 최근 발송 이력. 풀에서 원천 제외하여 반복 발송 차단.
+        대량(약 200+) 전달 시 GET URL 길이 한계 대응으로 POST alias 로 자동 전환.
 
         Returns:
             {"headlines": [...], "excluded_ids": [int, ...]}
             백엔드 미구현/오류 시 모두 빈 리스트.
         """
+        exclude_ids = [int(i) for i in (exclude_ids or [])]
+        exclude_csv = ",".join(str(i) for i in exclude_ids)
         try:
-            raw = await self._get(
-                "/api/public/analytics/headlines/today",
-                auth_required=False,
-                params={"limit": limit, "one_per_company": "true", "fallback_days": "1,2"},
-            )
+            if exclude_csv and len(exclude_csv) > self._GET_EXCLUDE_IDS_BUDGET:
+                logger.info(
+                    f"AllergyInsight 헤드라인: exclude_ids={len(exclude_ids)}건 → POST alias 사용"
+                )
+                raw = await self._post(
+                    "/api/public/analytics/headlines/today:select",
+                    auth_required=False,
+                    json_body={
+                        "limit": limit,
+                        "one_per_company": True,
+                        "fallback_days": [1, 2],
+                        "exclude_ids": exclude_ids,
+                    },
+                )
+            else:
+                params: Dict[str, Any] = {
+                    "limit": limit,
+                    "one_per_company": "true",
+                    "fallback_days": "1,2",
+                }
+                if exclude_csv:
+                    params["exclude_ids"] = exclude_csv
+                raw = await self._get(
+                    "/api/public/analytics/headlines/today",
+                    auth_required=False,
+                    params=params,
+                )
             body = self._unwrap(raw)
             headlines = body.get("headlines", []) or []
             excluded_ids = body.get("excluded_ids", []) or []
             logger.info(
-                f"AllergyInsight 헤드라인 수집 완료: {len(headlines)}건"
+                f"AllergyInsight 헤드라인 수집 완료: {len(headlines)}건 "
+                f"(exclude {len(exclude_ids)})"
             )
             return {"headlines": headlines, "excluded_ids": excluded_ids}
         except Exception as e:
@@ -358,22 +413,32 @@ class AllergyInsightCollector:
             })
         return result
 
-    async def collect_daily_report(self) -> Dict:
+    async def collect_daily_report(
+        self, exclude_ids: Optional[list[int]] = None
+    ) -> Dict:
         """일일 리포트 수집.
 
         Phase 1 전환 완료: 신규 재구성 섹션(top_headlines/company_digest)을 주 경로로 사용.
         기존 _collect_recent_news 메서드는 제거하지 않지만 daily 플로우에서는 미사용.
         Spec: NEWSLETTER_REDESIGN_SPEC §4.2
+
+        Args:
+            exclude_ids: NewsLetterPlatform `sent_articles` 최근 N일 기사 ID.
+                헤드라인·company_digest 양쪽에서 풀 단계에서 원천 제외.
         """
+        recent_excl = list(exclude_ids or [])
         try:
             # 1. 핵심 헤드라인 수집 (공개 API, 1기업 1헤드라인)
-            headlines_payload = await self._collect_headlines_today(limit=5)
+            headlines_payload = await self._collect_headlines_today(
+                limit=5, exclude_ids=recent_excl
+            )
             top_headlines = headlines_payload.get("headlines", [])
             excluded_ids = headlines_payload.get("excluded_ids", [])
 
-            # 2. 기업 동향 다이제스트 (헤드라인과 disjoint 보장)
+            # 2. 기업 동향 다이제스트 (헤드라인 선정분 + 최근 발송 이력 동시 제외)
+            digest_excl = sorted({*excluded_ids, *recent_excl})
             company_digest = await self._collect_company_digest(
-                days=7, exclude_ids=excluded_ids
+                days=7, exclude_ids=digest_excl
             )
 
             # 3. 논문 수집 (공개 API)
@@ -435,11 +500,17 @@ class AllergyInsightCollector:
             logger.error(f"AllergyInsight 일일 리포트 수집 실패: {e}")
             return {}
 
-    async def collect_all(self) -> Dict[str, Any]:
-        """전체 데이터 수집"""
+    async def collect_all(
+        self, exclude_ids: Optional[list[int]] = None
+    ) -> Dict[str, Any]:
+        """전체 데이터 수집.
+
+        Args:
+            exclude_ids: 최근 발송 이력 — daily 리포트 수집에 전달.
+        """
         result = {}
 
-        daily_report = await self.collect_daily_report()
+        daily_report = await self.collect_daily_report(exclude_ids=exclude_ids)
         if daily_report:
             result["daily_report"] = daily_report
 

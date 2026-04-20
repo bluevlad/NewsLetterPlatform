@@ -71,7 +71,10 @@ class EduFitTenant(BaseTenant):
             "send_minute": settings.edufit_monthly_send_minute,
         }
 
-    async def collect_data(self) -> Dict[str, Any]:
+    async def collect_data(
+        self, *, exclude_ids: "list[int] | None" = None
+    ) -> Dict[str, Any]:
+        # EduFit 은 현재 dedup_recent_days 미활성 — exclude_ids 는 무시.
         return await self._collector.collect_all()
 
     async def collect_summary_data(self, newsletter_type: str,

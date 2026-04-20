@@ -83,9 +83,37 @@ class BaseTenant(ABC):
         """월간 뉴스레터 스케줄 설정 (기본: 빈 dict)"""
         return {}
 
+    @property
+    def dedup_recent_days(self) -> Optional[int]:
+        """교차일 기사 dedup 윈도. None 이면 비활성.
+
+        활성(int) 이면 스케줄러가 `sent_articles` 테이블에서 최근 N일 ID 를
+        조회해 `collect_data(exclude_ids=...)` 로 전달하고,
+        발송 성공 시 `extract_sent_article_entries` 로 기록한다.
+        """
+        return None
+
+    def extract_sent_article_entries(
+        self, context: Dict[str, Any]
+    ) -> List[tuple]:
+        """발송 컨텍스트에서 이력 기록 대상 기사 추출.
+
+        `dedup_recent_days` 활성 테넌트가 오버라이드.
+
+        Returns:
+            [(article_id: int, article_url: Optional[str], section: str), ...]
+        """
+        return []
+
     @abstractmethod
-    async def collect_data(self) -> Dict[str, Any]:
-        """데이터 수집 (원본 서비스 API 호출)
+    async def collect_data(
+        self, *, exclude_ids: Optional[List[int]] = None
+    ) -> Dict[str, Any]:
+        """데이터 수집 (원본 서비스 API 호출).
+
+        Args:
+            exclude_ids: `dedup_recent_days` 활성 테넌트에서 최근 발송된
+                기사 ID 를 수집/선정 단계에서 원천 제외. 미활성 테넌트는 무시.
 
         Returns:
             수집된 데이터 딕셔너리 (data_type: data)
