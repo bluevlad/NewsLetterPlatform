@@ -76,6 +76,16 @@ subscription_manager = SubscriptionManager()
 _static_dir = _Path(__file__).parent / "static"
 if _static_dir.is_dir():
     app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+    # 서비스 소개 페이지 자산 — /css/service-landing.css 접근용
+    if (_static_dir / "css").is_dir():
+        app.mount("/css", StaticFiles(directory=str(_static_dir / "css")), name="intro-css")
+
+
+@app.get("/intro.html", include_in_schema=False)
+async def intro_page():
+    """서비스 소개 페이지 (게이트웨이에서 진입 시)"""
+    from fastapi.responses import FileResponse
+    return FileResponse(_static_dir / "intro.html")
 
 # Admin 라우터 등록 (/{tenant_id} 보다 먼저)
 app.include_router(admin_router)
