@@ -5,10 +5,12 @@ NewsLetterPlatform 웹 애플리케이션
 
 import logging
 import threading
+from pathlib import Path as _Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -66,6 +68,20 @@ app.add_middleware(SessionMiddleware, secret_key=_secrets.token_urlsafe(32))
 
 # 구독 매니저
 subscription_manager = SubscriptionManager()
+
+# 정적 파일 서빙 (서비스 소개 페이지 자산)
+_static_dir = _Path(__file__).parent / "static"
+if _static_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+    if (_static_dir / "css").is_dir():
+        app.mount("/css", StaticFiles(directory=str(_static_dir / "css")), name="intro-css")
+
+
+@app.get("/intro.html", include_in_schema=False)
+async def intro_page():
+    """서비스 소개 페이지 (게이트웨이에서 진입 시)"""
+    return FileResponse(_static_dir / "intro.html")
+
 
 # Admin 라우터 등록 (/{tenant_id} 보다 먼저)
 app.include_router(admin_router)
