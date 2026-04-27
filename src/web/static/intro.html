@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NewsLetterPlatform - Autonomous Dev & Ops</title>
-    <meta name="description" content="NewsLetterPlatform - 서비스를 연결하는 뉴스레터 허브">
+    <title>NewsLetterPlatform — 멀티테넌트 뉴스레터 통합 플랫폼</title>
+    <meta name="description" content="AllergyInsight, EduFit 등 다른 서비스의 콘텐츠를 수신하여 뉴스레터를 생성·발송하는 중앙 뉴스레터 허브 플랫폼">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/service-landing.css">
@@ -18,89 +18,74 @@
 <body>
     <div class="sl-container">
 
-        <nav class="sl-topnav">
-            <div class="sl-nav-links">
-                <a href="https://www.unmong.com/index.html" class="sl-nav-link"><span class="sl-nav-arrow">&#8593;</span> Portal</a>
-                <a href="https://www.unmong.com/architecture.html" class="sl-nav-link"><span class="sl-nav-arrow">&#8594;</span> Architecture</a>
-            </div>
-        </nav>
-
         <section class="sl-hero">
-            <div class="sl-hero-status"><span class="dot"></span> Active</div>
             <h1>NewsLetterPlatform</h1>
-            <p class="tagline">Newsletter Management & Dispatch</p>
-            <p class="desc">AllergyInsight, EduFit 등 다른 서비스의 콘텐츠를 수신하여 뉴스레터를 생성/발송하는 중앙 뉴스레터 허브 플랫폼</p>
-            <div class="sl-hero-actions">
-                <a href="https://newsletter.unmong.com/archive" target="_blank" rel="noopener" class="sl-btn sl-btn-primary">통합 아카이브</a>
-                <a href="https://newsletter.unmong.com/edufit/subscribe" target="_blank" rel="noopener" class="sl-btn sl-btn-outline">EduFit 구독</a>
-                <a href="https://newsletter.unmong.com/allergy-insight/subscribe" target="_blank" rel="noopener" class="sl-btn sl-btn-outline">AllergyInsight 구독</a>
-                <a href="https://newsletter.unmong.com/admin/history" target="_blank" rel="noopener" class="sl-btn sl-btn-outline">발송 이력</a>
-                <a href="https://newsletter.unmong.com/admin" target="_blank" rel="noopener" class="sl-btn sl-btn-outline">관리자</a>
-            </div>
+            <p class="tagline">Newsletter Platform · Multi-tenant Dispatch Hub</p>
+            <p class="desc">AllergyInsight, EduFit 등 다른 서비스의 콘텐츠를 수신하여 뉴스레터를 생성·발송하는 중앙 뉴스레터 허브 플랫폼</p>
         </section>
 
         <section class="sl-section">
             <div class="sl-section-title">Features</div>
             <div class="sl-features">
-                <a class="sl-feature" href="https://newsletter.unmong.com/archive" target="_blank" rel="noopener">
+                <a class="sl-feature" href="/archive">
                     <span class="sl-feature-icon">&#128218;</span>
                     <div class="sl-feature-name">통합 아카이브</div>
                     <div class="sl-feature-desc">모든 테넌트의 발송 뉴스레터를 한 페이지에서 열람 (로그인 불필요)</div>
                     <span class="sl-feature-tag">Public · Archive</span>
                 </a>
-                <a class="sl-feature" href="https://newsletter.unmong.com/edufit/subscribe" target="_blank" rel="noopener">
+                <a class="sl-feature" href="/edufit/subscribe">
                     <span class="sl-feature-icon">&#128236;</span>
                     <div class="sl-feature-name">EduFit 구독</div>
                     <div class="sl-feature-desc">공무원 학원 강사·학원 평판 분석 일일 브리핑 구독 (이메일 인증)</div>
                     <span class="sl-feature-tag">Public · Subscribe</span>
                 </a>
-                <a class="sl-feature" href="https://newsletter.unmong.com/edufit/archive" target="_blank" rel="noopener">
+                <a class="sl-feature" href="/edufit/archive">
                     <span class="sl-feature-icon">&#128196;</span>
                     <div class="sl-feature-name">EduFit 아카이브</div>
                     <div class="sl-feature-desc">EduFit 일간 브리핑 백넘버 — 강사·학원 분석 결과 모아보기</div>
                     <span class="sl-feature-tag">Public · Archive</span>
                 </a>
-                <a class="sl-feature" href="https://newsletter.unmong.com/allergy-insight/subscribe" target="_blank" rel="noopener">
+                <a class="sl-feature" href="/allergy-insight/subscribe">
                     <span class="sl-feature-icon">&#128236;</span>
                     <div class="sl-feature-name">AllergyInsight 구독</div>
                     <div class="sl-feature-desc">알러지 뉴스·논문·인사이트 주간 브리핑 구독 (이메일 인증)</div>
                     <span class="sl-feature-tag">Public · Subscribe</span>
                 </a>
-                <a class="sl-feature" href="https://newsletter.unmong.com/allergy-insight/archive" target="_blank" rel="noopener">
+                <a class="sl-feature" href="/allergy-insight/archive">
                     <span class="sl-feature-icon">&#128196;</span>
                     <div class="sl-feature-name">AllergyInsight 아카이브</div>
                     <div class="sl-feature-desc">AllergyInsight 백넘버 — HealthPulse 통합 알러지 브리핑 모아보기</div>
                     <span class="sl-feature-tag">Public · Archive</span>
                 </a>
-                <a class="sl-feature" href="https://newsletter.unmong.com/admin" target="_blank" rel="noopener">
+                <a class="sl-feature" href="/admin">
                     <span class="sl-feature-icon">&#9881;&#65039;</span>
                     <div class="sl-feature-name">관리자 대시보드</div>
                     <div class="sl-feature-desc">테넌트별 구독자 수·최근 발송·헬스체크 요약을 한 화면에 집약</div>
-                    <span class="sl-feature-tag">Admin · Dashboard</span>
+                    <span class="sl-feature-tag sl-feature-tag--admin-locked">Admin · Dashboard</span>
                 </a>
-                <a class="sl-feature" href="https://newsletter.unmong.com/admin/history" target="_blank" rel="noopener">
+                <a class="sl-feature" href="/admin/history">
                     <span class="sl-feature-icon">&#128200;</span>
                     <div class="sl-feature-name">발송 이력</div>
                     <div class="sl-feature-desc">발송 일시·수신자 수·성공/실패·재시도 현황 (테넌트별 필터 지원)</div>
-                    <span class="sl-feature-tag">Admin · History</span>
+                    <span class="sl-feature-tag sl-feature-tag--admin-locked">Admin · History</span>
                 </a>
-                <a class="sl-feature" href="https://newsletter.unmong.com/admin/edufit/subscribers" target="_blank" rel="noopener">
+                <a class="sl-feature" href="/admin/edufit/subscribers">
                     <span class="sl-feature-icon">&#128101;</span>
                     <div class="sl-feature-name">구독자 관리</div>
                     <div class="sl-feature-desc">테넌트별 구독자 검색·추가·활성/비활성 토글·CSV 내보내기</div>
-                    <span class="sl-feature-tag">Admin · Subscribers</span>
+                    <span class="sl-feature-tag sl-feature-tag--admin-locked">Admin · Subscribers</span>
                 </a>
-                <a class="sl-feature" href="https://newsletter.unmong.com/admin/edufit/send" target="_blank" rel="noopener">
+                <a class="sl-feature" href="/admin/edufit/send">
                     <span class="sl-feature-icon">&#128231;</span>
                     <div class="sl-feature-name">발송 운영</div>
                     <div class="sl-feature-desc">미리보기·테스트 발송·수집 트리거·즉시 발송(adhoc) 등 발송 운영 액션</div>
-                    <span class="sl-feature-tag">Admin · Operations</span>
+                    <span class="sl-feature-tag sl-feature-tag--admin-locked">Admin · Operations</span>
                 </a>
-                <a class="sl-feature" href="https://newsletter.unmong.com/admin/scheduler" target="_blank" rel="noopener">
+                <a class="sl-feature" href="/admin/scheduler">
                     <span class="sl-feature-icon">&#128338;</span>
                     <div class="sl-feature-name">스케줄러</div>
                     <div class="sl-feature-desc">APScheduler 등록 작업 목록(daily/weekly/monthly)·다음 실행 시각 확인</div>
-                    <span class="sl-feature-tag">Admin · Scheduler</span>
+                    <span class="sl-feature-tag sl-feature-tag--admin-locked">Admin · Scheduler</span>
                 </a>
             </div>
         </section>
@@ -175,23 +160,23 @@
         <section class="sl-section sl-connected">
             <div class="sl-section-title">Connected Services</div>
             <div class="sl-connected-grid">
-                <a href="https://allergy.unmong.com/intro.html" class="sl-connected-card">
+                <a href="https://allergy.unmong.com/" class="sl-connected-card" target="_blank" rel="noopener noreferrer">
                     <span class="sl-connected-dot" style="background:#f43f5e;"></span>
                     <div class="sl-connected-info">
                         <div class="sl-connected-name">AllergyInsight</div>
-                        <div class="sl-connected-role">진단 콘텐츠 제공</div>
+                        <div class="sl-connected-role">알러지 콘텐츠 제공</div>
                     </div>
                     <span class="sl-connected-arrow">&#8594;</span>
                 </a>
-                <a href="https://edufit.unmong.com/intro.html" class="sl-connected-card">
-                    <span class="sl-connected-dot" style="background:#10b981;"></span>
+                <a href="https://edufit.unmong.com/" class="sl-connected-card" target="_blank" rel="noopener noreferrer">
+                    <span class="sl-connected-dot" style="background:#22c55e;"></span>
                     <div class="sl-connected-info">
                         <div class="sl-connected-name">EduFit</div>
-                        <div class="sl-connected-role">분석 콘텐츠 제공</div>
+                        <div class="sl-connected-role">학원·강사 분석 콘텐츠 제공</div>
                     </div>
                     <span class="sl-connected-arrow">&#8594;</span>
                 </a>
-                <a href="https://infrawatcher.unmong.com/intro.html" class="sl-connected-card">
+                <a href="https://infrawatcher.unmong.com/" class="sl-connected-card" target="_blank" rel="noopener noreferrer">
                     <span class="sl-connected-dot" style="background:#06b6d4;"></span>
                     <div class="sl-connected-info">
                         <div class="sl-connected-name">InfraWatcher</div>
