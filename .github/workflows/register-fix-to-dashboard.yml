@@ -1,0 +1,109 @@
+# ==============================================================
+# fix 커밋 → QA Dashboard 자동 등록 (developer 경로)
+# 표준: standards/qa/FIX_RESULT_REGISTRATION.md
+#
+# 적용 대상: 모든 서비스 repo (main↔prod 운영 여부 무관)
+# 도입 절차:
+#   1) 이 파일을 .github/workflows/register-fix-to-dashboard.yml 로 복사
+#   2) repo Secrets 등록:
+#      - QA_DASHBOARD_API_URL  (예: https://qadashboard.unmong.com/api)
+#      - QA_DASHBOARD_API_KEY  (QA-Dashboard 운영자 발급)
+#   3) CLAUDE.md 의 fix 커밋 표준에 Discovery-Method 필수 명시
+#      (또는 표준 PROD_TO_MAIN_AUTO_SYNC 와 함께 루트 CLAUDE.md 한 곳에서 강제)
+#
+# 동작:
+#   - main 또는 prod 에 fix 로 시작하는 커밋이 push 되면 트리거
+#   - footer 메타데이터 (Discovery-Method, Root-Cause 등) 파싱
+#   - QA Dashboard /api/fix-results 에 fix_source='developer' 로 POST
+#   - footer 누락 시 ::warning:: 만 남기고 등록 스킵 (push 자체는 막지 않음)
+#
+# Claude 보조 여부 자동 판별:
+#   - Co-Authored-By 트레일러에 "Claude" 가 있으면 strategy = manual-dev-claude-assisted
+#   - 없으면 strategy = manual-dev
+# ==============================================================
+name: Register fix to QA Dashboard
+
+on:
+  push:
+    branches: [main, prod]
+
+jobs:
+  register-fix:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.head_commit.message, 'fix')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Parse fix commit footer & POST to QA Dashboard
+        env:
+          QA_DASHBOARD_API_URL: ${{ secrets.QA_DASHBOARD_API_URL }}
+          QA_DASHBOARD_API_KEY: ${{ secrets.QA_DASHBOARD_API_KEY }}
+          PROJECT_NAME: ${{ github.event.repository.name }}
+          COMMIT_HASH:  ${{ github.event.head_commit.id }}
+          AUTHOR_EMAIL: ${{ github.event.head_commit.author.email }}
+        run: |
+          set -euo pipefail
+          MSG=$(git log -1 --pretty=%B "$COMMIT_HASH")
+
+          extract() {
+            echo "$MSG" | awk -v k="$1" 'BEGIN{IGNORECASE=1} $0 ~ "^"k":" {sub("^"k": *",""); print; exit}'
+          }
+
+          DISCOVERY=$(extract "Discovery-Method")
+          ROOTCAUSE=$(extract "Root-Cause")
+          CATEGORY=$(extract "Error-Category")
+          LAYER=$(extract "Affected-Layer")
+          RECURRENCE=$(extract "Recurrence")
+          PREVENTION=$(extract "Prevention")
+
+          # Discovery-Method 또는 Root-Cause 누락 시 등록 스킵 (footer 표준 미준수)
+          if [ -z "$DISCOVERY" ] || [ -z "$ROOTCAUSE" ]; then
+            echo "::warning::fix 커밋이지만 footer 메타데이터 부재 — 등록 스킵 (commit=$COMMIT_HASH)"
+            echo "::warning::필수 footer: Discovery-Method, Root-Cause, Error-Category, Prevention"
+            exit 0
+          fi
+
+          # Claude-assisted 여부는 Co-Authored-By 트레일러로 판별
+          STRATEGY=$(echo "$MSG" | grep -qi "Co-Authored-By:.*Claude" && echo "manual-dev-claude-assisted" || echo "manual-dev")
+
+          # subject 의 첫 줄 → error 요약
+          SUBJECT=$(echo "$MSG" | head -1)
+
+          PAYLOAD=$(jq -n \
+            --arg project "$PROJECT_NAME" \
+            --arg commit  "$COMMIT_HASH" \
+            --arg actor   "$AUTHOR_EMAIL" \
+            --arg disc    "$DISCOVERY" \
+            --arg cat     "$ROOTCAUSE" \
+            --arg layer   "$LAYER" \
+            --arg recur   "${RECURRENCE:-first}" \
+            --arg prev    "$PREVENTION" \
+            --arg strat   "$STRATEGY" \
+            --arg err     "$SUBJECT" \
+            '{
+              projectName:      $project,
+              issueNumber:      null,
+              fixSource:        "developer",
+              discoveryMethod:  $disc,
+              actor:            $actor,
+              sourceRunId:      null,
+              priority:         "P2",
+              category:         $cat,
+              affectedLayer:    $layer,
+              strategy:         $strat,
+              status:           "deployed",
+              commitHash:       $commit,
+              recurrence:       $recur,
+              preventionRule:   $prev,
+              error:            $err,
+              completedAt:      now | todate
+            }')
+
+          curl -fsSL -X POST "$QA_DASHBOARD_API_URL/fix-results" \
+            -H "Authorization: Bearer $QA_DASHBOARD_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
+
+          echo "::notice::fix commit registered to QA Dashboard (commit=$COMMIT_HASH, source=developer, strategy=$STRATEGY)"
