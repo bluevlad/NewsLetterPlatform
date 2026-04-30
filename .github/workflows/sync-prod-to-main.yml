@@ -1,0 +1,141 @@
+# ==============================================================
+# Prod → Main 자동 동기화 (cherry-pick 기반)
+# 표준: standards/git/PROD_TO_MAIN_AUTO_SYNC.md
+#
+# 적용 대상: main ↔ prod 이중 브랜치 운영 서비스 repo
+# 도입 절차:
+#   1) 이 파일을 .github/workflows/sync-prod-to-main.yml 로 복사
+#   2) repo Secrets 에 SYNC_PAT 등록 (fine-grained PAT, contents+PR write)
+#   3) (선택) main branch protection bypass actors 에 PAT 소유자 추가
+# ==============================================================
+name: Sync prod-only commits back to main
+
+on:
+  push:
+    branches: [prod]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # 자기 자신이 만든 main push 가 만든 prod push 에는 재진입 안 함 (안전 가드)
+    if: github.actor != 'prod-sync-bot' && !contains(github.event.head_commit.message, '[skip-sync]')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_PAT }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "prod-sync-bot"
+          git config user.email "prod-sync-bot@unmong.com"
+          git fetch origin main prod
+
+      - name: Detect prod-only commits not yet on main
+        id: detect
+        run: |
+          set -euo pipefail
+          # 1) prod 에만 있는 non-merge commit hash 추출
+          PROD_ONLY=$(git log --no-merges --pretty=%H origin/main..origin/prod)
+          if [ -z "$PROD_ONLY" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::no prod-only non-merge commits, nothing to sync"
+            exit 0
+          fi
+
+          # 2) main 의 최근 non-merge commit 들 patch-id 사전 (lookback 300)
+          MAIN_PIDS=$(git log -300 --no-merges --pretty=%H origin/main | \
+            while read m; do
+              git show "$m" 2>/dev/null | git patch-id 2>/dev/null | awk '{print $1}'
+            done | sort -u)
+
+          # 3) 각 prod-only commit 검사:
+          #    (a) main commit message 에 'cherry picked from commit <hash>' trail 이 있으면 skip
+          #    (b) patch-id 가 main 사전에 있으면 skip
+          #    (c) 둘 다 없으면 cherry-pick 대상
+          NEED=""
+          while IFS= read -r c; do
+            [ -z "$c" ] && continue
+
+            # (a) cherry-pick(-x) trail
+            if git log origin/main --grep="cherry picked from commit $c" --pretty=%H | head -1 | grep -q .; then
+              echo "::notice::skip $c (already on main via cherry-pick -x trail)"
+              continue
+            fi
+
+            # (b) patch-id 비교
+            PID=$(git show "$c" 2>/dev/null | git patch-id 2>/dev/null | awk '{print $1}')
+            if [ -n "$PID" ] && echo "$MAIN_PIDS" | grep -Fxq "$PID"; then
+              echo "::notice::skip $c (patch-id match found in main lookback)"
+              continue
+            fi
+
+            NEED="${NEED}${c}"$'\n'
+          done <<< "$PROD_ONLY"
+
+          if [ -z "${NEED//[$'\n ']/}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::all prod-only commits already represented on main, nothing to sync"
+            exit 0
+          fi
+
+          printf '%s' "$NEED" > /tmp/commits.txt
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::will cherry-pick $(grep -c . /tmp/commits.txt) commit(s) to main"
+          cat /tmp/commits.txt
+
+      - name: Cherry-pick to main, push (with rebase retry on race)
+        if: steps.detect.outputs.skip == 'false'
+        id: pick
+        run: |
+          set -euo pipefail
+          git checkout main
+          git pull --ff-only origin main
+
+          while IFS= read -r commit; do
+            [ -z "$commit" ] && continue
+            # --empty=drop: 동일 내용이지만 base tree 차이로 patch-id 가 다른 commit 도 안전 처리
+            if ! git cherry-pick -x --empty=drop "$commit"; then
+              echo "::warning::cherry-pick failed for $commit — falling back to PR"
+              git cherry-pick --abort || true
+              echo "fallback=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done < /tmp/commits.txt
+
+          # main 동시 push race 대비: 최대 3회 rebase 후 재시도
+          for i in 1 2 3; do
+            if git push origin main; then
+              echo "fallback=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::pushed cherry-picked commits to main (attempt $i)"
+              exit 0
+            fi
+            echo "::warning::push failed (attempt $i), rebasing and retrying"
+            git pull --rebase origin main
+          done
+          echo "::error::push to main failed after 3 retries"
+          exit 1
+
+      - name: Fallback — open PR for manual merge
+        if: steps.pick.outputs.fallback == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          set -euo pipefail
+          BRANCH="auto-sync/prod-to-main-$(date -u +%Y%m%d-%H%M%S)"
+          git checkout origin/main -b "$BRANCH"
+          # 충돌 마커 포함한 채로 commit 하면 PR 에서 충돌 명확히 보임
+          git merge --no-edit origin/prod || {
+            git add -A
+            git commit -m "WIP: merge conflict, resolve manually" || true
+          }
+          git push origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Auto-sync: prod → main (수동 해결 필요)" \
+            --body "prod 직접 커밋을 cherry-pick 하다 충돌 발생. 표준: \`standards/git/PROD_TO_MAIN_AUTO_SYNC.md\`. 리뷰어가 충돌 해결 후 머지해주세요."

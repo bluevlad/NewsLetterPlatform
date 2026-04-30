@@ -134,6 +134,33 @@ NewsLetterPlatform/
 
 > 로컬 환경 정보는 `CLAUDE.local.md` 참조 (git에 포함되지 않음)
 
+## Branch Merge 원칙 (필수)
+
+**표준 흐름 — 운영서버(MacBook)에서 직접 prod에 push**:
+
+1. 작업 branch 또는 main에서 변경사항 commit
+2. **main에 merge 먼저** (`git checkout main && git merge <work-branch>`)
+3. **prod에 main을 merge하여 push** (`git checkout prod && git merge main && git push origin prod`)
+4. GitHub Actions `deploy-prod.yml` 자동 실행 → docker 재빌드 + 배포
+5. `sync-prod-to-main.yml` 자동 실행 → prod-only commit이 있으면 main으로 cherry-pick (이미 머지된 변경은 patch-id 매칭으로 스킵)
+
+**원칙 요약**: `작업 branch → main merge → prod merge(push) → docker 자동 재빌드`
+
+### Do NOT (branch 운영)
+
+- prod 브랜치에 main을 머지하지 않고 prod에 직접 force push 금지
+- main과 prod가 분기된 상태에서 양쪽 branch에 따로 commit 금지
+- main에만 commit 후 prod에 미반영 금지 — 운영 배포가 트리거되지 않음
+
+### 잘못된 base 위에서 main에 commit한 경우 복구
+
+main이 prod와 다른 base 위에 있는 채로 작업했음을 발견하면:
+
+1. main의 잘못된 commit을 `git revert` (force push 금지)
+2. main에 `git merge -X theirs origin/prod`로 prod 운영 코드 동기화
+3. 임시 작업 branch 생성 → prod 베이스 위에 변경사항 다시 적용
+4. 임시 branch → main merge → prod merge(push)
+
 ## Fix 커밋 오류 추적
 
 > 상세: [FIX_COMMIT_TRACKING_GUIDE.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/git/FIX_COMMIT_TRACKING_GUIDE.md) | [ERROR_TAXONOMY.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/git/ERROR_TAXONOMY.md)

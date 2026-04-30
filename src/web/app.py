@@ -5,6 +5,7 @@ NewsLetterPlatform 웹 애플리케이션
 
 import logging
 import threading
+from pathlib import Path as _Path
 from urllib.parse import urlparse
 
 from pathlib import Path as _Path

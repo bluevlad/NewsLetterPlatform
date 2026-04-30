@@ -2,16 +2,25 @@
     <table>
         <thead>
             <tr>
+                <th style="width: 32px;">
+                    <input type="checkbox" id="select-all-subs" title="전체 선택">
+                </th>
                 <th>Email</th>
                 <th>Name</th>
                 <th>Status</th>
+                <th>Slot</th>
                 <th>Created</th>
                 <th>Action</th>
             </tr>
         </thead>
         <tbody>
         {% for s in subscribers %}
+            {% set effective_slot = s.send_slot or default_slot %}
             <tr>
+                <td>
+                    <input type="checkbox" name="subscriber_ids" value="{{ s.id }}"
+                           {% if not s.is_active %}disabled{% endif %}>
+                </td>
                 <td>{{ s.email }}</td>
                 <td class="text-muted">{{ s.name or '-' }}</td>
                 <td>
@@ -21,19 +30,42 @@
                     <span class="badge badge-danger">Inactive</span>
                     {% endif %}
                 </td>
+                <td>
+                    <select class="form-input" style="padding: 0.25rem 0.4rem; font-size: 0.85rem;"
+                            hx-post="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers/{{ s.id }}/slot"
+                            hx-target="#toast-container" hx-swap="beforeend"
+                            hx-trigger="change"
+                            hx-vals='js:{slot: event.target.value}'
+                            {% if not s.is_active %}disabled{% endif %}>
+                        {% for slot in slots_meta %}
+                        <option value="{{ slot.key }}" {% if slot.key == effective_slot %}selected{% endif %}>
+                            {{ slot.label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </td>
                 <td class="text-muted text-sm">{{ s.created_at.strftime('%Y-%m-%d %H:%M') if s.created_at else '-' }}</td>
                 <td>
-                    <button class="btn btn-sm {% if s.is_active %}btn-secondary{% else %}btn-primary{% endif %}"
-                            hx-post="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers/{{ s.id }}/toggle"
-                            hx-target="#toast-container" hx-swap="beforeend"
-                            hx-confirm="{% if s.is_active %}{{ s.email }} 구독을 비활성화하시겠습니까?{% else %}{{ s.email }} 구독을 활성화하시겠습니까?{% endif %}">
-                        {% if s.is_active %}Deactivate{% else %}Activate{% endif %}
-                    </button>
+                    <div class="flex items-center gap-1" style="flex-wrap: wrap;">
+                        <button class="btn btn-sm {% if s.is_active %}btn-secondary{% else %}btn-primary{% endif %}"
+                                hx-post="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers/{{ s.id }}/toggle"
+                                hx-target="#toast-container" hx-swap="beforeend"
+                                hx-confirm="{% if s.is_active %}{{ s.email }} 구독을 비활성화하시겠습니까?{% else %}{{ s.email }} 구독을 활성화하시겠습니까?{% endif %}">
+                            {% if s.is_active %}Deactivate{% else %}Activate{% endif %}
+                        </button>
+                        <button class="btn btn-sm btn-danger"
+                                hx-post="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers/{{ s.id }}/delete"
+                                hx-target="#toast-container" hx-swap="beforeend"
+                                hx-confirm="{{ s.email }} 구독자를 영구 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
+                                hx-on::after-request="if(event.detail.successful) this.closest('tr').remove()">
+                            Delete
+                        </button>
+                    </div>
                 </td>
             </tr>
         {% else %}
             <tr>
-                <td colspan="5" class="text-muted text-sm" style="text-align:center; padding:2rem;">
+                <td colspan="7" class="text-muted text-sm" style="text-align:center; padding:2rem;">
                     No subscribers found
                 </td>
             </tr>
