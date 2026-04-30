@@ -34,31 +34,28 @@ jobs:
           DATABASE_URL=sqlite:///./data/newsletterplatform.db
 
           # Scheduler (24h format, KST)
-          # 발송은 슬롯(early 6:40 / mid 7:40 / late 8:40)별로 분기되며,
-          # SEND_HOUR/MINUTE는 deprecated이지만 호환성 위해 유지.
-          # COLLECT는 가장 빠른 슬롯(6:40)보다 충분히 일찍 5:00 단일 실행.
           # EduFit
-          EDUFIT_COLLECT_HOUR=5
-          EDUFIT_COLLECT_MINUTE=0
+          EDUFIT_COLLECT_HOUR=7
+          EDUFIT_COLLECT_MINUTE=20
           EDUFIT_SEND_HOUR=8
           EDUFIT_SEND_MINUTE=20
 
           # AllergyInsight (Daily)
-          ALLERGY_COLLECT_HOUR=5
-          ALLERGY_COLLECT_MINUTE=0
+          ALLERGY_COLLECT_HOUR=7
+          ALLERGY_COLLECT_MINUTE=30
           ALLERGY_SEND_HOUR=8
           ALLERGY_SEND_MINUTE=30
 
           # AllergyInsight (Weekly: 매주 금요일)
           ALLERGY_WEEKLY_DAY_OF_WEEK=fri
-          ALLERGY_WEEKLY_COLLECT_HOUR=5
-          ALLERGY_WEEKLY_COLLECT_MINUTE=0
+          ALLERGY_WEEKLY_COLLECT_HOUR=7
+          ALLERGY_WEEKLY_COLLECT_MINUTE=10
           ALLERGY_WEEKLY_SEND_HOUR=9
           ALLERGY_WEEKLY_SEND_MINUTE=30
 
           # AllergyInsight (Monthly: 매월 말일)
           ALLERGY_MONTHLY_DAY_OF_MONTH=last
-          ALLERGY_MONTHLY_COLLECT_HOUR=5
+          ALLERGY_MONTHLY_COLLECT_HOUR=7
           ALLERGY_MONTHLY_COLLECT_MINUTE=0
           ALLERGY_MONTHLY_SEND_HOUR=10
           ALLERGY_MONTHLY_SEND_MINUTE=0
