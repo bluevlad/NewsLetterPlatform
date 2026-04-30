@@ -19,6 +19,7 @@ from ..database.repository import (
 from ..delivery.gmail_sender import get_sender
 from ..template.renderer import get_renderer
 from .health import update_health
+from .slots import DAILY_SLOTS, get_slot_time
 from ...config import settings
 from ...tenant.registry import get_registry
 
@@ -148,19 +149,23 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
 
 
 def run_send_job(
-    tenant_id: str, newsletter_type: str = "daily", manual: bool = False
+    tenant_id: str, newsletter_type: str = "daily", manual: bool = False,
+    slot: str = None
 ) -> None:
     """뉴스레터 발송 작업 (배치 발송 + 실패 재시도)
 
     Args:
         manual: True이면 수동 발송 모드 — dedup 스킵, newsletter_type="manual"로 이력 저장.
                 자동 스케줄 발송 이력(daily/weekly/monthly)에 영향을 주지 않는다.
+        slot: 'early'/'mid'/'late' — 해당 슬롯 구독자만 발송. None이면 전체 활성 구독자.
+              (수동 모드나 1회성 실행에 None 사용)
     """
     # 이력 저장용 타입: manual이면 "manual", 아니면 원래 newsletter_type
     history_type = "manual" if manual else newsletter_type
     mode_label = "[manual]" if manual else ""
+    slot_label = f"[slot={slot}]" if slot else ""
     type_label = f"[{newsletter_type}]" if newsletter_type != "daily" else ""
-    log_prefix = f"[{tenant_id}]{mode_label}{type_label}"
+    log_prefix = f"[{tenant_id}]{mode_label}{type_label}{slot_label}"
     logger.info(f"{log_prefix} 뉴스레터 발송 시작")
 
     registry = get_registry()
@@ -213,8 +218,11 @@ def run_send_job(
             except Exception as e:
                 logger.warning(f"{log_prefix} 아카이브 저장 실패 (발송은 계속): {e}")
 
-        # 구독자 조회
-        subscribers = SubscriberRepository.get_all_active(session, tenant_id)
+        # 구독자 조회 (슬롯 필터링)
+        if slot:
+            subscribers = SubscriberRepository.get_active_by_slot(session, tenant_id, slot)
+        else:
+            subscribers = SubscriberRepository.get_all_active(session, tenant_id)
 
         if not subscribers:
             logger.warning(f"[{tenant_id}] 등록된 구독자가 없습니다.")
@@ -578,14 +586,20 @@ def run_adhoc_send(
 
 
 def register_all_jobs(scheduler: BlockingScheduler) -> None:
-    """TenantRegistry 순회하며 모든 작업 등록"""
+    """TenantRegistry 순회하며 모든 작업 등록.
+
+    구조:
+      - 수집: 테넌트당 daily/weekly/monthly 각 1회 (모든 슬롯이 동일 캐시 공유 → 콘텐츠 일관성)
+      - 발송: 슬롯(early/mid/late)마다 별도 cron 잡으로 분리
+      - weekly/monthly 발송 시간은 daily 슬롯에서 -10분 (slots.WEEKLY_MONTHLY_OFFSET_MINUTES)
+    """
     registry = get_registry()
 
     for tenant in registry.get_all():
         config = tenant.schedule_config
         tid = tenant.tenant_id
 
-        # Daily 스케줄 등록
+        # === Daily 수집 (1회) ===
         scheduler.add_job(
             run_collect_job,
             trigger=CronTrigger(
@@ -596,88 +610,104 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
             id=f"collect_{tid}",
             name=f"Collect {tenant.display_name}",
         )
-
-        scheduler.add_job(
-            run_send_job,
-            trigger=CronTrigger(
-                hour=config["send_hour"],
-                minute=config["send_minute"]
-            ),
-            args=[tid, "daily"],
-            id=f"send_{tid}",
-            name=f"Send {tenant.display_name}",
-        )
-
         logger.info(
-            f"[{tid}] daily 스케줄 등록: "
-            f"수집 {config['collect_hour']:02d}:{config['collect_minute']:02d}, "
-            f"발송 {config['send_hour']:02d}:{config['send_minute']:02d}"
+            f"[{tid}] daily 수집 등록: "
+            f"{config['collect_hour']:02d}:{config['collect_minute']:02d}"
         )
 
-        # Weekly 스케줄 등록
+        # === Daily 발송 (슬롯별) ===
+        for s in DAILY_SLOTS:
+            s_hour, s_minute = get_slot_time(s["key"], "daily")
+            scheduler.add_job(
+                run_send_job,
+                trigger=CronTrigger(hour=s_hour, minute=s_minute),
+                kwargs={"tenant_id": tid, "newsletter_type": "daily",
+                        "manual": False, "slot": s["key"]},
+                id=f"send_{tid}_{s['key']}",
+                name=f"Send {tenant.display_name} [{s['label']}]",
+            )
+            logger.info(
+                f"[{tid}] daily 발송 등록 [{s['key']}]: {s_hour:02d}:{s_minute:02d}"
+            )
+
+        # === Weekly 스케줄 (수집 1회 + 슬롯별 발송) ===
         if "weekly" in tenant.supported_frequencies:
             wc = tenant.weekly_schedule_config
             if wc:
+                day_of_week = wc.get("day_of_week", "mon")
                 scheduler.add_job(
                     run_collect_job,
                     trigger=CronTrigger(
-                        day_of_week=wc.get("day_of_week", "mon"),
-                        hour=wc.get("collect_hour", 7),
+                        day_of_week=day_of_week,
+                        hour=wc.get("collect_hour", 5),
                         minute=wc.get("collect_minute", 0),
                     ),
                     args=[tid, "weekly"],
                     id=f"collect_weekly_{tid}",
                     name=f"Collect Weekly {tenant.display_name}",
                 )
-                scheduler.add_job(
-                    run_send_job,
-                    trigger=CronTrigger(
-                        day_of_week=wc.get("day_of_week", "mon"),
-                        hour=wc.get("send_hour", 9),
-                        minute=wc.get("send_minute", 0),
-                    ),
-                    args=[tid, "weekly"],
-                    id=f"send_weekly_{tid}",
-                    name=f"Send Weekly {tenant.display_name}",
-                )
                 logger.info(
-                    f"[{tid}] weekly 스케줄 등록: "
-                    f"{wc.get('day_of_week', 'mon')} "
-                    f"수집 {wc.get('collect_hour', 7):02d}:{wc.get('collect_minute', 0):02d}, "
-                    f"발송 {wc.get('send_hour', 9):02d}:{wc.get('send_minute', 0):02d}"
+                    f"[{tid}] weekly 수집 등록: {day_of_week} "
+                    f"{wc.get('collect_hour', 5):02d}:{wc.get('collect_minute', 0):02d}"
                 )
 
-        # Monthly 스케줄 등록
+                for s in DAILY_SLOTS:
+                    s_hour, s_minute = get_slot_time(s["key"], "weekly")
+                    scheduler.add_job(
+                        run_send_job,
+                        trigger=CronTrigger(
+                            day_of_week=day_of_week,
+                            hour=s_hour,
+                            minute=s_minute,
+                        ),
+                        kwargs={"tenant_id": tid, "newsletter_type": "weekly",
+                                "manual": False, "slot": s["key"]},
+                        id=f"send_weekly_{tid}_{s['key']}",
+                        name=f"Send Weekly {tenant.display_name} [{s['label']}]",
+                    )
+                    logger.info(
+                        f"[{tid}] weekly 발송 등록 [{s['key']}]: "
+                        f"{day_of_week} {s_hour:02d}:{s_minute:02d}"
+                    )
+
+        # === Monthly 스케줄 (수집 1회 + 슬롯별 발송) ===
         if "monthly" in tenant.supported_frequencies:
             mc = tenant.monthly_schedule_config
             if mc:
+                day_of_month = mc.get("day_of_month", 1)
+                day_display = "말일" if str(day_of_month) == "last" else f"{day_of_month}일"
+
                 scheduler.add_job(
                     run_collect_job,
                     trigger=CronTrigger(
-                        day=mc.get("day_of_month", 1),
-                        hour=mc.get("collect_hour", 7),
+                        day=day_of_month,
+                        hour=mc.get("collect_hour", 5),
                         minute=mc.get("collect_minute", 0),
                     ),
                     args=[tid, "monthly"],
                     id=f"collect_monthly_{tid}",
                     name=f"Collect Monthly {tenant.display_name}",
                 )
-                scheduler.add_job(
-                    run_send_job,
-                    trigger=CronTrigger(
-                        day=mc.get("day_of_month", 1),
-                        hour=mc.get("send_hour", 10),
-                        minute=mc.get("send_minute", 0),
-                    ),
-                    args=[tid, "monthly"],
-                    id=f"send_monthly_{tid}",
-                    name=f"Send Monthly {tenant.display_name}",
-                )
-                day_label = mc.get('day_of_month', 1)
-                day_display = "말일" if str(day_label) == "last" else f"{day_label}일"
                 logger.info(
-                    f"[{tid}] monthly 스케줄 등록: "
-                    f"매월 {day_display} "
-                    f"수집 {mc.get('collect_hour', 7):02d}:{mc.get('collect_minute', 0):02d}, "
-                    f"발송 {mc.get('send_hour', 10):02d}:{mc.get('send_minute', 0):02d}"
+                    f"[{tid}] monthly 수집 등록: 매월 {day_display} "
+                    f"{mc.get('collect_hour', 5):02d}:{mc.get('collect_minute', 0):02d}"
                 )
+
+                for s in DAILY_SLOTS:
+                    s_hour, s_minute = get_slot_time(s["key"], "monthly")
+                    scheduler.add_job(
+                        run_send_job,
+                        trigger=CronTrigger(
+                            day=day_of_month,
+                            hour=s_hour,
+                            minute=s_minute,
+                        ),
+                        kwargs={"tenant_id": tid, "newsletter_type": "monthly",
+                                "manual": False, "slot": s["key"]},
+                        id=f"send_monthly_{tid}_{s['key']}",
+                        name=f"Send Monthly {tenant.display_name} [{s['label']}]",
+                    )
+                    logger.info(
+                        f"[{tid}] monthly 발송 등록 [{s['key']}]: "
+                        f"매월 {day_display} {s_hour:02d}:{s_minute:02d}"
+                    )
