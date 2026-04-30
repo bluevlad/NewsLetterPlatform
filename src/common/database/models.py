@@ -45,12 +45,14 @@ class Subscriber(Base):
     name = Column(String(100))
     unsubscribe_token = Column(String(64), unique=True)
     is_active = Column(Boolean, default=True)
+    send_slot = Column(String(20), nullable=True)  # 'early' | 'mid' | 'late' | NULL(=DEFAULT_SLOT)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "email", name="uq_subscriber_tenant_email"),
         Index("idx_subscriber_tenant_active", "tenant_id", "is_active"),
+        Index("idx_subscriber_tenant_slot", "tenant_id", "send_slot", "is_active"),
     )
 
     def __repr__(self):

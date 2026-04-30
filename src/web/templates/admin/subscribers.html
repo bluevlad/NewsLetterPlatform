@@ -20,6 +20,30 @@
     </div>
 </div>
 
+<!-- Slot stats (발송 시간 슬롯별 활성 구독자 수) -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h3>발송 시간 슬롯</h3>
+        <span class="text-muted text-sm">
+            daily 시간 / weekly·monthly는 -10분
+        </span>
+    </div>
+    <div class="stats-grid">
+        {% for s in slots_meta %}
+        <div class="stat-card">
+            <div class="stat-label">
+                {{ s.label }}
+                {% if s.is_default %}<span class="badge badge-success" style="margin-left:0.4rem;">기본</span>{% endif %}
+            </div>
+            <div class="stat-value">{{ slot_counts.get(s.key, 0) }}</div>
+            <div class="text-muted text-sm">
+                Daily {{ s.daily_time }} · W/M {{ s.weekly_monthly_time }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
 <!-- Add subscriber + Export -->
 <div class="card mb-3">
     <div class="card-header">
@@ -56,8 +80,46 @@
                hx-include="[name='search']">
     </div>
 
-    <div id="subscriber-table">
-        {% include "admin/_subscriber_rows.html" %}
-    </div>
+    <!-- 다중 선택 일괄 변경 액션 바 -->
+    <form id="bulk-slot-form"
+          hx-post="{{ base_path }}/admin/{{ tenant.tenant_id }}/subscribers/bulk_slot"
+          hx-target="#toast-container" hx-swap="beforeend"
+          hx-confirm="선택한 구독자들의 발송 시간을 일괄 변경하시겠습니까?"
+          hx-on::after-request="if(event.detail.successful) { document.querySelectorAll('input[name=subscriber_ids]:checked').forEach(c=>c.checked=false); document.getElementById('select-all-subs').checked=false; }">
+        <div class="flex items-center gap-1 mb-2" style="flex-wrap: wrap;">
+            <span id="bulk-selected-count" class="text-muted text-sm">0명 선택됨</span>
+            <span class="text-muted text-sm">→</span>
+            <select name="slot" class="form-input" style="width: auto;">
+                {% for s in slots_meta %}
+                <option value="{{ s.key }}">{{ s.label }}{% if s.is_default %} · 기본{% endif %}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">선택 항목 일괄 변경</button>
+        </div>
+
+        <div id="subscriber-table">
+            {% include "admin/_subscriber_rows.html" %}
+        </div>
+    </form>
 </div>
+
+<script>
+(function() {
+    function updateCount() {
+        var cs = document.querySelectorAll('input[name=subscriber_ids]:checked').length;
+        var el = document.getElementById('bulk-selected-count');
+        if (el) el.textContent = cs + '명 선택됨';
+    }
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.name === 'subscriber_ids') updateCount();
+        if (e.target && e.target.id === 'select-all-subs') {
+            document.querySelectorAll('input[name=subscriber_ids]').forEach(function(c) {
+                c.checked = e.target.checked;
+            });
+            updateCount();
+        }
+    });
+    document.body.addEventListener('htmx:afterSwap', updateCount);
+})();
+</script>
 {% endblock %}
