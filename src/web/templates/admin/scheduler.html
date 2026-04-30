@@ -33,8 +33,38 @@
     </div>
 </div>
 
-<!-- Schedule Config per Tenant -->
+<!-- Slot Definitions -->
 <div class="card">
+    <div class="card-header">
+        <h3>발송 시간 슬롯 정의</h3>
+        <span class="text-muted text-sm">슬롯별로 분할 발송 · weekly/monthly는 -10분</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Slot</th>
+                    <th>Daily 발송</th>
+                    <th>Weekly · Monthly 발송</th>
+                    <th>기본값</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for s in slots_meta %}
+                <tr>
+                    <td>{{ s.label }}</td>
+                    <td><span style="font-family: monospace; font-weight: 600;">{{ s.daily_time }}</span></td>
+                    <td><span style="font-family: monospace; font-weight: 600;">{{ s.weekly_monthly_time }}</span></td>
+                    <td>{% if s.is_default %}<span class="badge badge-success">기본</span>{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Schedule Config per Tenant -->
+<div class="card mt-2">
     <div class="card-header">
         <h3>Schedule Configuration</h3>
     </div>
@@ -46,7 +76,8 @@
                     <th>Type</th>
                     <th>Schedule</th>
                     <th>Collect Time</th>
-                    <th>Send Time</th>
+                    <th>Send Times (Slot별)</th>
+                    <th>Slot 인원</th>
                 </tr>
             </thead>
             <tbody>
@@ -60,11 +91,16 @@
                     <td class="text-sm text-muted">Every day</td>
                     <td>
                         <span style="font-family: monospace; font-weight: 600;">{{ info.collect_time }}</span>
-                        <span class="text-muted text-xs">UTC</span>
                     </td>
-                    <td>
-                        <span style="font-family: monospace; font-weight: 600;">{{ info.send_time }}</span>
-                        <span class="text-muted text-xs">UTC</span>
+                    <td class="text-sm">
+                        {% for s in slots_meta %}
+                        <div><strong>{{ s.label }}</strong> · {{ s.daily_time }}</div>
+                        {% endfor %}
+                    </td>
+                    <td class="text-sm">
+                        {% for s in slots_meta %}
+                        <div>{{ s.label.split(' ')[0] }}: <strong>{{ info.slot_counts.get(s.key, 0) }}</strong></div>
+                        {% endfor %}
                     </td>
                 </tr>
                 {% if info.weekly_config %}
@@ -74,12 +110,13 @@
                     <td class="text-sm text-muted">Every {{ info.weekly_config.day_of_week }}</td>
                     <td>
                         <span style="font-family: monospace; font-weight: 600;">{{ info.weekly_config.collect_time }}</span>
-                        <span class="text-muted text-xs">UTC</span>
                     </td>
-                    <td>
-                        <span style="font-family: monospace; font-weight: 600;">{{ info.weekly_config.send_time }}</span>
-                        <span class="text-muted text-xs">UTC</span>
+                    <td class="text-sm">
+                        {% for s in slots_meta %}
+                        <div><strong>{{ s.label }}</strong> · {{ s.weekly_monthly_time }}</div>
+                        {% endfor %}
                     </td>
+                    <td class="text-sm text-muted">동일</td>
                 </tr>
                 {% endif %}
                 {% if info.monthly_config %}
@@ -89,12 +126,13 @@
                     <td class="text-sm text-muted">Day {{ info.monthly_config.day_of_month }} of month</td>
                     <td>
                         <span style="font-family: monospace; font-weight: 600;">{{ info.monthly_config.collect_time }}</span>
-                        <span class="text-muted text-xs">UTC</span>
                     </td>
-                    <td>
-                        <span style="font-family: monospace; font-weight: 600;">{{ info.monthly_config.send_time }}</span>
-                        <span class="text-muted text-xs">UTC</span>
+                    <td class="text-sm">
+                        {% for s in slots_meta %}
+                        <div><strong>{{ s.label }}</strong> · {{ s.weekly_monthly_time }}</div>
+                        {% endfor %}
                     </td>
+                    <td class="text-sm text-muted">동일</td>
                 </tr>
                 {% endif %}
             {% endfor %}

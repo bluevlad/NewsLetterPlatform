@@ -60,6 +60,27 @@ def init_db(database_url: str = "sqlite:///./data/newsletterplatform.db") -> Non
     Base.metadata.create_all(bind=_engine)
 
     _migrate_send_history_newsletter_type(_engine)
+    _migrate_subscriber_send_slot(_engine)
+
+
+def _migrate_subscriber_send_slot(engine) -> None:
+    """subscribers 테이블에 send_slot 컬럼 추가 + 기존 행을 'late'로 일괄 배정"""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(subscribers)"))
+            columns = [row[1] for row in result]
+            if "send_slot" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE subscribers ADD COLUMN send_slot VARCHAR(20)"
+                ))
+                # 기존 구독자는 현재 발송 시간(8:20/8:30)에 가장 가까운 'late'(8:40)로 배정
+                conn.execute(text(
+                    "UPDATE subscribers SET send_slot = 'late' WHERE send_slot IS NULL"
+                ))
+                conn.commit()
+                logger.info("subscribers 테이블에 send_slot 컬럼 추가 + 기존 행 'late' 일괄 배정 완료")
+    except Exception as e:
+        logger.debug(f"subscribers send_slot 마이그레이션 스킵: {e}")
 
 
 def _migrate_send_history_newsletter_type(engine) -> None:
@@ -139,6 +160,81 @@ class SubscriberRepository:
         return session.query(Subscriber).filter(
             and_(Subscriber.tenant_id == tenant_id, Subscriber.is_active == True)
         ).all()
+
+    @staticmethod
+    def get_active_by_slot(session: Session, tenant_id: str, slot: str) -> list[Subscriber]:
+        """특정 슬롯에 속한 활성 구독자 (NULL 슬롯은 DEFAULT_SLOT으로 간주)"""
+        from ..scheduler.slots import DEFAULT_SLOT
+        if slot == DEFAULT_SLOT:
+            slot_filter = or_(Subscriber.send_slot == slot, Subscriber.send_slot.is_(None))
+        else:
+            slot_filter = Subscriber.send_slot == slot
+        return session.query(Subscriber).filter(
+            and_(
+                Subscriber.tenant_id == tenant_id,
+                Subscriber.is_active == True,
+                slot_filter,
+            )
+        ).all()
+
+    @staticmethod
+    def count_by_slot(session: Session, tenant_id: str) -> dict:
+        """슬롯별 활성 구독자 수: {'early': N, 'mid': N, 'late': N}"""
+        from ..scheduler.slots import DEFAULT_SLOT, SLOT_KEYS
+        rows = (
+            session.query(Subscriber.send_slot, func.count(Subscriber.id))
+            .filter(
+                and_(
+                    Subscriber.tenant_id == tenant_id,
+                    Subscriber.is_active == True,
+                )
+            )
+            .group_by(Subscriber.send_slot)
+            .all()
+        )
+        result = {key: 0 for key in SLOT_KEYS}
+        for slot, cnt in rows:
+            key = slot if slot in SLOT_KEYS else DEFAULT_SLOT
+            result[key] = result.get(key, 0) + cnt
+        return result
+
+    @staticmethod
+    def bulk_update_slot(session: Session, tenant_id: str,
+                         subscriber_ids: list[int], new_slot: str) -> int:
+        """선택한 구독자들의 슬롯을 일괄 변경. 변경된 행 수 반환"""
+        if not subscriber_ids:
+            return 0
+        updated = (
+            session.query(Subscriber)
+            .filter(
+                and_(
+                    Subscriber.tenant_id == tenant_id,
+                    Subscriber.id.in_(subscriber_ids),
+                )
+            )
+            .update({Subscriber.send_slot: new_slot}, synchronize_session=False)
+        )
+        session.flush()
+        return updated
+
+    @staticmethod
+    def update_slot(session: Session, subscriber_id: int, new_slot: str) -> bool:
+        subscriber = session.query(Subscriber).filter(Subscriber.id == subscriber_id).first()
+        if not subscriber:
+            return False
+        subscriber.send_slot = new_slot
+        session.flush()
+        return True
+
+    @staticmethod
+    def delete(session: Session, subscriber_id: int) -> bool:
+        """구독자 영구 삭제. 삭제되면 True, 없으면 False"""
+        subscriber = session.query(Subscriber).filter(Subscriber.id == subscriber_id).first()
+        if not subscriber:
+            return False
+        session.delete(subscriber)
+        session.flush()
+        return True
 
     @staticmethod
     def get_by_unsubscribe_token(session: Session, token: str) -> Optional[Subscriber]:
