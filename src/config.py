@@ -30,19 +30,19 @@ class Settings(BaseSettings):
     edufit_send_hour: int = Field(default=8, env="EDUFIT_SEND_HOUR")
     edufit_send_minute: int = Field(default=20, env="EDUFIT_SEND_MINUTE")
 
-    # 스케줄러 - EduFit (Weekly: 매주 월요일)
-    edufit_weekly_day_of_week: str = Field(default="mon", env="EDUFIT_WEEKLY_DAY_OF_WEEK")
-    edufit_weekly_collect_hour: int = Field(default=7, env="EDUFIT_WEEKLY_COLLECT_HOUR")
+    # 스케줄러 - EduFit (Weekly: 매주 금요일, 일일 발송 10분 후)
+    edufit_weekly_day_of_week: str = Field(default="fri", env="EDUFIT_WEEKLY_DAY_OF_WEEK")
+    edufit_weekly_collect_hour: int = Field(default=8, env="EDUFIT_WEEKLY_COLLECT_HOUR")
     edufit_weekly_collect_minute: int = Field(default=0, env="EDUFIT_WEEKLY_COLLECT_MINUTE")
-    edufit_weekly_send_hour: int = Field(default=9, env="EDUFIT_WEEKLY_SEND_HOUR")
-    edufit_weekly_send_minute: int = Field(default=0, env="EDUFIT_WEEKLY_SEND_MINUTE")
+    edufit_weekly_send_hour: int = Field(default=8, env="EDUFIT_WEEKLY_SEND_HOUR")
+    edufit_weekly_send_minute: int = Field(default=30, env="EDUFIT_WEEKLY_SEND_MINUTE")
 
-    # 스케줄러 - EduFit (Monthly: 매월 1일)
-    edufit_monthly_day_of_month: int = Field(default=1, env="EDUFIT_MONTHLY_DAY_OF_MONTH")
-    edufit_monthly_collect_hour: int = Field(default=7, env="EDUFIT_MONTHLY_COLLECT_HOUR")
+    # 스케줄러 - EduFit (Monthly: 매월 말일, 일일 발송 10분 후)
+    edufit_monthly_day_of_month: str = Field(default="last", env="EDUFIT_MONTHLY_DAY_OF_MONTH")
+    edufit_monthly_collect_hour: int = Field(default=8, env="EDUFIT_MONTHLY_COLLECT_HOUR")
     edufit_monthly_collect_minute: int = Field(default=0, env="EDUFIT_MONTHLY_COLLECT_MINUTE")
-    edufit_monthly_send_hour: int = Field(default=10, env="EDUFIT_MONTHLY_SEND_HOUR")
-    edufit_monthly_send_minute: int = Field(default=0, env="EDUFIT_MONTHLY_SEND_MINUTE")
+    edufit_monthly_send_hour: int = Field(default=8, env="EDUFIT_MONTHLY_SEND_HOUR")
+    edufit_monthly_send_minute: int = Field(default=30, env="EDUFIT_MONTHLY_SEND_MINUTE")
 
     # 스케줄러 - AllergyInsight (Daily)
     allergy_collect_hour: int = Field(default=7, env="ALLERGY_COLLECT_HOUR")
@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     edufit_api_url: str = Field(
         default="http://localhost:9070/api/v1",
         env="EDUFIT_API_URL"
+    )
+    edufit_jwt_secret: str = Field(
+        default="",
+        env="EDUFIT_JWT_SECRET"
     )
     allergy_insight_api_url: str = Field(
         default="http://localhost:9040",
@@ -104,14 +108,12 @@ class Settings(BaseSettings):
     csrf_allowed_hosts: str = Field(default="", env="CSRF_ALLOWED_HOSTS")
 
     # Admin
-    admin_password: str = Field(default="", env="ADMIN_PASSWORD")
+    admin_password: str = Field(default="dnflskfk", env="ADMIN_PASSWORD")
     admin_session_hours: int = Field(default=24, env="ADMIN_SESSION_HOURS")
 
-    # Google OAuth (Admin 로그인용)
+    # Google Sign-In (Admin 로그인용 - client_id만 필요)
     google_client_id: str = Field(default="", env="GOOGLE_CLIENT_ID")
-    google_client_secret: str = Field(default="", env="GOOGLE_CLIENT_SECRET")
     super_admin_emails: str = Field(default="", env="SUPER_ADMIN_EMAILS")
-    backend_url: str = Field(default="http://localhost:9060", env="BACKEND_URL")
 
     class Config:
         env_file = Path(__file__).parent.parent / ".env"

@@ -4,7 +4,7 @@
 
 import json
 import logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
@@ -14,10 +14,27 @@ from sqlalchemy.orm import sessionmaker, Session
 
 logger = logging.getLogger(__name__)
 
+# KST (UTC+9)
+_KST = timezone(timedelta(hours=9))
+
+
+def _today_start_utc() -> datetime:
+    """KST 기준 오늘 자정을 naive UTC datetime으로 반환
+
+    컨테이너 TZ=Asia/Seoul 환경에서 datetime.utcnow()를 사용하면
+    UTC 자정(=KST 09:00)이 경계가 되어 전일 09:00~당일 08:59 KST가
+    같은 "오늘"로 묶이는 문제가 있다.
+    KST 자정을 UTC로 환산(전일 15:00 UTC)하여 올바른 경계를 사용한다.
+    """
+    now_kst = datetime.now(_KST)
+    midnight_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+    midnight_utc = midnight_kst.astimezone(timezone.utc)
+    return midnight_utc.replace(tzinfo=None)
+
 from .models import (
     Base, Subscriber, SendHistory, CollectedData,
     CollectedDataHistory, EmailVerification, VerificationType,
-    NewsletterType
+    NewsletterType, NewsletterArchive, SentArticle
 )
 
 
@@ -189,14 +206,16 @@ class SendHistoryRepository:
         return history
 
     @staticmethod
-    def already_sent_today(session: Session, tenant_id: str, subscriber_id: int) -> bool:
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    def already_sent_today(session: Session, tenant_id: str, subscriber_id: int,
+                           newsletter_type: str = "daily") -> bool:
+        today_start = _today_start_utc()
         return (
             session.query(SendHistory)
             .filter(
                 and_(
                     SendHistory.tenant_id == tenant_id,
                     SendHistory.subscriber_id == subscriber_id,
+                    SendHistory.newsletter_type == newsletter_type,
                     SendHistory.sent_at >= today_start,
                     SendHistory.is_success == True
                 )
@@ -205,14 +224,16 @@ class SendHistoryRepository:
         )
 
     @staticmethod
-    def get_sent_today_subscriber_ids(session: Session, tenant_id: str) -> set[int]:
-        """당일 발송 완료된 구독자 ID 일괄 조회 (N+1 방지)"""
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    def get_sent_today_subscriber_ids(session: Session, tenant_id: str,
+                                      newsletter_type: str = "daily") -> set[int]:
+        """당일 발송 완료된 구독자 ID 일괄 조회 (N+1 방지, newsletter_type별 분리)"""
+        today_start = _today_start_utc()
         rows = (
             session.query(SendHistory.subscriber_id)
             .filter(
                 and_(
                     SendHistory.tenant_id == tenant_id,
+                    SendHistory.newsletter_type == newsletter_type,
                     SendHistory.sent_at >= today_start,
                     SendHistory.is_success == True
                 )
@@ -225,7 +246,7 @@ class SendHistoryRepository:
     @staticmethod
     def get_today_stats(session: Session, tenant_id: str) -> dict:
         """오늘 발송 통계: {total, success, failed}"""
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = _today_start_utc()
         rows = (
             session.query(
                 SendHistory.is_success,
@@ -305,6 +326,53 @@ class SendHistoryRepository:
                     SendHistory.sent_at >= since,
                 )
             )
+            .group_by(func.date(SendHistory.sent_at))
+            .order_by(func.date(SendHistory.sent_at).desc())
+            .all()
+        )
+        return [
+            {"date": str(row.date), "total": row.total, "success": row.success or 0,
+             "failed": row.total - (row.success or 0)}
+            for row in rows
+        ]
+
+    @staticmethod
+    def get_history_all_paginated(
+        session: Session,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        success_only: Optional[bool] = None,
+        tenant_filter: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[SendHistory], int]:
+        """전체 테넌트 발송 이력 페이지네이션"""
+        query = session.query(SendHistory)
+        if tenant_filter:
+            query = query.filter(SendHistory.tenant_id == tenant_filter)
+        if date_from:
+            query = query.filter(SendHistory.sent_at >= date_from)
+        if date_to:
+            query = query.filter(SendHistory.sent_at < date_to + timedelta(days=1))
+        if success_only is True:
+            query = query.filter(SendHistory.is_success == True)
+        elif success_only is False:
+            query = query.filter(SendHistory.is_success == False)
+        total = query.count()
+        items = query.order_by(SendHistory.sent_at.desc()).offset(offset).limit(limit).all()
+        return items, total
+
+    @staticmethod
+    def get_daily_summary_all(session: Session, days: int = 7) -> list[dict]:
+        """전체 테넌트 최근 N일 일별 발송 요약"""
+        since = datetime.utcnow() - timedelta(days=days)
+        rows = (
+            session.query(
+                func.date(SendHistory.sent_at).label("date"),
+                func.count(SendHistory.id).label("total"),
+                func.sum(func.cast(SendHistory.is_success, Integer)).label("success"),
+            )
+            .filter(SendHistory.sent_at >= since)
             .group_by(func.date(SendHistory.sent_at))
             .order_by(func.date(SendHistory.sent_at).desc())
             .all()
@@ -504,6 +572,72 @@ class CollectedDataRepository:
         ]
 
 
+class NewsletterArchiveRepository:
+    """뉴스레터 아카이브 저장소"""
+
+    @staticmethod
+    def save(session: Session, tenant_id: str, newsletter_type: str,
+             subject: str, html_content: str, sent_date: date = None) -> NewsletterArchive:
+        """아카이브 저장 (같은 tenant/type/date는 덮어쓰기)"""
+        if sent_date is None:
+            sent_date = date.today()
+
+        existing = session.query(NewsletterArchive).filter(
+            and_(
+                NewsletterArchive.tenant_id == tenant_id,
+                NewsletterArchive.newsletter_type == newsletter_type,
+                NewsletterArchive.sent_date == sent_date,
+            )
+        ).first()
+
+        if existing:
+            existing.subject = subject
+            existing.html_content = html_content
+            existing.created_at = datetime.utcnow()
+            session.flush()
+            return existing
+
+        archive = NewsletterArchive(
+            tenant_id=tenant_id,
+            newsletter_type=newsletter_type,
+            subject=subject,
+            html_content=html_content,
+            sent_date=sent_date,
+        )
+        session.add(archive)
+        session.flush()
+        return archive
+
+    @staticmethod
+    def get_list(session: Session, tenant_id: str,
+                 limit: int = 50) -> list[NewsletterArchive]:
+        """아카이브 목록 조회 (최신순)"""
+        return (
+            session.query(NewsletterArchive)
+            .filter(NewsletterArchive.tenant_id == tenant_id)
+            .order_by(NewsletterArchive.sent_date.desc(), NewsletterArchive.newsletter_type.desc())
+            .limit(limit)
+            .all()
+        )
+
+    @staticmethod
+    def get_all_list(session: Session, limit: int = 100) -> list[NewsletterArchive]:
+        """전체 테넌트 아카이브 목록 조회 (최신순)"""
+        return (
+            session.query(NewsletterArchive)
+            .order_by(NewsletterArchive.sent_date.desc(), NewsletterArchive.newsletter_type.desc())
+            .limit(limit)
+            .all()
+        )
+
+    @staticmethod
+    def get_by_id(session: Session, archive_id: int) -> Optional[NewsletterArchive]:
+        """ID로 아카이브 조회"""
+        return session.query(NewsletterArchive).filter(
+            NewsletterArchive.id == archive_id
+        ).first()
+
+
 class EmailVerificationRepository:
     """이메일 인증 저장소"""
 
@@ -557,3 +691,86 @@ class EmailVerificationRepository:
         if verification_type:
             query = query.filter(EmailVerification.verification_type == verification_type)
         query.delete()
+
+
+class SentArticleRepository:
+    """발송 기사 이력 저장소 (교차일 dedup 용)
+
+    동일 테넌트에서 최근 N일 내 이미 발송된 기사 ID 를 조회하여
+    수집/선정 단계에서 제외(exclude_ids)하기 위한 저장소.
+    `UNIQUE(tenant_id, article_id, section, sent_date)` 로 멱등 보장.
+    """
+
+    @staticmethod
+    def list_recent_article_ids(session: Session, tenant_id: str,
+                                days: int = 7) -> list[int]:
+        """최근 N일(KST 기준) 내 해당 테넌트에서 발송된 article_id 목록.
+
+        Returns:
+            중복 제거된 article_id 리스트 (sent_at DESC 순).
+        """
+        cutoff = _today_start_utc() - timedelta(days=days)
+        rows = (
+            session.query(SentArticle.article_id)
+            .filter(
+                and_(
+                    SentArticle.tenant_id == tenant_id,
+                    SentArticle.sent_at >= cutoff,
+                )
+            )
+            .order_by(SentArticle.sent_at.desc())
+            .distinct()
+            .all()
+        )
+        return [row[0] for row in rows]
+
+    @staticmethod
+    def record_sent_articles(session: Session, tenant_id: str,
+                             sent_date: date,
+                             entries: list[tuple[int, Optional[str], str]]) -> int:
+        """발송된 기사 이력을 기록 (멱등: 중복 키는 무시).
+
+        Args:
+            entries: [(article_id, article_url, section), ...]
+
+        Returns:
+            실제로 신규 INSERT 된 건수.
+        """
+        if not entries:
+            return 0
+
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+        payload = [
+            {
+                "tenant_id": tenant_id,
+                "article_id": aid,
+                "article_url": url,
+                "section": section,
+                "sent_date": sent_date,
+            }
+            for aid, url, section in entries
+            if aid is not None and section
+        ]
+        if not payload:
+            return 0
+        stmt = sqlite_insert(SentArticle).values(payload)
+        stmt = stmt.on_conflict_do_nothing(
+            index_elements=["tenant_id", "article_id", "section", "sent_date"]
+        )
+        result = session.execute(stmt)
+        return result.rowcount or 0
+
+    @staticmethod
+    def purge_older_than(session: Session, days: int = 90) -> int:
+        """보존 기간(기본 90일) 초과 이력 삭제. 주간 cron 용.
+
+        Returns:
+            삭제된 행 수.
+        """
+        cutoff = _today_start_utc() - timedelta(days=days)
+        deleted = (
+            session.query(SentArticle)
+            .filter(SentArticle.sent_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        return int(deleted or 0)

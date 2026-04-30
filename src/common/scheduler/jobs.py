@@ -13,7 +13,8 @@ from apscheduler.triggers.cron import CronTrigger
 
 from ..database.repository import (
     get_session, CollectedDataRepository,
-    SubscriberRepository, SendHistoryRepository
+    SubscriberRepository, SendHistoryRepository,
+    NewsletterArchiveRepository, SentArticleRepository
 )
 from ..delivery.gmail_sender import get_sender
 from ..template.renderer import get_renderer
@@ -32,9 +33,9 @@ def _get_period_range(newsletter_type: str) -> tuple[date, date]:
     """
     today = date.today()
     if newsletter_type == "weekly":
-        # 최근 7일 (어제까지)
-        date_to = today - timedelta(days=1)
-        date_from = today - timedelta(days=7)
+        # 이번 주 월요일~오늘 (금요일 발송 기준)
+        date_from = today - timedelta(days=today.weekday())  # 월요일
+        date_to = today
         return date_from, date_to
     elif newsletter_type == "monthly":
         if today.day == 1:
@@ -42,9 +43,9 @@ def _get_period_range(newsletter_type: str) -> tuple[date, date]:
             date_to = today - timedelta(days=1)
             date_from = date_to.replace(day=1)
         else:
-            # 말일 발송: 이번달 1일~어제
+            # 말일 발송: 이번달 1일~오늘
             date_from = today.replace(day=1)
-            date_to = today - timedelta(days=1)
+            date_to = today
         return date_from, date_to
     else:
         # daily: 오늘
@@ -52,19 +53,28 @@ def _get_period_range(newsletter_type: str) -> tuple[date, date]:
 
 
 def _get_period_start_for_dedup(newsletter_type: str) -> datetime:
-    """중복 방지용 기간 시작 시각 계산"""
-    today = date.today()
+    """중복 방지용 기간 시작 시각 계산 (KST 기준 → naive UTC 반환)
+
+    sent_at이 UTC로 저장되므로, KST 기준 기간 시작을 UTC로 환산하여 반환한다.
+    """
+    from datetime import timezone
+    KST = timezone(timedelta(hours=9))
+    now_kst = datetime.now(KST)
+    today = now_kst.date()
+
     if newsletter_type == "weekly":
-        # 이번주 월요일 00:00
+        # 이번주 월요일 00:00 KST → UTC
         monday = today - timedelta(days=today.weekday())
-        return datetime.combine(monday, datetime.min.time())
+        start_kst = datetime.combine(monday, datetime.min.time()).replace(tzinfo=KST)
     elif newsletter_type == "monthly":
-        # 이번달 1일 00:00
+        # 이번달 1일 00:00 KST → UTC
         first = today.replace(day=1)
-        return datetime.combine(first, datetime.min.time())
+        start_kst = datetime.combine(first, datetime.min.time()).replace(tzinfo=KST)
     else:
-        # daily: 오늘 00:00
-        return datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        # daily: 오늘 00:00 KST → UTC
+        start_kst = datetime.combine(today, datetime.min.time()).replace(tzinfo=KST)
+
+    return start_kst.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
@@ -80,7 +90,22 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
 
     try:
         if newsletter_type == "daily":
-            collected = asyncio.run(tenant.collect_data())
+            # dedup 활성 테넌트는 최근 발송 이력을 exclude_ids 로 전달하여
+            # 수집/선정 단계에서 원천 제외.
+            recent_ids: list[int] = []
+            if tenant.dedup_recent_days:
+                with get_session() as session:
+                    recent_ids = SentArticleRepository.list_recent_article_ids(
+                        session, tenant_id, days=tenant.dedup_recent_days
+                    )
+                if recent_ids:
+                    logger.info(
+                        f"[{tenant_id}] dedup: 최근 {tenant.dedup_recent_days}일 "
+                        f"발송 기사 {len(recent_ids)}건 제외 대상"
+                    )
+            collected = asyncio.run(
+                tenant.collect_data(exclude_ids=recent_ids or None)
+            )
         else:
             # weekly/monthly: 요약 데이터 수집
             date_from, date_to = _get_period_range(newsletter_type)
@@ -122,10 +147,21 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
     update_health("collect")
 
 
-def run_send_job(tenant_id: str, newsletter_type: str = "daily") -> None:
-    """뉴스레터 발송 작업 (배치 발송 + 실패 재시도)"""
+def run_send_job(
+    tenant_id: str, newsletter_type: str = "daily", manual: bool = False
+) -> None:
+    """뉴스레터 발송 작업 (배치 발송 + 실패 재시도)
+
+    Args:
+        manual: True이면 수동 발송 모드 — dedup 스킵, newsletter_type="manual"로 이력 저장.
+                자동 스케줄 발송 이력(daily/weekly/monthly)에 영향을 주지 않는다.
+    """
+    # 이력 저장용 타입: manual이면 "manual", 아니면 원래 newsletter_type
+    history_type = "manual" if manual else newsletter_type
+    mode_label = "[manual]" if manual else ""
     type_label = f"[{newsletter_type}]" if newsletter_type != "daily" else ""
-    logger.info(f"[{tenant_id}]{type_label} 뉴스레터 발송 시작")
+    log_prefix = f"[{tenant_id}]{mode_label}{type_label}"
+    logger.info(f"{log_prefix} 뉴스레터 발송 시작")
 
     registry = get_registry()
     tenant = registry.get(tenant_id)
@@ -155,12 +191,27 @@ def run_send_job(tenant_id: str, newsletter_type: str = "daily") -> None:
         if context is None:
             return
 
-        # HTML 렌더링
-        try:
-            html_content = renderer.render(template_name, context)
-        except Exception as e:
-            logger.error(f"[{tenant_id}]{type_label} 템플릿 렌더링 실패: {e}")
-            return
+        # pre-rendered HTML이 있으면 템플릿 렌더링 스킵
+        if "prerendered_html" in context:
+            html_content = context["prerendered_html"]
+            logger.info(f"{log_prefix} pre-rendered HTML 사용 (템플릿 렌더링 스킵)")
+        else:
+            # HTML 렌더링
+            try:
+                html_content = renderer.render(template_name, context)
+            except Exception as e:
+                logger.error(f"{log_prefix} 템플릿 렌더링 실패: {e}")
+                return
+
+        # 아카이브 저장 (수동 발송은 아카이브 생략 — 동일 날짜 중복 방지)
+        if not manual:
+            try:
+                NewsletterArchiveRepository.save(
+                    session, tenant_id, newsletter_type, subject, html_content
+                )
+                logger.info(f"{log_prefix} 아카이브 저장 완료")
+            except Exception as e:
+                logger.warning(f"{log_prefix} 아카이브 저장 실패 (발송은 계속): {e}")
 
         # 구독자 조회
         subscribers = SubscriberRepository.get_all_active(session, tenant_id)
@@ -169,23 +220,25 @@ def run_send_job(tenant_id: str, newsletter_type: str = "daily") -> None:
             logger.warning(f"[{tenant_id}] 등록된 구독자가 없습니다.")
             return
 
-        # 중복 방지: 주기별 발송 완료된 구독자 조회
-        if newsletter_type == "daily":
-            sent_ids = SendHistoryRepository.get_sent_today_subscriber_ids(
-                session, tenant_id
-            )
-        else:
-            period_start = _get_period_start_for_dedup(newsletter_type)
-            sent_ids = SendHistoryRepository.get_sent_subscriber_ids_for_period(
-                session, tenant_id, newsletter_type, period_start
-            )
+        # 중복 방지: 수동 발송은 dedup 스킵
+        sent_ids: set[int] = set()
+        if not manual:
+            if newsletter_type == "daily":
+                sent_ids = SendHistoryRepository.get_sent_today_subscriber_ids(
+                    session, tenant_id, newsletter_type="daily"
+                )
+            else:
+                period_start = _get_period_start_for_dedup(newsletter_type)
+                sent_ids = SendHistoryRepository.get_sent_subscriber_ids_for_period(
+                    session, tenant_id, newsletter_type, period_start
+                )
 
         # 발송 대상 메시지 리스트 구성
         messages = []
         target_subscribers = []
         for subscriber in subscribers:
             if subscriber.id in sent_ids:
-                logger.debug(f"[{tenant_id}]{type_label} 이미 발송됨: {subscriber.email}")
+                logger.debug(f"{log_prefix} 이미 발송됨: {subscriber.email}")
                 continue
 
             unsubscribe_url = (
@@ -203,31 +256,31 @@ def run_send_job(tenant_id: str, newsletter_type: str = "daily") -> None:
             target_subscribers.append(subscriber)
 
         if not messages:
-            logger.info(f"[{tenant_id}]{type_label} 발송 대상이 없습니다 (모두 발송 완료).")
+            logger.info(f"{log_prefix} 발송 대상이 없습니다 (모두 발송 완료).")
             update_health("send")
             return
 
         # 1차 배치 발송
         results = sender.send_batch_efficient(messages)
 
-        # 1차 결과 기록
+        # 1차 결과 기록 (history_type으로 저장하여 자동/수동 이력 분리)
         failed_items = []
         sent_count = 0
         for subscriber, msg, result in zip(target_subscribers, messages, results):
             SendHistoryRepository.create(
                 session, tenant_id, subscriber.id,
                 subject, result.success, result.error_message,
-                newsletter_type=newsletter_type
+                newsletter_type=history_type
             )
             if result.success:
                 sent_count += 1
             else:
                 failed_items.append((subscriber, msg))
-                logger.error(f"[{tenant_id}]{type_label} 발송 실패: {subscriber.email} - {result.error_message}")
+                logger.error(f"{log_prefix} 발송 실패: {subscriber.email} - {result.error_message}")
 
         # 2차 재시도 (실패 건)
         if failed_items:
-            logger.info(f"[{tenant_id}]{type_label} {len(failed_items)}건 재시도 (5초 후)")
+            logger.info(f"{log_prefix} {len(failed_items)}건 재시도 (5초 후)")
             time.sleep(5)
 
             retry_messages = [msg for _, msg in failed_items]
@@ -238,16 +291,35 @@ def run_send_job(tenant_id: str, newsletter_type: str = "daily") -> None:
                     SendHistoryRepository.create(
                         session, tenant_id, subscriber.id,
                         subject, True, None,
-                        newsletter_type=newsletter_type
+                        newsletter_type=history_type
                     )
                     sent_count += 1
-                    logger.info(f"[{tenant_id}]{type_label} 재시도 발송 성공: {subscriber.email}")
+                    logger.info(f"{log_prefix} 재시도 발송 성공: {subscriber.email}")
                 else:
                     logger.error(
-                        f"[{tenant_id}]{type_label} 재시도 발송 실패: {subscriber.email} - {retry_result.error_message}"
+                        f"{log_prefix} 재시도 발송 실패: {subscriber.email} - {retry_result.error_message}"
                     )
 
-    logger.info(f"[{tenant_id}]{type_label} 뉴스레터 발송 완료: {sent_count}/{len(messages)}건")
+        # dedup: 발송 성공 기사 이력 기록 (자동 daily 발송만, 수동은 제외)
+        if (
+            sent_count >= 1
+            and not manual
+            and newsletter_type == "daily"
+            and tenant.dedup_recent_days
+        ):
+            try:
+                entries = tenant.extract_sent_article_entries(context)
+                if entries:
+                    inserted = SentArticleRepository.record_sent_articles(
+                        session, tenant_id, date.today(), entries
+                    )
+                    logger.info(
+                        f"{log_prefix} sent_articles 기록: {inserted}/{len(entries)}건"
+                    )
+            except Exception as e:
+                logger.warning(f"{log_prefix} sent_articles 기록 실패: {e}")
+
+    logger.info(f"{log_prefix} 뉴스레터 발송 완료: {sent_count}/{len(messages)}건")
     update_health("send")
 
 
@@ -349,7 +421,9 @@ def send_welcome_newsletter(tenant_id: str, email: str) -> bool:
                 logger.warning(f"[{tenant_id}] 구독자를 찾을 수 없습니다: {email}")
                 return False
 
-            if SendHistoryRepository.already_sent_today(session, tenant_id, subscriber.id):
+            if SendHistoryRepository.already_sent_today(
+                session, tenant_id, subscriber.id, newsletter_type="daily"
+            ):
                 logger.info(f"[{tenant_id}] 이미 오늘 발송됨, 웰컴 건너뜀: {email}")
                 return True
 
@@ -391,6 +465,116 @@ def send_welcome_newsletter(tenant_id: str, email: str) -> bool:
     except Exception as e:
         logger.exception(f"[{tenant_id}] 웰컴 뉴스레터 발송 중 오류: {e}")
         return False
+
+
+def run_adhoc_send(
+    tenant_id: str,
+    subject: str,
+    html_content: str,
+    subscriber_ids: list[int] | None = None,
+) -> dict:
+    """긴급/이벤트성 뉴스레터 즉시 발송 (adhoc)
+
+    - daily/weekly/monthly 중복 체크와 완전히 분리
+    - 같은 날 동일 제목의 adhoc은 중복 방지
+    - subscriber_ids가 None이면 전체 활성 구독자에게 발송
+
+    Returns:
+        {"total": int, "success": int, "failed": int, "skipped": int}
+    """
+    logger.info(f"[{tenant_id}][adhoc] 긴급/이벤트 뉴스레터 발송 시작: {subject}")
+
+    sender = get_sender()
+    if not sender.is_configured:
+        logger.warning(f"[{tenant_id}][adhoc] Gmail 설정이 완료되지 않아 발송을 건너뜁니다.")
+        return {"total": 0, "success": 0, "failed": 0, "skipped": 0}
+
+    result = {"total": 0, "success": 0, "failed": 0, "skipped": 0}
+
+    with get_session() as session:
+        # 아카이브 저장
+        try:
+            NewsletterArchiveRepository.save(
+                session, tenant_id, "adhoc", subject, html_content
+            )
+            logger.info(f"[{tenant_id}][adhoc] 아카이브 저장 완료")
+        except Exception as e:
+            logger.warning(f"[{tenant_id}][adhoc] 아카이브 저장 실패 (발송은 계속): {e}")
+
+        # 구독자 조회
+        if subscriber_ids:
+            subscribers = [
+                SubscriberRepository.get_by_id(session, sid)
+                for sid in subscriber_ids
+            ]
+            subscribers = [s for s in subscribers if s and s.is_active]
+        else:
+            subscribers = SubscriberRepository.get_all_active(session, tenant_id)
+
+        if not subscribers:
+            logger.warning(f"[{tenant_id}][adhoc] 발송 대상 구독자가 없습니다.")
+            return result
+
+        result["total"] = len(subscribers)
+
+        # adhoc 중복 방지: 오늘 같은 adhoc 타입으로 이미 발송된 구독자
+        sent_ids = SendHistoryRepository.get_sent_today_subscriber_ids(
+            session, tenant_id, newsletter_type="adhoc"
+        )
+
+        registry = get_registry()
+        tenant = registry.get(tenant_id)
+        display_name = tenant.display_name if tenant else tenant_id
+
+        messages = []
+        target_subscribers = []
+        for subscriber in subscribers:
+            if subscriber.id in sent_ids:
+                logger.debug(f"[{tenant_id}][adhoc] 이미 발송됨: {subscriber.email}")
+                result["skipped"] += 1
+                continue
+
+            unsubscribe_url = (
+                f"{settings.web_base_url}/{tenant_id}"
+                f"/unsubscribe/token/{subscriber.unsubscribe_token}"
+            )
+            subscriber_html = html_content.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
+
+            messages.append({
+                "recipient": subscriber.email,
+                "subject": subject,
+                "html_content": subscriber_html,
+                "sender_name": display_name,
+            })
+            target_subscribers.append(subscriber)
+
+        if not messages:
+            logger.info(f"[{tenant_id}][adhoc] 발송 대상이 없습니다 (모두 발송 완료).")
+            return result
+
+        # 배치 발송
+        send_results = sender.send_batch_efficient(messages)
+
+        for subscriber, send_result in zip(target_subscribers, send_results):
+            SendHistoryRepository.create(
+                session, tenant_id, subscriber.id,
+                subject, send_result.success, send_result.error_message,
+                newsletter_type="adhoc"
+            )
+            if send_result.success:
+                result["success"] += 1
+            else:
+                result["failed"] += 1
+                logger.error(
+                    f"[{tenant_id}][adhoc] 발송 실패: {subscriber.email} - {send_result.error_message}"
+                )
+
+    logger.info(
+        f"[{tenant_id}][adhoc] 발송 완료: "
+        f"성공 {result['success']}/{result['total']}건, "
+        f"실패 {result['failed']}건, 스킵 {result['skipped']}건"
+    )
+    return result
 
 
 def register_all_jobs(scheduler: BlockingScheduler) -> None:

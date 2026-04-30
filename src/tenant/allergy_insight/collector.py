@@ -4,13 +4,19 @@ AllergyInsight Backend API v2.0.0 호출
 
 API Endpoints:
   - POST /api/auth/simple/login → JWT 토큰 획득
-  - GET  /api/admin/news → 뉴스 목록 (Bearer 인증)
+  - GET  /api/admin/news → 뉴스 전체 목록 (Bearer 인증, 주간/월간용)
   - GET  /api/admin/news/stats → 뉴스 통계 (Bearer 인증)
   - GET  /api/papers → 논문 목록 (공개)
+
+Redesign Phase 1 endpoints (NEWSLETTER_REDESIGN_SPEC §3.2):
+  - GET  /api/public/analytics/headlines/today → 핵심 헤드라인 Top-N (P1 구현 완료)
+  - GET  /api/public/analytics/company-digest → 기업 동향 다이제스트 (P1 구현 완료)
+  - GET  /api/public/drugs/updates → 약물 업데이트 (P2 예정)
+  - GET  /api/public/analytics/weekly-metrics → 주간 메트릭 (P3 예정)
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional
 
 import httpx
@@ -53,7 +59,12 @@ class AllergyInsightCollector:
         logger.info("AllergyInsight JWT 토큰 획득 완료")
         return token
 
-    async def _get(self, path: str, auth_required: bool = True) -> Any:
+    async def _get(
+        self,
+        path: str,
+        auth_required: bool = True,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Any:
         """API GET 요청 (3회 재시도)"""
         url = f"{self.api_base_url}{path}"
         headers = {}
@@ -62,14 +73,42 @@ class AllergyInsightCollector:
 
         async def _request():
             async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
-                response = await client.get(url, headers=headers)
+                response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
                 return response.json()
 
         return await retry_async(_request)
 
+    async def _post(
+        self,
+        path: str,
+        auth_required: bool = True,
+        json_body: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """API POST 요청 (3회 재시도). 대량 exclude_ids 전달 등 GET 길이 한계 대응용."""
+        url = f"{self.api_base_url}{path}"
+        headers = {}
+        if auth_required and self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        async def _request():
+            async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+                response = await client.post(url, headers=headers, json=json_body)
+                response.raise_for_status()
+                return response.json()
+
+        return await retry_async(_request)
+
+    @staticmethod
+    def _unwrap(payload: Any) -> Dict[str, Any]:
+        """{ data: ..., meta: ... } 래핑된 응답에서 data 본체만 추출. 래핑이 없으면 원본 유지."""
+        if isinstance(payload, dict) and "data" in payload:
+            inner = payload.get("data")
+            return inner if isinstance(inner, dict) else {}
+        return payload if isinstance(payload, dict) else {}
+
     async def _collect_news(self, page_size: int = 100) -> list[dict]:
-        """뉴스 목록 수집 - GET /api/admin/news"""
+        """뉴스 전체 목록 수집 (주간/월간용) - GET /api/admin/news"""
         data = await self._get(f"/api/admin/news?page=1&page_size={page_size}")
         return data.get("items", [])
 
@@ -84,6 +123,177 @@ class AllergyInsightCollector:
             auth_required=False,
         )
         return data.get("items", [])
+
+    # ─────────────────────────────────────────────────────────────
+    # Redesign Phase 1 endpoints (fail-safe: 실패 시 빈 구조 반환)
+    # Spec: NEWSLETTER_REDESIGN_SPEC.md §3.2, §4.1
+    # ─────────────────────────────────────────────────────────────
+
+    # GET URL 대략 안전선 — 1800 bytes 초과 예상 시 POST alias 로 전환.
+    _GET_EXCLUDE_IDS_BUDGET = 1800
+
+    async def _collect_headlines_today(
+        self,
+        limit: int = 5,
+        exclude_ids: Optional[list[int]] = None,
+    ) -> Dict[str, Any]:
+        """오늘의 핵심 헤드라인 Top-N 수집 (1기업 1헤드라인).
+
+        exclude_ids: 최근 발송 이력. 풀에서 원천 제외하여 반복 발송 차단.
+        대량(약 200+) 전달 시 GET URL 길이 한계 대응으로 POST alias 로 자동 전환.
+
+        Returns:
+            {"headlines": [...], "excluded_ids": [int, ...]}
+            백엔드 미구현/오류 시 모두 빈 리스트.
+        """
+        exclude_ids = [int(i) for i in (exclude_ids or [])]
+        exclude_csv = ",".join(str(i) for i in exclude_ids)
+        try:
+            if exclude_csv and len(exclude_csv) > self._GET_EXCLUDE_IDS_BUDGET:
+                logger.info(
+                    f"AllergyInsight 헤드라인: exclude_ids={len(exclude_ids)}건 → POST alias 사용"
+                )
+                raw = await self._post(
+                    "/api/public/analytics/headlines/today:select",
+                    auth_required=False,
+                    json_body={
+                        "limit": limit,
+                        "one_per_company": True,
+                        "fallback_days": [1, 2],
+                        "exclude_ids": exclude_ids,
+                    },
+                )
+            else:
+                params: Dict[str, Any] = {
+                    "limit": limit,
+                    "one_per_company": "true",
+                    "fallback_days": "1,2",
+                }
+                if exclude_csv:
+                    params["exclude_ids"] = exclude_csv
+                raw = await self._get(
+                    "/api/public/analytics/headlines/today",
+                    auth_required=False,
+                    params=params,
+                )
+            body = self._unwrap(raw)
+            headlines = body.get("headlines", []) or []
+            excluded_ids = body.get("excluded_ids", []) or []
+            logger.info(
+                f"AllergyInsight 헤드라인 수집 완료: {len(headlines)}건 "
+                f"(exclude {len(exclude_ids)})"
+            )
+            return {"headlines": headlines, "excluded_ids": excluded_ids}
+        except Exception as e:
+            logger.warning(
+                f"AllergyInsight 헤드라인 수집 실패 (빈 구조 폴백): {e}"
+            )
+            return {"headlines": [], "excluded_ids": []}
+
+    async def _collect_company_digest(
+        self,
+        days: int = 7,
+        exclude_ids: Optional[list[int]] = None,
+    ) -> list[dict]:
+        """기업 동향 다이제스트 수집 (headlines에 선정된 기사는 제외).
+
+        Returns:
+            [{"company_name", "count_7d", "avg_importance", "representative", "categories"}, ...]
+            실패 시 빈 리스트.
+        """
+        try:
+            params: Dict[str, Any] = {"days": days, "limit_per_company": 1}
+            if exclude_ids:
+                params["exclude_ids"] = ",".join(str(i) for i in exclude_ids)
+            raw = await self._get(
+                "/api/public/analytics/company-digest",
+                auth_required=False,
+                params=params,
+            )
+            body = self._unwrap(raw)
+            companies = body.get("companies", []) or []
+            logger.info(
+                f"AllergyInsight 기업 다이제스트 수집 완료: {len(companies)}건 "
+                f"(exclude {len(exclude_ids or [])})"
+            )
+            return companies
+        except Exception as e:
+            logger.warning(
+                f"AllergyInsight 기업 다이제스트 수집 실패 (빈 리스트 폴백): {e}"
+            )
+            return []
+
+    async def _collect_drug_updates(self, days: int = 7) -> Dict[str, Any]:
+        """약물·처방제 업데이트 수집 (openFDA + MFDS).
+
+        Returns:
+            {"new_approvals": [], "label_changes": [], "blackbox_warnings": [],
+             "recalls": [], "total": int}
+            실패 시 total=0 빈 구조. 템플릿이 total=0 이면 섹션 자동 숨김.
+        """
+        empty = {
+            "new_approvals": [],
+            "label_changes": [],
+            "blackbox_warnings": [],
+            "recalls": [],
+            "total": 0,
+        }
+        try:
+            raw = await self._get(
+                "/api/public/drugs/updates",
+                auth_required=False,
+                params={"days": days, "type": "all"},
+            )
+            body = self._unwrap(raw)
+            result = {
+                "new_approvals": body.get("new_approvals", []) or [],
+                "label_changes": body.get("label_changes", []) or [],
+                "blackbox_warnings": body.get("blackbox_warnings", []) or [],
+                "recalls": body.get("recalls", []) or [],
+            }
+            result["total"] = (
+                len(result["new_approvals"])
+                + len(result["label_changes"])
+                + len(result["blackbox_warnings"])
+                + len(result["recalls"])
+            )
+            logger.info(
+                f"AllergyInsight 약물 업데이트 수집 완료: total={result['total']}"
+            )
+            return result
+        except Exception as e:
+            logger.warning(
+                f"AllergyInsight 약물 업데이트 수집 실패 (빈 구조 폴백): {e}"
+            )
+            return empty
+
+    async def _collect_weekly_metrics(
+        self, report_date: Optional[str] = None, window_days: int = 7
+    ) -> Dict[str, Any]:
+        """주간 브리핑 메트릭 수집 (월요일 daily 또는 weekly/monthly 발송에 포함).
+
+        Returns:
+            {"period": {...}, "category_trend_7d": [...], "top_keywords": [...],
+             "top_companies": [...], "drug_updates_summary": {...}}
+            실패 시 빈 dict. 템플릿이 falsy 체크로 섹션 숨김.
+        """
+        try:
+            params: Dict[str, Any] = {"window_days": window_days}
+            if report_date:
+                params["report_date"] = report_date
+            raw = await self._get(
+                "/api/public/analytics/weekly-metrics",
+                auth_required=False,
+                params=params,
+            )
+            body = self._unwrap(raw)
+            logger.info("AllergyInsight 주간 메트릭 수집 완료")
+            return body or {}
+        except Exception as e:
+            logger.warning(
+                f"AllergyInsight 주간 메트릭 수집 실패 (빈 dict 폴백): {e}"
+            )
+            return {}
 
     def _transform_news(self, raw_items: list[dict]) -> list[dict]:
         """v2.0.0 뉴스 아이템 → daily_report top_news 포맷 변환"""
@@ -186,62 +396,85 @@ class AllergyInsightCollector:
             })
         return result
 
-    async def collect_daily_report(self) -> Dict:
-        """일일 리포트 수집 — 로그인 후 뉴스+논문+통계 조합"""
+    async def collect_daily_report(
+        self, exclude_ids: Optional[list[int]] = None
+    ) -> Dict:
+        """일일 리포트 수집.
+
+        Phase 1 전환 완료: 신규 재구성 섹션(top_headlines/company_digest)을 주 경로로 사용.
+        Spec: NEWSLETTER_REDESIGN_SPEC §4.2
+
+        Args:
+            exclude_ids: NewsLetterPlatform `sent_articles` 최근 N일 기사 ID.
+                헤드라인·company_digest 양쪽에서 풀 단계에서 원천 제외.
+        """
+        recent_excl = list(exclude_ids or [])
         try:
-            # 1. JWT 토큰 획득
-            await self._login()
+            # 1. 핵심 헤드라인 수집 (공개 API, 1기업 1헤드라인)
+            headlines_payload = await self._collect_headlines_today(
+                limit=5, exclude_ids=recent_excl
+            )
+            top_headlines = headlines_payload.get("headlines", [])
+            excluded_ids = headlines_payload.get("excluded_ids", [])
 
-            # 2. 데이터 수집
-            raw_news = await self._collect_news()
-            raw_stats = await self._collect_news_stats()
-            raw_papers = await self._collect_papers()
+            # 2. 기업 동향 다이제스트 (헤드라인 선정분 + 최근 발송 이력 동시 제외)
+            digest_excl = sorted({*excluded_ids, *recent_excl})
+            company_digest = await self._collect_company_digest(
+                days=7, exclude_ids=digest_excl
+            )
 
-            # 3. 포맷 변환
-            news_items = self._transform_news(raw_news)
+            # 3. 논문 수집 (공개 API)
+            raw_papers = await self._collect_papers(page_size=20)
             paper_items = self._transform_papers(raw_papers)
 
-            # 중요도 순 정렬 (top_news)
-            scored = [n for n in news_items if n.get("importance_score")]
-            unscored = [n for n in news_items if not n.get("importance_score")]
-            scored.sort(
-                key=lambda x: x.get("importance_score", 0) or 0,
-                reverse=True,
-            )
-            top_news = scored + unscored
+            # 4. 통계 수집 (인증 필요 — 실패 시 기본값 사용)
+            raw_stats = {}
+            try:
+                await self._login()
+                raw_stats = await self._collect_news_stats()
+            except Exception as e:
+                logger.warning(f"뉴스 통계 수집 실패 (기본값 사용): {e}")
 
-            # 뉴스 그룹 (카테고리별)
-            news_groups = self._build_news_groups(news_items)
+            # 5. 약물 업데이트 (P2 — 현재는 빈 구조 폴백)
+            drug_updates = await self._collect_drug_updates(days=7)
 
-            # 기업 뉴스
-            company_news = self._build_company_news(news_items)
+            # 6. 주간 메트릭은 월요일 daily에만 포함 (spec §4.6 옵션 A)
+            weekly_metrics: Dict[str, Any] = {}
+            if date.today().weekday() == 0:
+                weekly_metrics = await self._collect_weekly_metrics()
 
             now = datetime.now(timezone.utc).isoformat()
 
             report = {
                 "report_date": now,
                 "generated_at": now,
-                "top_news": top_news[:20],
-                "news_groups": news_groups,
+                "top_headlines": top_headlines,
+                "company_digest": company_digest,
                 "papers": paper_items[:20],
-                "company_news": company_news,
+                "drug_updates": drug_updates,
+                "weekly_metrics": weekly_metrics,
                 "stats": {
-                    "news_count": raw_stats.get("total_news", len(news_items)),
-                    "paper_count": len(paper_items),
-                    "company_count": len(company_news),
-                    "total_count": (
-                        raw_stats.get("total_news", len(news_items))
-                        + len(paper_items)
-                        + len(company_news)
+                    "news_count": raw_stats.get(
+                        "total_news", len(top_headlines)
                     ),
-                    "trend_company_count": len(company_news),
+                    "paper_count": len(paper_items),
+                    "company_count": len(company_digest),
+                    "drug_count": drug_updates.get("total", 0),
+                    "total_count": (
+                        raw_stats.get("total_news", len(top_headlines))
+                        + len(paper_items)
+                        + len(company_digest)
+                    ),
+                    "trend_company_count": len(company_digest),
                 },
             }
 
             logger.info(
                 f"AllergyInsight 일일 리포트 수집 완료: "
-                f"뉴스 {len(news_items)}건, 논문 {len(paper_items)}건, "
-                f"기업 {len(company_news)}건"
+                f"헤드라인 {len(top_headlines)}건, "
+                f"기업다이제스트 {len(company_digest)}건, "
+                f"논문 {len(paper_items)}건, "
+                f"약물 {drug_updates.get('total', 0)}건"
             )
             return report
 
@@ -249,11 +482,17 @@ class AllergyInsightCollector:
             logger.error(f"AllergyInsight 일일 리포트 수집 실패: {e}")
             return {}
 
-    async def collect_all(self) -> Dict[str, Any]:
-        """전체 데이터 수집"""
+    async def collect_all(
+        self, exclude_ids: Optional[list[int]] = None
+    ) -> Dict[str, Any]:
+        """전체 데이터 수집.
+
+        Args:
+            exclude_ids: 최근 발송 이력 — daily 리포트 수집에 전달.
+        """
         result = {}
 
-        daily_report = await self.collect_daily_report()
+        daily_report = await self.collect_daily_report(exclude_ids=exclude_ids)
         if daily_report:
             result["daily_report"] = daily_report
 

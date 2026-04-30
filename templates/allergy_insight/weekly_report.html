@@ -241,6 +241,57 @@
         </tr>
         {% endif %}
 
+        <!-- Section 6.5: Weekly Metrics (Phase 1 신규, 백엔드 /weekly-metrics 준비 시 자동 렌더) -->
+        {% if weekly_metrics and (weekly_metrics.top_keywords or weekly_metrics.top_companies or weekly_metrics.category_trend_7d or weekly_metrics.drug_updates_summary) %}
+        <tr>
+            <td style="padding: 25px 30px 10px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #5e35b1; color: #4527a0; font-size: 19px;">
+                    📈 Weekly Metrics
+                    {% if weekly_metrics.period %}
+                    <span style="color: #888888; font-size: 12px; font-weight: normal; margin-left: 8px;">{{ weekly_metrics.period.start }} ~ {{ weekly_metrics.period.end }}</span>
+                    {% endif %}
+                </h2>
+
+                {% if weekly_metrics.top_keywords %}
+                <p style="margin: 8px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">🔥 Hot Keywords</p>
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 12px;">
+                    {% for kw in weekly_metrics.top_keywords[:10] %}
+                    <tr>
+                        <td style="padding: 4px 0; color: #263238; font-size: 13px;">
+                            <span style="color: #4527a0; font-weight: 500;">{{ kw.keyword }}</span>
+                            <span style="color: #888888; font-size: 11px; margin-left: 6px;">{{ kw.count }}건</span>
+                            {% if kw.delta_pct is defined and kw.delta_pct %}<span style="color: #e53935; font-size: 11px; margin-left: 4px;">+{{ kw.delta_pct }}%</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+
+                {% if weekly_metrics.top_companies %}
+                <p style="margin: 10px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">🏢 Top Companies</p>
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 12px;">
+                    {% for c in weekly_metrics.top_companies[:10] %}
+                    <tr>
+                        <td style="padding: 4px 0; color: #263238; font-size: 13px;">
+                            <span style="display: inline-block; width: 20px; color: #888888; font-size: 11px;">{{ loop.index }}.</span>
+                            {{ c.company_name }} <span style="color: #888888; font-size: 11px;">({{ c.count }}건)</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+
+                {% if weekly_metrics.drug_updates_summary %}
+                {% set ds = weekly_metrics.drug_updates_summary %}
+                <p style="margin: 10px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">💊 Drug Updates Summary</p>
+                <p style="margin: 0; color: #555555; font-size: 12px;">
+                    New {{ ds.new_count or 0 }} · Label {{ ds.label_change_count or 0 }} · Warning {{ ds.warning_count or 0 }} · Recall {{ ds.recall_count or 0 }}
+                </p>
+                {% endif %}
+            </td>
+        </tr>
+        {% endif %}
+
         <!-- Section 7: Top 3 Key News -->
         {% if top_news %}
         <tr>

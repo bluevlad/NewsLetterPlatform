@@ -2,7 +2,7 @@
 AllergyInsight 테넌트 구현
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from ..base import BaseTenant, BrandConfig, NEWSLETTER_TYPE_LABELS
 from .config import TENANT_ID, DISPLAY_NAME, EMAIL_SUBJECT_PREFIX, EMAIL_TEMPLATE, BRAND_CONFIG
@@ -71,8 +71,35 @@ class AllergyInsightTenant(BaseTenant):
             "send_minute": settings.allergy_monthly_send_minute,
         }
 
-    async def collect_data(self) -> Dict[str, Any]:
-        return await self._collector.collect_all()
+    @property
+    def dedup_recent_days(self) -> Optional[int]:
+        """AllergyInsight 는 최근 7일 발송 기사 재노출 차단."""
+        return 7
+
+    def extract_sent_article_entries(
+        self, context: Dict[str, Any]
+    ) -> List[tuple]:
+        """daily 발송 context 에서 sent_articles 기록 대상 추출.
+
+        - top_headlines: (id, url, 'headline')
+        - company_digest[*].representative: (id, url, 'company_digest')
+        """
+        entries: List[tuple] = []
+        for h in context.get("top_headlines") or []:
+            aid = h.get("id")
+            if aid is not None:
+                entries.append((int(aid), h.get("url"), "headline"))
+        for c in context.get("company_digest") or []:
+            rep = c.get("representative") or {}
+            aid = rep.get("id")
+            if aid is not None:
+                entries.append((int(aid), rep.get("url"), "company_digest"))
+        return entries
+
+    async def collect_data(
+        self, *, exclude_ids: Optional[List[int]] = None
+    ) -> Dict[str, Any]:
+        return await self._collector.collect_all(exclude_ids=exclude_ids)
 
     def format_report(self, collected_data: Dict[str, Any]) -> Dict[str, Any]:
         return self._formatter.format(collected_data)

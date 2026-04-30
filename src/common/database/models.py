@@ -33,6 +33,8 @@ class NewsletterType(PyEnum):
     DAILY = "daily"
     WEEKLY = "weekly"
     MONTHLY = "monthly"
+    ADHOC = "adhoc"
+    MANUAL = "manual"
 
 
 class Subscriber(Base):
@@ -118,6 +120,62 @@ class CollectedDataHistory(Base):
 
     def __repr__(self):
         return f"<CollectedDataHistory(tenant={self.tenant_id}, type={self.data_type}, date={self.collected_date})>"
+
+
+class NewsletterArchive(Base):
+    """뉴스레터 아카이브 - 발송된 뉴스레터 HTML 보관"""
+    __tablename__ = "newsletter_archives"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(50), nullable=False, index=True)
+    newsletter_type = Column(String(20), nullable=False)
+    subject = Column(String(500))
+    html_content = Column(Text, nullable=False)
+    sent_date = Column(Date, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "newsletter_type", "sent_date",
+            name="uq_archive_tenant_type_date"
+        ),
+        Index("idx_archive_tenant_date", "tenant_id", "sent_date"),
+    )
+
+    def __repr__(self):
+        return f"<NewsletterArchive(tenant={self.tenant_id}, type={self.newsletter_type}, date={self.sent_date})>"
+
+
+class SentArticle(Base):
+    """뉴스레터에 포함되어 발송된 기사 이력 (교차일 dedup용)
+
+    AllergyInsight 등에서 동일 article_id 가 수일간 반복 선정되는 것을
+    차단하기 위해, 발송 성공 시 테넌트·섹션 단위로 기록한다.
+    """
+    __tablename__ = "sent_articles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(50), nullable=False)
+    article_id = Column(Integer, nullable=False)
+    article_url = Column(String(1000))
+    section = Column(String(30), nullable=False)
+    sent_date = Column(Date, nullable=False)
+    sent_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "article_id", "section", "sent_date",
+            name="uq_sent_articles_dedup"
+        ),
+        Index("idx_sent_articles_tenant_time", "tenant_id", "sent_at"),
+        Index("idx_sent_articles_lookup", "tenant_id", "article_id"),
+    )
+
+    def __repr__(self):
+        return (
+            f"<SentArticle(tenant={self.tenant_id}, article_id={self.article_id}, "
+            f"section={self.section}, date={self.sent_date})>"
+        )
 
 
 class EmailVerification(Base):

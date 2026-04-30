@@ -277,6 +277,23 @@ body::after {
     color: var(--service-color);
 }
 
+/* 권한 라벨 변형 — SERVICE_LANDING_GUIDE.md §3.2 */
+.sl-feature-tag--public,
+.sl-feature-tag--granted {
+    background: rgba(16, 185, 129, 0.12);
+    color: #10b981;
+}
+
+.sl-feature-tag--member-locked {
+    background: rgba(251, 191, 36, 0.12);
+    color: #fbbf24;
+}
+
+.sl-feature-tag--admin-locked {
+    background: rgba(248, 113, 113, 0.12);
+    color: #f87171;
+}
+
 /* ── Architecture Diagram ── */
 .sl-arch {
     animation: fadeInUp 0.7s ease-out 0.3s backwards;

@@ -93,6 +93,68 @@
                         </td>
                     </tr>
 
+                    <!-- News Articles -->
+                    {% if news_articles %}
+                    <tr>
+                        <td style="padding: 0 1px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.6); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
+                                <tr>
+                                    <td style="padding: 24px 32px;">
+                                        <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;">&#x1F4F0; 오늘의 주요 뉴스</h2>
+
+                                        {% for article in news_articles[:5] %}
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 10px; background: rgba(15, 23, 42, 0.5); border-radius: 8px; border-left: 3px solid #38bdf8;">
+                                            <tr>
+                                                <td style="padding: 12px 16px;">
+                                                    <a href="{{ article.url }}" style="text-decoration: none; display: block;">
+                                                        <p style="margin: 0; font-size: 14px; font-weight: 600; color: #e2e8f0; line-height: 1.4;">
+                                                            {{ article.title }}
+                                                        </p>
+                                                    </a>
+                                                    <p style="margin: 6px 0 0 0; font-size: 12px; color: #94a3b8;">
+                                                        {{ article.source_name }}
+                                                        {% if article.published_at %} &middot; {{ article.published_at }}{% endif %}
+                                                        {% if article.mention_count > 0 %}
+                                                        <span style="color: #10b981;"> &middot; 강사 언급 {{ article.mention_count }}건</span>
+                                                        {% endif %}
+                                                    </p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {% endif %}
+
+                    <!-- Source Distribution -->
+                    {% if source_stats and source_stats.distribution %}
+                    <tr>
+                        <td style="padding: 0 1px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(30, 41, 59, 0.8); border-left: 1px solid rgba(148, 163, 184, 0.1); border-right: 1px solid rgba(148, 163, 184, 0.1);">
+                                <tr>
+                                    <td style="padding: 20px 32px;">
+                                        <p style="margin: 0 0 12px 0; font-size: 13px; font-weight: 600; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px;">소스별 언급 분포</p>
+                                        {% for src in source_stats.distribution %}
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 6px;">
+                                            <tr>
+                                                <td width="60px" style="font-size: 13px; color: #e2e8f0;">{{ src.label }}</td>
+                                                <td style="padding: 4px 8px;">
+                                                    <div style="background: {% if src.source_type == 'news' %}#38bdf8{% elif src.source_type == 'cafe' %}#10b981{% elif src.source_type == 'gallery' %}#a78bfa{% else %}#f59e0b{% endif %}; height: 14px; border-radius: 3px; width: {{ src.mention_ratio | round(0) | int }}%; min-width: 4px;"></div>
+                                                </td>
+                                                <td width="80px" align="right" style="font-size: 12px; color: #94a3b8;">{{ src.mention_count }}건 ({{ src.mention_ratio }}%)</td>
+                                            </tr>
+                                        </table>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {% endif %}
+
                     <!-- Top Teachers -->
                     {% if top_teachers %}
                     <tr>

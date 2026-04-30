@@ -8,8 +8,11 @@ import threading
 from pathlib import Path as _Path
 from urllib.parse import urlparse
 
+from pathlib import Path as _Path
+
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy import text
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -19,6 +22,7 @@ from ..common.database.repository import get_session_factory
 from ..common.subscription.manager import SubscriptionManager
 from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
+from ..common.database.repository import get_session, SendHistoryRepository, NewsletterArchiveRepository
 from ..tenant.registry import get_registry
 from .shared import templates, templates_dir, get_db, get_tenant_or_404
 from .admin import admin_router
@@ -61,7 +65,7 @@ class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
 # CSRF 미들웨어 적용
 app.add_middleware(CSRFOriginCheckMiddleware)
 
-# Starlette SessionMiddleware (Google OAuth state 저장용)
+# Starlette SessionMiddleware
 # secret_key: 앱 시작 시마다 새 키 생성 (in-memory 세션과 동일 lifecycle)
 import secrets as _secrets
 app.add_middleware(SessionMiddleware, secret_key=_secrets.token_urlsafe(32))
@@ -69,10 +73,11 @@ app.add_middleware(SessionMiddleware, secret_key=_secrets.token_urlsafe(32))
 # 구독 매니저
 subscription_manager = SubscriptionManager()
 
-# 정적 파일 서빙 (서비스 소개 페이지 자산)
+# 정적 파일 서빙
 _static_dir = _Path(__file__).parent / "static"
 if _static_dir.is_dir():
     app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+    # 서비스 소개 페이지 자산 — /css/service-landing.css 접근용
     if (_static_dir / "css").is_dir():
         app.mount("/css", StaticFiles(directory=str(_static_dir / "css")), name="intro-css")
 
@@ -80,8 +85,8 @@ if _static_dir.is_dir():
 @app.get("/intro.html", include_in_schema=False)
 async def intro_page():
     """서비스 소개 페이지 (게이트웨이에서 진입 시)"""
+    from fastapi.responses import FileResponse
     return FileResponse(_static_dir / "intro.html")
-
 
 # Admin 라우터 등록 (/{tenant_id} 보다 먼저)
 app.include_router(admin_router)
@@ -97,6 +102,52 @@ def resolve_template(tenant_id: str, template_name: str) -> str:
     if override_path.exists():
         return f"overrides/{tenant_id}/{template_name}"
     return template_name
+
+
+# ==================== Health Check ====================
+
+@app.get("/api/health", response_class=JSONResponse)
+async def api_health():
+    """Liveness 엔드포인트 — 앱 프로세스 응답 + DB 연결 확인"""
+    try:
+        with get_session() as session:
+            session.execute(text("SELECT 1"))
+        return JSONResponse(content={"status": "ok"}, status_code=200)
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return JSONResponse(
+            content={"status": "unhealthy", "error": str(e)},
+            status_code=503,
+        )
+
+
+@app.get("/api/health/scheduler", response_class=JSONResponse)
+async def api_health_scheduler():
+    """Readiness 엔드포인트 — 당일 발송 통계 기반 스케줄러 상태"""
+    try:
+        registry = get_registry()
+        total = 0
+        failed = 0
+        tenant_stats = {}
+
+        with get_session() as session:
+            for tid in registry.get_active_ids():
+                stats = SendHistoryRepository.get_today_stats(session, tid)
+                tenant_stats[tid] = stats
+                total += stats["total"]
+                failed += stats["failed"]
+
+        return JSONResponse(content={
+            "total": total,
+            "failed": failed,
+            "tenants": tenant_stats,
+        })
+    except Exception as e:
+        logger.error(f"Scheduler health check failed: {e}")
+        return JSONResponse(
+            content={"total": 0, "failed": 0, "error": str(e)},
+            status_code=503,
+        )
 
 
 # ==================== 랜딩 페이지 ====================
@@ -265,6 +316,93 @@ async def result_page(request: Request, tenant_id: str, email: str = ""):
         "tenant": tenant,
         "email": email,
     })
+
+
+# ==================== 아카이브 ====================
+
+@app.get("/archive", response_class=HTMLResponse)
+async def archive_all(request: Request):
+    """전체 테넌트 뉴스레터 아카이브 통합 목록"""
+    registry = get_registry()
+    tenants = registry.get_all()
+    tenant_map = {t.tenant_id: t for t in tenants}
+
+    with get_session() as session:
+        archives = NewsletterArchiveRepository.get_all_list(session, limit=100)
+        # 테넌트 → 월별 그룹핑
+        grouped_by_tenant = {}
+        for archive in archives:
+            tid = archive.tenant_id
+            if tid not in grouped_by_tenant:
+                grouped_by_tenant[tid] = {}
+            month_key = archive.sent_date.strftime("%Y년 %m월")
+            if month_key not in grouped_by_tenant[tid]:
+                grouped_by_tenant[tid][month_key] = []
+            type_labels = {"daily": "일일", "weekly": "주간", "monthly": "월간"}
+            grouped_by_tenant[tid][month_key].append({
+                "id": archive.id,
+                "tenant_id": tid,
+                "date": archive.sent_date.strftime("%m/%d"),
+                "weekday": ["월", "화", "수", "목", "금", "토", "일"][archive.sent_date.weekday()],
+                "type": archive.newsletter_type,
+                "type_label": type_labels.get(archive.newsletter_type, archive.newsletter_type),
+                "subject": archive.subject or "",
+            })
+
+    return templates.TemplateResponse("archive_all.html", {
+        "request": request,
+        "grouped_by_tenant": grouped_by_tenant,
+        "tenant_map": tenant_map,
+    })
+
+
+@app.get("/{tenant_id}/archive", response_class=HTMLResponse)
+async def archive_list(request: Request, tenant_id: str):
+    """뉴스레터 아카이브 목록"""
+    tenant = get_tenant_or_404(tenant_id)
+
+    with get_session() as session:
+        archives = NewsletterArchiveRepository.get_list(session, tenant_id, limit=50)
+        # 월별 그룹핑
+        grouped = {}
+        for archive in archives:
+            month_key = archive.sent_date.strftime("%Y년 %m월")
+            if month_key not in grouped:
+                grouped[month_key] = []
+            type_labels = {"daily": "일일", "weekly": "주간", "monthly": "월간"}
+            grouped[month_key].append({
+                "id": archive.id,
+                "date": archive.sent_date.strftime("%m/%d"),
+                "weekday": ["월", "화", "수", "목", "금", "토", "일"][archive.sent_date.weekday()],
+                "type": archive.newsletter_type,
+                "type_label": type_labels.get(archive.newsletter_type, archive.newsletter_type),
+                "subject": archive.subject or "",
+            })
+
+    return templates.TemplateResponse("archive_list.html", {
+        "request": request,
+        "tenant": tenant,
+        "grouped": grouped,
+    })
+
+
+@app.get("/{tenant_id}/archive/{archive_id}", response_class=HTMLResponse)
+async def archive_detail(request: Request, tenant_id: str, archive_id: int):
+    """뉴스레터 아카이브 상세 (HTML 원본 렌더링)"""
+    tenant = get_tenant_or_404(tenant_id)
+
+    with get_session() as session:
+        archive = NewsletterArchiveRepository.get_by_id(session, archive_id)
+        if not archive or archive.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail="아카이브를 찾을 수 없습니다")
+
+        # 구독해지 링크를 아카이브 안내로 대체
+        html = archive.html_content.replace(
+            "__UNSUBSCRIBE_URL__",
+            f"{_base}/{tenant_id}/archive"
+        )
+
+        return HTMLResponse(content=html)
 
 
 # ==================== 구독 해지 플로우 ====================

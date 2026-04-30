@@ -9,6 +9,11 @@ DISPLAY_NAME = "AllergyInsight 알러지 뉴스 브리핑"
 EMAIL_SUBJECT_PREFIX = "[AllergyInsight]"
 EMAIL_TEMPLATE = "allergy_insight/daily_report.html"
 
+# 재구성 섹션 전용 컬러 토큰 (NEWSLETTER_REDESIGN_SPEC §4.5).
+# BrandConfig가 공용 스키마라 필드 추가 대신 테넌트 전용 상수로 둔다.
+DRUG_SECTION_COLOR = "#00838f"
+DRUG_SECTION_BG = "#e0f7fa"
+
 BRAND_CONFIG = BrandConfig(
     primary_color="#2e7d32",
     primary_color_dark="#1b5e20",
@@ -36,6 +41,11 @@ BRAND_CONFIG = BrandConfig(
             icon="&#x2B50;",
             title="중요도 분석",
             description="AI가 뉴스의 중요도를 분석하여 핵심 소식을 선별합니다",
+        ),
+        BrandFeature(
+            icon="&#x1F48A;",
+            title="약물 업데이트",
+            description="openFDA·MFDS 기반 알러지 치료제 승인·라벨 변경·경고를 요약합니다",
         ),
     ],
 )

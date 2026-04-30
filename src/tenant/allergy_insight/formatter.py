@@ -7,14 +7,32 @@ import logging
 from datetime import datetime
 from typing import Any, Dict
 
+from .config import DRUG_SECTION_BG, DRUG_SECTION_COLOR
+
 logger = logging.getLogger(__name__)
+
+
+def _empty_drug_updates() -> Dict[str, Any]:
+    """drug_updates 기본값 (total=0 이면 템플릿이 섹션 숨김)."""
+    return {
+        "new_approvals": [],
+        "label_changes": [],
+        "blackbox_warnings": [],
+        "recalls": [],
+        "total": 0,
+    }
 
 
 class AllergyInsightFormatter:
     """AllergyInsight API 응답 → 템플릿 컨텍스트 변환"""
 
     def format(self, collected_data: Dict[str, Any]) -> Dict[str, Any]:
-        """수집 데이터를 템플릿 변수로 변환"""
+        """수집 데이터를 템플릿 변수로 변환.
+
+        Phase 1 전환 완료: top_headlines/company_digest/drug_updates/weekly_metrics
+        키만 사용. 기존 Phase 0 키(top_news/company_news/news_groups) 제거.
+        Spec: NEWSLETTER_REDESIGN_SPEC §4.3
+        """
         daily_report = collected_data.get("daily_report", {})
 
         if not daily_report:
@@ -30,16 +48,30 @@ class AllergyInsightFormatter:
             default=datetime.now(),
         )
 
+        drug_updates = daily_report.get("drug_updates") or _empty_drug_updates()
+        # 방어: 백엔드가 배열만 주고 total 누락한 경우 재계산
+        if "total" not in drug_updates:
+            drug_updates["total"] = (
+                len(drug_updates.get("new_approvals", []))
+                + len(drug_updates.get("label_changes", []))
+                + len(drug_updates.get("blackbox_warnings", []))
+                + len(drug_updates.get("recalls", []))
+            )
+
         return {
             "report_date": report_date,
-            "top_news": daily_report.get("top_news", []),
-            "company_news": daily_report.get("company_news", []),
-            "news_groups": daily_report.get("news_groups", []),
+            "top_headlines": daily_report.get("top_headlines", []),
+            "company_digest": daily_report.get("company_digest", []),
             "papers": daily_report.get("papers", []),
+            "drug_updates": drug_updates,
+            "weekly_metrics": daily_report.get("weekly_metrics") or {},
+            "drug_section_color": DRUG_SECTION_COLOR,
+            "drug_section_bg": DRUG_SECTION_BG,
             "stats": daily_report.get("stats", {
                 "news_count": 0,
                 "paper_count": 0,
                 "company_count": 0,
+                "drug_count": 0,
                 "total_count": 0,
                 "trend_company_count": 0,
             }),
@@ -51,20 +83,22 @@ class AllergyInsightFormatter:
 
         Args:
             history_data: [{collected_date, data_type, data}, ...]
-            collected_data: 추가 수집 데이터 (optional)
+            collected_data: 추가 수집 데이터 (optional). weekly_metrics 키가 있으면 전달.
         """
-        return self._format_stats_report(history_data)
+        return self._format_stats_report(history_data, collected_data)
 
     def format_monthly(self, history_data: list, collected_data: dict = None) -> dict:
         """월간 통계 포매팅 - format_weekly와 동일한 통계 구조 반환
 
         Args:
             history_data: [{collected_date, data_type, data}, ...]
-            collected_data: 추가 수집 데이터 (optional)
+            collected_data: 추가 수집 데이터 (optional). weekly_metrics 키가 있으면 전달.
         """
-        return self._format_stats_report(history_data)
+        return self._format_stats_report(history_data, collected_data)
 
-    def _format_stats_report(self, history_data: list) -> dict:
+    def _format_stats_report(
+        self, history_data: list, collected_data: dict = None
+    ) -> dict:
         """주간/월간 공통 통계 리포트 포매팅"""
         from collections import Counter, defaultdict
         from datetime import date, timedelta
@@ -77,11 +111,10 @@ class AllergyInsightFormatter:
             data = record["data"]
             by_date[d][dtype] = data
 
-        # 원시 데이터 수집
-        all_top_news = []
-        all_news_groups = []
+        # 원시 데이터 수집 (Phase 1: top_headlines + company_digest 경로)
+        all_headlines = []
         all_papers = []
-        all_company_news = []
+        all_company_digest = []
         total_news_count = 0
         total_paper_count = 0
         total_company_count = 0
@@ -99,14 +132,20 @@ class AllergyInsightFormatter:
             total_paper_count += day_stats.get("paper_count", 0)
             total_company_count += day_stats.get("company_count", 0)
 
-            for news in daily_report.get("top_news", []):
-                all_top_news.append(news)
+            # Phase 1 키 우선, Phase 0 키 폴백 (과거 히스토리 데이터 호환)
+            headlines = daily_report.get("top_headlines", [])
+            if headlines:
+                all_headlines.extend(headlines)
+            else:
+                for news in daily_report.get("top_news", []):
+                    all_headlines.append(news)
 
-            for group in daily_report.get("news_groups", []):
-                all_news_groups.append(group)
-
-            for company in daily_report.get("company_news", []):
-                all_company_news.append(company)
+            digest = daily_report.get("company_digest", [])
+            if digest:
+                all_company_digest.extend(digest)
+            else:
+                for company in daily_report.get("company_news", []):
+                    all_company_digest.append(company)
 
             for paper in daily_report.get("papers", []):
                 all_papers.append(paper)
@@ -114,19 +153,11 @@ class AllergyInsightFormatter:
         # 뉴스 중복 제거 (title 기준)
         seen_titles = set()
         unique_news = []
-        for news in all_top_news:
+        for news in all_headlines:
             title = news.get("title", "")
             if title and title not in seen_titles:
                 seen_titles.add(title)
                 unique_news.append(news)
-
-        # news_groups 내 개별 뉴스도 추가 (중복 제거)
-        for group in all_news_groups:
-            for item in group.get("items", []):
-                title = item.get("title", "")
-                if title and title not in seen_titles:
-                    seen_titles.add(title)
-                    unique_news.append(item)
 
         # 논문 중복 제거
         seen_paper_titles = set()
@@ -137,10 +168,10 @@ class AllergyInsightFormatter:
                 seen_paper_titles.add(title)
                 unique_papers.append(paper)
 
-        # 기업 뉴스 이름 기준 합치기
+        # 기업 이름 수집
         company_names = set()
-        for company in all_company_news:
-            name = company.get("name", "")
+        for item in all_company_digest:
+            name = item.get("company_name") or item.get("name", "")
             if name:
                 company_names.add(name)
 
@@ -271,6 +302,9 @@ class AllergyInsightFormatter:
             period_end = today - timedelta(days=1)
             period_start = today - timedelta(days=7)
 
+        # Phase 1: weekly_metrics 패스스루 (collected_data에 있으면)
+        weekly_metrics = (collected_data or {}).get("weekly_metrics") or {}
+
         return {
             "report_date": datetime.now(),
             "period_start": period_start,
@@ -291,6 +325,9 @@ class AllergyInsightFormatter:
             "importance_analysis": importance_analysis,
             "top_journals": top_journals,
             "top_news": top_news,
+            "weekly_metrics": weekly_metrics,
+            "drug_section_color": DRUG_SECTION_COLOR,
+            "drug_section_bg": DRUG_SECTION_BG,
         }
 
     @staticmethod
@@ -305,18 +342,22 @@ class AllergyInsightFormatter:
 
     @staticmethod
     def _empty_context() -> Dict[str, Any]:
-        """데이터 없을 시 빈 기본값"""
+        """데이터 없을 시 빈 기본값 (Phase 1 키만)."""
         now = datetime.now()
         return {
             "report_date": now,
-            "top_news": [],
-            "company_news": [],
-            "news_groups": [],
+            "top_headlines": [],
+            "company_digest": [],
             "papers": [],
+            "drug_updates": _empty_drug_updates(),
+            "weekly_metrics": {},
+            "drug_section_color": DRUG_SECTION_COLOR,
+            "drug_section_bg": DRUG_SECTION_BG,
             "stats": {
                 "news_count": 0,
                 "paper_count": 0,
                 "company_count": 0,
+                "drug_count": 0,
                 "total_count": 0,
                 "trend_company_count": 0,
             },
