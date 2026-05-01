@@ -24,30 +24,10 @@ class Settings(BaseSettings):
         env="DATABASE_URL"
     )
 
-    # 스케줄러 - EduFit (Daily)
+    # 스케줄러 - AllergyInsight (Daily)
     # 발송은 슬롯(early 6:40 / mid 7:40 / late 8:40)별로 분기되며,
     # SEND_HOUR/MINUTE는 deprecated이지만 호환성 위해 유지.
     # COLLECT는 가장 빠른 슬롯(6:40)보다 충분히 일찍 5:00 단일 실행.
-    edufit_collect_hour: int = Field(default=5, env="EDUFIT_COLLECT_HOUR")
-    edufit_collect_minute: int = Field(default=0, env="EDUFIT_COLLECT_MINUTE")
-    edufit_send_hour: int = Field(default=8, env="EDUFIT_SEND_HOUR")
-    edufit_send_minute: int = Field(default=20, env="EDUFIT_SEND_MINUTE")
-
-    # 스케줄러 - EduFit (Weekly: 매주 금요일)
-    edufit_weekly_day_of_week: str = Field(default="fri", env="EDUFIT_WEEKLY_DAY_OF_WEEK")
-    edufit_weekly_collect_hour: int = Field(default=5, env="EDUFIT_WEEKLY_COLLECT_HOUR")
-    edufit_weekly_collect_minute: int = Field(default=0, env="EDUFIT_WEEKLY_COLLECT_MINUTE")
-    edufit_weekly_send_hour: int = Field(default=8, env="EDUFIT_WEEKLY_SEND_HOUR")
-    edufit_weekly_send_minute: int = Field(default=30, env="EDUFIT_WEEKLY_SEND_MINUTE")
-
-    # 스케줄러 - EduFit (Monthly: 매월 말일)
-    edufit_monthly_day_of_month: str = Field(default="last", env="EDUFIT_MONTHLY_DAY_OF_MONTH")
-    edufit_monthly_collect_hour: int = Field(default=5, env="EDUFIT_MONTHLY_COLLECT_HOUR")
-    edufit_monthly_collect_minute: int = Field(default=0, env="EDUFIT_MONTHLY_COLLECT_MINUTE")
-    edufit_monthly_send_hour: int = Field(default=8, env="EDUFIT_MONTHLY_SEND_HOUR")
-    edufit_monthly_send_minute: int = Field(default=30, env="EDUFIT_MONTHLY_SEND_MINUTE")
-
-    # 스케줄러 - AllergyInsight (Daily)
     allergy_collect_hour: int = Field(default=5, env="ALLERGY_COLLECT_HOUR")
     allergy_collect_minute: int = Field(default=0, env="ALLERGY_COLLECT_MINUTE")
     allergy_send_hour: int = Field(default=8, env="ALLERGY_SEND_HOUR")
@@ -68,14 +48,6 @@ class Settings(BaseSettings):
     allergy_monthly_send_minute: int = Field(default=0, env="ALLERGY_MONTHLY_SEND_MINUTE")
 
     # 테넌트 API URLs
-    edufit_api_url: str = Field(
-        default="http://localhost:9070/api/v1",
-        env="EDUFIT_API_URL"
-    )
-    edufit_jwt_secret: str = Field(
-        default="",
-        env="EDUFIT_JWT_SECRET"
-    )
     allergy_insight_api_url: str = Field(
         default="http://localhost:9040",
         env="ALLERGY_INSIGHT_API_URL"

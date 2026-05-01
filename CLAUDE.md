@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-멀티테넌트 뉴스레터 통합 플랫폼 - EduFit, AllergyInsight 뉴스레터 발송
+멀티테넌트 뉴스레터 통합 플랫폼 - AllergyInsight 뉴스레터 발송
 
 ## Environment
 
@@ -77,7 +77,6 @@ NewsLetterPlatform/
 │   ├── common/              # 공통 모듈 (구독, 발송, 템플릿, 스케줄러, DB)
 │   ├── tenant/              # 테넌트별 모듈 (collector, formatter)
 │   │   ├── base.py          # 테넌트 인터페이스 (ABC)
-│   │   ├── edufit/          # EduFit 테넌트 (AcademyInsight+TeacherHub 통합)
 │   │   └── allergy_insight/ # AllergyInsight 테넌트 (HealthPulse 통합)
 │   └── web/                 # FastAPI 웹 앱
 ├── templates/               # 이메일 HTML 템플릿
@@ -106,7 +105,6 @@ NewsLetterPlatform/
 
 | 서비스 | 포트 | Docker 컨테이너명 |
 |--------|------|-------------------|
-| EduFit Backend | 9070 | edufit-backend |
 | AllergyInsight Backend | 9040 | allergyinsight-backend |
 
 ## Configuration

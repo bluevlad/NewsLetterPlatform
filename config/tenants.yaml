@@ -3,24 +3,6 @@
 # brand 섹션은 참조 문서용입니다. 실제 브랜드 설정은 각 테넌트의 config.py가 source of truth입니다.
 
 tenants:
-  edufit:
-    display_name: "EduFit 강사·학원 분석 브리핑"
-    description: "공무원 학원 강사·학원 평판 분석 일일 브리핑 (AcademyInsight+TeacherHub 통합)"
-    api_base_url: "${EDUFIT_API_URL}"
-    email_subject_prefix: "[EduFit]"
-    email_template: "edufit/daily_report.html"
-    schedule:
-      collect_hour: 7
-      collect_minute: 20
-      send_hour: 8
-      send_minute: 20
-    is_active: true
-    brand:
-      primary_color: "#10b981"
-      primary_color_dark: "#059669"
-      accent_color: "#34d399"
-      color_scheme: "Green"
-
   allergy-insight:
     display_name: "AllergyInsight 알러지 뉴스 브리핑"
     description: "알러지 뉴스 & 논문 브리핑 (HealthPulse 통합)"
