@@ -8,8 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 실행 환경 감지 (SSH 재접속 금지)
 
 - Claude는 현재 호스트에서 직접 실행 중 — **SSH 재접속을 시도하지 말 것**
-- `uname -s` = `Darwin` → MacBook 운영환경 (172.30.1.72), docker/docker compose 직접 실행 가능
-- `uname -s` 결과가 Windows/MINGW/MSYS → Windows 개발환경 (172.30.1.100)
+- `uname -s` = `Darwin` → MacBook 운영환경 (`<INTERNAL_HOST_PROD>`), docker/docker compose 직접 실행 가능
+- `uname -s` 결과가 Windows/MINGW/MSYS → Windows 개발환경 (`<INTERNAL_HOST_DEV>`)
 - Docker 명령은 현재 호스트에서 바로 실행 (별도 SSH 접속 불필요)
 - compose 파일 선택: Darwin → `docker-compose.yml` / Windows → `docker-compose.local.yml`
 
@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Environment
 
 - **Database**: SQLite (SQLAlchemy ORM)
-- **Target Server**: MacBook Docker (172.30.1.72) / Windows 로컬 개발
+- **Target Server**: MacBook Docker (`<INTERNAL_HOST_PROD>`) / Windows 로컬 개발
 - **Docker Strategy**: Docker Compose (web + scheduler)
 - **Python Version**: 3.12+
 
