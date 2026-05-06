@@ -1,12 +1,12 @@
 """Bounce Feedback Loop — Gmail IMAP에서 NDR 메시지를 수집/파싱
 
-운영자 발신함(rainend00@gmail.com)에서 mailer-daemon/postmaster의 NDR을
+운영자 발신함(GMAIL_ADDRESS 환경변수)에서 mailer-daemon/postmaster의 NDR을
 주기적으로 가져와:
   1) 영구 실패(hard bounce, SMTP 5xx) 주소를 전 테넌트에서 비활성화
   2) bounce_log에 기록 → request_subscribe 진입 단계 사전 차단
   3) 처리한 NDR은 INBOX 라벨 제거(Gmail archive)하여 운영자 inbox에서 분리
 
-가이드: standards/services/newsletterplatform/SUBSCRIPTION_ABUSE_HARDENING.md
+설계 가이드는 비공개 표준 저장소 참조.
 """
 
 import imaplib
