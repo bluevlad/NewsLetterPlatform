@@ -17,6 +17,7 @@ from ..database.repository import (
     NewsletterArchiveRepository, SentArticleRepository
 )
 from ..delivery.gmail_sender import get_sender
+from ..delivery.bounce_processor import run_bounce_processor
 from ..template.renderer import get_renderer
 from .health import update_health
 from .slots import DAILY_SLOTS, get_slot_time
@@ -711,3 +712,13 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
                         f"[{tid}] monthly 발송 등록 [{s['key']}]: "
                         f"매월 {day_display} {s_hour:02d}:{s_minute:02d}"
                     )
+
+    # === Bounce Feedback Loop (30분 주기) ===
+    # Gmail inbox에서 NDR 자동 수집 → hard bounce 주소 비활성화 + 재발송 차단
+    scheduler.add_job(
+        run_bounce_processor,
+        trigger=CronTrigger(minute="*/30"),
+        id="bounce_processor",
+        name="Bounce Feedback Loop (NDR 처리)",
+    )
+    logger.info("bounce_processor 등록: 30분 주기")
