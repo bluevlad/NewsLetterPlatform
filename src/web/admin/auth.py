@@ -106,6 +106,7 @@ async def login_page(request: Request):
         "error": error_messages.get(error),
         "google_oauth_enabled": _is_google_oauth_configured(),
         "google_client_id": settings.google_client_id if _is_google_oauth_configured() else "",
+        "password_login_enabled": bool(settings.admin_password),
     })
     # Google Identity Services 팝업이 postMessage로 credential을 전달할 수 있도록 허용
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
@@ -114,14 +115,21 @@ async def login_page(request: Request):
 
 @router.post("/admin/login")
 async def login_submit(request: Request, password: str = Form(...)):
-    """로그인 처리 (비밀번호)"""
+    """로그인 처리 (비밀번호) — ADMIN_PASSWORD 미설정 시 사용 불가."""
     if not settings.admin_password:
-        return templates.TemplateResponse("admin/login.html", {
-            "request": request,
-            "error": "관리자 비밀번호가 설정되지 않았습니다. ADMIN_PASSWORD 환경변수를 설정해주세요.",
-            "google_oauth_enabled": _is_google_oauth_configured(),
-            "google_client_id": "",
-        })
+        # 비밀번호 로그인 비활성화 — Google Sign-In 단일 진입점으로 운영
+        logger.warning("Admin 비밀번호 로그인 시도 차단: ADMIN_PASSWORD 미설정")
+        return templates.TemplateResponse(
+            "admin/login.html",
+            {
+                "request": request,
+                "error": "비밀번호 로그인은 비활성화되어 있습니다. Google 로그인으로 진행해주세요.",
+                "google_oauth_enabled": _is_google_oauth_configured(),
+                "google_client_id": settings.google_client_id if _is_google_oauth_configured() else "",
+                "password_login_enabled": False,
+            },
+            status_code=403,
+        )
 
     if secrets.compare_digest(password, settings.admin_password):
         token = create_session()
@@ -136,6 +144,7 @@ async def login_submit(request: Request, password: str = Form(...)):
         "error": "비밀번호가 일치하지 않습니다.",
         "google_oauth_enabled": _is_google_oauth_configured(),
         "google_client_id": settings.google_client_id if _is_google_oauth_configured() else "",
+        "password_login_enabled": True,
     })
 
 

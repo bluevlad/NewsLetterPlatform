@@ -102,6 +102,7 @@
             <div class="alert-error">{{ error }}</div>
             {% endif %}
             <div id="google-error" class="alert-error" style="display:none;"></div>
+            {% if password_login_enabled %}
             <form method="post" action="{{ base_path }}/admin/login">
                 <div class="form-group">
                     <label for="password">Password</label>
@@ -109,8 +110,14 @@
                 </div>
                 <button type="submit" class="btn">로그인</button>
             </form>
-            {% if google_oauth_enabled %}
+            {% endif %}
+            {% if password_login_enabled and google_oauth_enabled %}
             <div class="divider"><span>또는</span></div>
+            {% endif %}
+            {% if google_oauth_enabled %}
+            <p style="text-align:center; color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">
+                관리자 계정의 Google 로그인만 허용됩니다.
+            </p>
             <div class="google-signin-wrapper">
                 <div id="g_id_onload"
                      data-client_id="{{ google_client_id }}"
