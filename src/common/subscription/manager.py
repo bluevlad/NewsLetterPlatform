@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from ...config import settings
 from ..database.models import Subscriber, EmailVerification, VerificationType
 from ..database.repository import (
-    SubscriberRepository, EmailVerificationRepository
+    SubscriberRepository, EmailVerificationRepository, BounceLogRepository
 )
 from ..security import is_role_account, is_bot_name_pattern
 
@@ -51,6 +51,11 @@ class SubscriptionManager:
         if is_role_account(email):
             logger.warning("role-account 차단: tenant=%s, email=%s", tenant_id, email)
             return False, "해당 이메일 주소로는 구독할 수 없습니다.", None
+
+        # Bounce loop: 최근 hard bounce 이력 있으면 재발송 차단 (Gmail 평판 보호)
+        if BounceLogRepository.has_recent_hard_bounce(session, email):
+            logger.warning("hard bounce 이력 차단: tenant=%s, email=%s", tenant_id, email)
+            return False, "이메일 주소를 다시 확인해주세요.", None
 
         # 어뷰즈 방어: 이름 컬럼이 봇 자동 생성 무작위 패턴
         if is_bot_name_pattern(name):
@@ -157,6 +162,12 @@ class SubscriptionManager:
             (success, message, verification_id)
         """
         email = email.strip().lower()
+
+        # Bounce loop 사전 차단
+        if BounceLogRepository.has_recent_hard_bounce(session, email):
+            logger.warning("unsubscribe hard bounce 차단: tenant=%s, email=%s",
+                          tenant_id, email)
+            return False, "이메일 주소를 다시 확인해주세요.", None
 
         # 어뷰즈 방어: 이메일 기반 rate limit (해지도 같은 발송 벡터)
         now = datetime.utcnow()
