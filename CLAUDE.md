@@ -134,21 +134,32 @@ NewsLetterPlatform/
 
 ## Branch Merge 원칙 (필수)
 
-**표준 흐름 — 운영서버(MacBook)에서 직접 prod에 push**:
+**기본 작업 위치는 `main`**. 모든 신규 구현/수정은 main 기준 새 branch에서 시작한다.
 
-1. 작업 branch 또는 main에서 변경사항 commit
-2. **main에 merge 먼저** (`git checkout main && git merge <work-branch>`)
-3. **prod에 main을 merge하여 push** (`git checkout prod && git merge main && git push origin prod`)
-4. GitHub Actions `deploy-prod.yml` 자동 실행 → docker 재빌드 + 배포
-5. `sync-prod-to-main.yml` 자동 실행 → prod-only commit이 있으면 main으로 cherry-pick (이미 머지된 변경은 patch-id 매칭으로 스킵)
+### 표준 흐름 (구현 작업 / prod push 요청 공통)
 
-**원칙 요약**: `작업 branch → main merge → prod merge(push) → docker 자동 재빌드`
+1. **main 최신화** (`git checkout main && git pull origin main`)
+2. **신규 작업 branch 생성** — 단순 작업이면 main에서 직접 작업해도 무방하나, 기본은 branch 생성
+   - 명명: `feature/<주제>` · `fix/<주제>` · `refactor/<주제>` 등
+3. **구현 + commit** (작업 branch에서)
+4. **main merge** (`git checkout main && git merge --no-ff <work-branch>`)
+5. **빌드 오류 검증** — import/구문/테스트 등으로 main이 깨지지 않았는지 확인. 오류가 있으면 main에서 수정 후 재커밋, prod push 보류
+6. **prod merge & push** (`git checkout prod && git merge main && git push origin prod`)
+7. **GitHub Actions `deploy-prod.yml`** 자동 실행 → self-hosted runner에서 docker 재빌드 + 배포
+8. **재빌드 완료 확인** (`gh run list --workflow=deploy-prod.yml --limit 1` / Actions 페이지에서 success 확인)
+9. **작업 branch 삭제** (`git branch -d <work-branch>` / 원격에 있었다면 `git push origin --delete <work-branch>`)
+10. **main으로 복귀** (`git checkout main`)
+11. `sync-prod-to-main.yml` 자동 실행 → prod-only commit이 있으면 main으로 cherry-pick (patch-id 매칭으로 중복 스킵)
+
+**원칙 요약**: `main pull → 작업 branch → 구현 → main merge → 빌드검증 → prod merge·push → docker 재빌드 완료 확인 → branch 삭제 → main 복귀`
 
 ### Do NOT (branch 운영)
 
 - prod 브랜치에 main을 머지하지 않고 prod에 직접 force push 금지
 - main과 prod가 분기된 상태에서 양쪽 branch에 따로 commit 금지
 - main에만 commit 후 prod에 미반영 금지 — 운영 배포가 트리거되지 않음
+- 빌드 오류가 있는 main을 prod에 push 금지 — 운영 docker 재빌드 실패
+- docker 재빌드 완료 전에 작업 branch 삭제 금지 — 롤백 시 참조 손실
 
 ### 잘못된 base 위에서 main에 commit한 경우 복구
 
