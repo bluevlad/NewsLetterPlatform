@@ -18,6 +18,7 @@ from ..database.models import Subscriber, EmailVerification, VerificationType
 from ..database.repository import (
     SubscriberRepository, EmailVerificationRepository
 )
+from ..security import is_role_account, is_bot_name_pattern
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +47,46 @@ class SubscriptionManager:
         email = email.strip().lower()
         name = name.strip()
 
+        # 어뷰즈 방어: role-account 메일함 차단
+        if is_role_account(email):
+            logger.warning("role-account 차단: tenant=%s, email=%s", tenant_id, email)
+            return False, "해당 이메일 주소로는 구독할 수 없습니다.", None
+
+        # 어뷰즈 방어: 이름 컬럼이 봇 자동 생성 무작위 패턴
+        if is_bot_name_pattern(name):
+            logger.warning("봇 이름 패턴 차단: tenant=%s, email=%s, name=%s",
+                          tenant_id, email, name)
+            return False, "이름을 다시 확인해주세요.", None
+
+        # 어뷰즈 방어: 이메일 기반 rate limit
+        now = datetime.utcnow()
+        recent_minutes = EmailVerificationRepository.count_recent_by_email(
+            session, email, now - timedelta(minutes=settings.subscribe_rate_limit_email_minutes)
+        )
+        if recent_minutes >= 1:
+            logger.warning("이메일 rate limit (분 단위) 초과: email=%s, count=%d",
+                          email, recent_minutes)
+            return False, (
+                f"방금 인증코드를 발송했습니다. "
+                f"{settings.subscribe_rate_limit_email_minutes}분 후 다시 시도해주세요."
+            ), None
+        recent_day = EmailVerificationRepository.count_recent_by_email(
+            session, email, now - timedelta(days=1)
+        )
+        if recent_day >= settings.subscribe_rate_limit_email_per_day:
+            logger.warning("이메일 rate limit (일 단위) 초과: email=%s, count=%d",
+                          email, recent_day)
+            return False, (
+                "오늘 인증코드 발송 한도를 초과했습니다. "
+                "내일 다시 시도해주세요."
+            ), None
+
         existing = SubscriberRepository.get_active_by_email(session, tenant_id, email)
         if existing:
             return False, "이미 구독 중인 이메일입니다.", None
 
         code = generate_verification_code()
-        expires_at = datetime.utcnow() + timedelta(minutes=settings.verification_expiry_minutes)
+        expires_at = now + timedelta(minutes=settings.verification_expiry_minutes)
 
         EmailVerificationRepository.delete_pending(session, tenant_id, email)
 
@@ -123,12 +158,23 @@ class SubscriptionManager:
         """
         email = email.strip().lower()
 
+        # 어뷰즈 방어: 이메일 기반 rate limit (해지도 같은 발송 벡터)
+        now = datetime.utcnow()
+        recent_minutes = EmailVerificationRepository.count_recent_by_email(
+            session, email, now - timedelta(minutes=settings.subscribe_rate_limit_email_minutes)
+        )
+        if recent_minutes >= 1:
+            return False, (
+                f"방금 인증코드를 발송했습니다. "
+                f"{settings.subscribe_rate_limit_email_minutes}분 후 다시 시도해주세요."
+            ), None
+
         subscriber = SubscriberRepository.get_active_by_email(session, tenant_id, email)
         if not subscriber:
             return False, "해당 이메일로 구독 중인 내역이 없습니다.", None
 
         code = generate_verification_code()
-        expires_at = datetime.utcnow() + timedelta(minutes=settings.verification_expiry_minutes)
+        expires_at = now + timedelta(minutes=settings.verification_expiry_minutes)
 
         EmailVerificationRepository.delete_pending(
             session, tenant_id, email, VerificationType.UNSUBSCRIBE

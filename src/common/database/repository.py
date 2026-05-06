@@ -788,6 +788,17 @@ class EmailVerificationRepository:
             query = query.filter(EmailVerification.verification_type == verification_type)
         query.delete()
 
+    @staticmethod
+    def count_recent_by_email(session: Session, email: str,
+                              since: datetime) -> int:
+        """주어진 시각 이후 동일 이메일로 발급된 인증 요청 수 (어뷰즈 rate limit 용)"""
+        return session.query(EmailVerification).filter(
+            and_(
+                EmailVerification.email == email,
+                EmailVerification.created_at >= since,
+            )
+        ).count()
+
 
 class SentArticleRepository:
     """발송 기사 이력 저장소 (교차일 dedup 용)
