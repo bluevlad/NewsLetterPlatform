@@ -67,7 +67,11 @@ async def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded)
     )
 
 class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
-    """CSRF 방지: POST 요청의 Origin/Referer가 허용된 호스트인지 검증"""
+    """CSRF 방지: POST 요청의 Origin/Referer가 허용된 호스트인지 검증.
+
+    BaseHTTPMiddleware 안에서 HTTPException 을 raise 하면 Starlette 가
+    잡지 못해 500 으로 떨어지므로 JSONResponse 를 직접 반환한다.
+    """
 
     async def dispatch(self, request: Request, call_next):
         if request.method == "POST":
@@ -84,8 +88,13 @@ class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
                         h.strip() for h in settings.csrf_allowed_hosts.split(",") if h.strip()
                     )
                 if parsed.hostname not in allowed_hosts:
-                    logger.warning("CSRF check failed: origin=%s", origin)
-                    raise HTTPException(status_code=403, detail="Forbidden: invalid origin")
+                    logger.warning(
+                        "CSRF check failed: origin=%s allowed=%s", origin, sorted(allowed_hosts)
+                    )
+                    return JSONResponse(
+                        status_code=403,
+                        content={"error": "Forbidden: invalid origin"},
+                    )
         return await call_next(request)
 
 # CSRF 미들웨어 적용
