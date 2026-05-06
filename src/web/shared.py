@@ -19,6 +19,9 @@ templates = Jinja2Templates(directory=str(templates_dir))
 # 리버스 프록시 base path를 모든 템플릿에서 사용 가능하게 설정
 templates.env.globals["base_path"] = settings.root_path
 
+# Cloudflare Turnstile site key — 비어있으면 템플릿에서 위젯 미렌더 (자동 비활성화)
+templates.env.globals["turnstile_site_key"] = settings.turnstile_site_key
+
 
 def get_db():
     """데이터베이스 세션 제너레이터"""

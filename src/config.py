@@ -90,6 +90,16 @@ class Settings(BaseSettings):
     google_client_id: str = Field(default="", env="GOOGLE_CLIENT_ID")
     super_admin_emails: str = Field(default="", env="SUPER_ADMIN_EMAILS")
 
+    # 구독 폼 어뷰즈 방어 (2026-05-02 Subscription Bombing 대응)
+    # Cloudflare Turnstile — site/secret key 비어 있으면 captcha 비활성화 (개발/테스트용)
+    turnstile_site_key: str = Field(default="", env="TURNSTILE_SITE_KEY")
+    turnstile_secret_key: str = Field(default="", env="TURNSTILE_SECRET_KEY")
+    # IP 기반 rate limit — slowapi 표기법. 변경 시 어뷰즈 baseline 재산정 필요
+    subscribe_rate_limit_ip: str = Field(default="5/hour", env="SUBSCRIBE_RATE_LIMIT_IP")
+    # 이메일 기반 — 동일 메일로 N분/N일 내 재발송 횟수 제한
+    subscribe_rate_limit_email_minutes: int = Field(default=5, env="SUBSCRIBE_RATE_LIMIT_EMAIL_MINUTES")
+    subscribe_rate_limit_email_per_day: int = Field(default=3, env="SUBSCRIBE_RATE_LIMIT_EMAIL_PER_DAY")
+
     class Config:
         env_file = Path(__file__).parent.parent / ".env"
         env_file_encoding = "utf-8"

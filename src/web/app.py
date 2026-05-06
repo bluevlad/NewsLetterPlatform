@@ -23,9 +23,18 @@ from ..common.subscription.manager import SubscriptionManager
 from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
 from ..common.database.repository import get_session, SendHistoryRepository, NewsletterArchiveRepository
+from ..common.security import (
+    is_honeypot_filled,
+    verify_turnstile,
+    get_client_ip,
+)
 from ..tenant.registry import get_registry
 from .shared import templates, templates_dir, get_db, get_tenant_or_404
 from .admin import admin_router
+
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # 리버스 프록시 base path prefix
 _base = settings.root_path
@@ -39,6 +48,23 @@ app = FastAPI(
     version="1.0.0",
     root_path=settings.root_path,
 )
+
+# Rate limiter — 리버스 프록시 X-Forwarded-For 고려한 키 함수 사용
+def _rate_limit_key(request: Request) -> str:
+    return get_client_ip(request)
+
+limiter = Limiter(key_func=_rate_limit_key)
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    """rate limit 초과 — 봇에 정보 노출 최소화 (구체 메시지 + 429)"""
+    logger.warning("rate limit 초과: ip=%s, path=%s", get_client_ip(request), request.url.path)
+    return JSONResponse(
+        status_code=429,
+        content={"error": "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."},
+    )
 
 class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
     """CSRF 방지: POST 요청의 Origin/Referer가 허용된 호스트인지 검증"""
@@ -176,14 +202,46 @@ async def subscribe_form(request: Request, tenant_id: str):
 
 
 @app.post("/{tenant_id}/subscribe", response_class=HTMLResponse)
+@limiter.limit(settings.subscribe_rate_limit_ip)
 async def subscribe_submit(
     request: Request,
     tenant_id: str,
     email: str = Form(...),
-    name: str = Form(default="")
+    name: str = Form(default=""),
+    website: str = Form(default=""),  # honeypot — 사람은 비워둠
+    cf_turnstile_response: str = Form(default="", alias="cf-turnstile-response"),
 ):
     """구독 신청 처리 - 인증코드 발송"""
     tenant = get_tenant_or_404(tenant_id)
+
+    # Honeypot — 봇이 모든 필드를 채우면 silent drop (200 + 일반 에러로 위장, 학습 회피)
+    if is_honeypot_filled(website):
+        logger.warning("honeypot trigger: ip=%s, email=%s", get_client_ip(request), email)
+        return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
+            "request": request,
+            "tenant": tenant,
+            "error": "오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+            "email": email,
+            "name": name,
+        })
+
+    # Cloudflare Turnstile (env 미설정 시 자동 비활성화)
+    if settings.turnstile_secret_key:
+        ok = await verify_turnstile(
+            cf_turnstile_response,
+            settings.turnstile_secret_key,
+            remote_ip=get_client_ip(request),
+        )
+        if not ok:
+            logger.warning("Turnstile 검증 실패: ip=%s, email=%s",
+                          get_client_ip(request), email)
+            return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
+                "request": request,
+                "tenant": tenant,
+                "error": "보안 검증에 실패했습니다. 페이지를 새로고침 후 다시 시도해주세요.",
+                "email": email,
+                "name": name,
+            })
 
     SessionLocal = get_session_factory()
     db = SessionLocal()
@@ -418,13 +476,42 @@ async def unsubscribe_form(request: Request, tenant_id: str):
 
 
 @app.post("/{tenant_id}/unsubscribe", response_class=HTMLResponse)
+@limiter.limit(settings.subscribe_rate_limit_ip)
 async def unsubscribe_submit(
     request: Request,
     tenant_id: str,
-    email: str = Form(...)
+    email: str = Form(...),
+    website: str = Form(default=""),  # honeypot
+    cf_turnstile_response: str = Form(default="", alias="cf-turnstile-response"),
 ):
     """구독 해지 신청 처리 - 인증코드 발송"""
     tenant = get_tenant_or_404(tenant_id)
+
+    if is_honeypot_filled(website):
+        logger.warning("honeypot trigger (unsubscribe): ip=%s, email=%s",
+                      get_client_ip(request), email)
+        return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_request.html"), {
+            "request": request,
+            "tenant": tenant,
+            "error": "오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+            "email": email,
+        })
+
+    if settings.turnstile_secret_key:
+        ok = await verify_turnstile(
+            cf_turnstile_response,
+            settings.turnstile_secret_key,
+            remote_ip=get_client_ip(request),
+        )
+        if not ok:
+            logger.warning("Turnstile 검증 실패 (unsubscribe): ip=%s, email=%s",
+                          get_client_ip(request), email)
+            return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_request.html"), {
+                "request": request,
+                "tenant": tenant,
+                "error": "보안 검증에 실패했습니다. 페이지를 새로고침 후 다시 시도해주세요.",
+                "email": email,
+            })
 
     SessionLocal = get_session_factory()
     db = SessionLocal()
