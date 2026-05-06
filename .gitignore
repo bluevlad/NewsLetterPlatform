@@ -29,6 +29,11 @@ CLAUDE.local.md
 data/*.db
 data/*.sqlite
 data/*.sqlite3
+data/*.db.*
+data/*.bak*
+data/.scheduler_health
+*.bak
+*.bak2_*
 
 # Logs
 logs/*.log
