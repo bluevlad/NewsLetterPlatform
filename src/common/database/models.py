@@ -202,3 +202,28 @@ class EmailVerification(Base):
 
     def __repr__(self):
         return f"<EmailVerification(tenant={self.tenant_id}, email='{self.email}')>"
+
+
+class BounceLog(Base):
+    """이메일 bounce 이력 (NDR 자동 처리)
+
+    IMAP으로 운영자 inbox에서 수집한 NDR을 파싱하여 적재.
+    hard bounce 시 동일 email의 모든 subscribers row가 비활성화되며
+    request_subscribe 진입 단계에서 사전 차단의 근거로 사용된다.
+    """
+    __tablename__ = "bounce_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String(255), nullable=False, index=True)
+    bounce_type = Column(String(10), nullable=False)  # 'hard' | 'soft'
+    smtp_code = Column(String(20))                     # e.g. '550 5.1.1'
+    diagnostic = Column(Text)                          # NDR 본문 발췌
+    ndr_message_id = Column(String(255), unique=True)  # IMAP Message-ID — 재처리 방지
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("idx_bounce_email_type_created", "email", "bounce_type", "created_at"),
+    )
+
+    def __repr__(self):
+        return f"<BounceLog(email='{self.email}', type={self.bounce_type}, code={self.smtp_code})>"
