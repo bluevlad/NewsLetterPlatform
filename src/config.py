@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     csrf_allowed_hosts: str = Field(default="", env="CSRF_ALLOWED_HOSTS")
 
     # Admin
-    admin_password: str = Field(default="dnflskfk", env="ADMIN_PASSWORD")
+    admin_password: str = Field(default="", env="ADMIN_PASSWORD")
     admin_session_hours: int = Field(default=24, env="ADMIN_SESSION_HOURS")
 
     # Google Sign-In (Admin 로그인용 - client_id만 필요)
