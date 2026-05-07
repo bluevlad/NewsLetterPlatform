@@ -666,6 +666,9 @@ class AllergyInsightCollector:
                 ),
                 "specific_items": specific_items[:5],
                 "keywords": keywords[:8],
+                # ▼ N2.5: B2a backend 의 한국어 1~2문장 LLM 임상 함의 요약.
+                # 백필 전 / abstract 부재 / LLM 실패 시 None — 템플릿이 자동 숨김.
+                "clinical_implication": item.get("clinical_implication"),
             })
 
         # primary relevance 우선, 그 다음 발행 연도로 정렬
