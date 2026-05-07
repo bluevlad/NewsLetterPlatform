@@ -194,15 +194,33 @@ class AllergyInsightCollector:
         self,
         days: int = 7,
         exclude_ids: Optional[list[int]] = None,
+        exclude_companies: Optional[list[str]] = None,
+        target_count: int = 5,
     ) -> list[dict]:
         """기업 동향 다이제스트 수집 (headlines에 선정된 기사는 제외).
 
+        백엔드는 days=7 누적만 제공하므로, 동일 기업이 daily 마다 반복
+        노출되는 문제를 클라이언트 사이드에서 보완한다:
+          1) days=7 1차 호출
+          2) exclude_companies (최근 발송 기업) + 카테고리 다양성 강제 필터
+          3) 결과가 target_count 미만이면 days=14 로 풀 확장 후 재시도
+
         Returns:
-            [{"company_name", "count_7d", "avg_importance", "representative", "categories"}, ...]
+            [{"company_name", "count_7d", "avg_importance", "representative",
+              "categories"}, ...] — 최대 target_count 건.
             실패 시 빈 리스트.
         """
-        try:
-            params: Dict[str, Any] = {"days": days, "limit_per_company": 1}
+        excluded_companies = {
+            (c or "").strip() for c in (exclude_companies or []) if c
+        }
+
+        async def _fetch(window_days: int) -> list[dict]:
+            params: Dict[str, Any] = {
+                "days": window_days,
+                "limit_per_company": 1,
+                # 백엔드 default 20 → 클라이언트 필터 여유분 확보를 위해 더 넓게
+                "max_companies": 40,
+            }
             if exclude_ids:
                 params["exclude_ids"] = ",".join(str(i) for i in exclude_ids)
             raw = await self._get(
@@ -211,12 +229,54 @@ class AllergyInsightCollector:
                 params=params,
             )
             body = self._unwrap(raw)
-            companies = body.get("companies", []) or []
+            return body.get("companies", []) or []
+
+        def _apply_filters(
+            companies: list[dict], max_per_category: int = 3
+        ) -> list[dict]:
+            """기업명 dedup + 카테고리 다양성 강제."""
+            seen_categories: dict[str, int] = {}
+            kept: list[dict] = []
+            for c in companies:
+                name = (c.get("company_name") or "").strip()
+                if not name or name in excluded_companies:
+                    continue
+                cats = c.get("categories") or []
+                primary_cat = cats[0] if cats else "etc"
+                if seen_categories.get(primary_cat, 0) >= max_per_category:
+                    continue
+                kept.append(c)
+                seen_categories[primary_cat] = (
+                    seen_categories.get(primary_cat, 0) + 1
+                )
+                if len(kept) >= target_count:
+                    break
+            return kept
+
+        try:
+            companies_7d = await _fetch(7)
+            filtered = _apply_filters(companies_7d)
+            if len(filtered) < target_count:
+                # 풀이 부족하면 14일로 확장 후 한 번 더 시도
+                companies_14d = await _fetch(14)
+                seen_names = {c.get("company_name") for c in filtered}
+                extra_pool = [
+                    c for c in companies_14d
+                    if c.get("company_name") not in seen_names
+                ]
+                extra_filtered = _apply_filters(
+                    extra_pool, max_per_category=3
+                )
+                filtered.extend(
+                    extra_filtered[: target_count - len(filtered)]
+                )
             logger.info(
-                f"AllergyInsight 기업 다이제스트 수집 완료: {len(companies)}건 "
-                f"(exclude {len(exclude_ids or [])})"
+                f"AllergyInsight 기업 다이제스트 수집 완료: "
+                f"raw={len(companies_7d)} → filtered={len(filtered)} "
+                f"(exclude_ids={len(exclude_ids or [])}, "
+                f"exclude_companies={len(excluded_companies)})"
             )
-            return companies
+            return filtered
         except Exception as e:
             logger.warning(
                 f"AllergyInsight 기업 다이제스트 수집 실패 (빈 리스트 폴백): {e}"
@@ -316,14 +376,65 @@ class AllergyInsightCollector:
             })
         return result
 
+    # PaperAllergenLink.link_type → (한글 라벨, 색상) 매핑.
+    # 백엔드 paper_link_extractor.py 기준 link_type 카탈로그.
+    _PAPER_LINK_TYPE_META = {
+        "symptom":   ("증상",   "#c62828"),
+        "dietary":   ("식이",   "#ef6c00"),
+        "mechanism": ("기전",   "#6a1b9a"),
+        "diagnosis": ("진단",   "#1565c0"),
+        "treatment": ("치료",   "#2e7d32"),
+        "prevention":("예방",   "#00838f"),
+        "epidemiology": ("역학", "#5e35b1"),
+        "general":   ("일반",   "#546e7a"),
+    }
+
     def _transform_papers(self, raw_items: list[dict]) -> list[dict]:
-        """v2.0.0 논문 아이템 → daily_report papers 포맷 변환"""
-        result = []
+        """v2.0.0 논문 아이템 → daily_report papers 포맷 변환.
+
+        백엔드 PaperResponse 가 이미 포함하는 allergen_links / keywords 를
+        활용해 알러지 도메인 강조용 메타를 부착한다:
+          - allergen_tags: 칩으로 표시 (link_type 라벨/색상 + relevance_score)
+          - primary_allergen: relevance_score 최고 1건
+          - specific_items: 한글 키워드 묶음 (중복 제거)
+          - keywords: PaperResponse.keywords (Phase 1 검색 결과 영속화 필드)
+        정렬 키도 published year → primary_allergen.relevance_score 우선으로 변경.
+        """
+        meta = self._PAPER_LINK_TYPE_META
+        transformed: list[dict] = []
         for item in raw_items:
-            result.append({
+            raw_links = item.get("allergen_links") or []
+            allergen_tags: list[dict] = []
+            specific_items: list[str] = []
+            for link in raw_links:
+                link_type = (link.get("link_type") or "general").lower()
+                label, color = meta.get(link_type, meta["general"])
+                tag = {
+                    "allergen_code": link.get("allergen_code"),
+                    "link_type": link_type,
+                    "link_type_label": label,
+                    "color": color,
+                    "relevance_score": int(link.get("relevance_score") or 0),
+                    "specific_item": link.get("specific_item"),
+                }
+                allergen_tags.append(tag)
+                spec = link.get("specific_item")
+                if spec and spec not in specific_items:
+                    specific_items.append(spec)
+            allergen_tags.sort(
+                key=lambda t: t["relevance_score"], reverse=True
+            )
+            primary = allergen_tags[0] if allergen_tags else None
+
+            keywords = item.get("keywords") or []
+            if isinstance(keywords, str):
+                keywords = [k.strip() for k in keywords.split(",") if k.strip()]
+
+            transformed.append({
                 "id": item.get("id"),
                 "content_type": "논문",
                 "title": item.get("title", ""),
+                "title_kr": item.get("title_kr"),
                 "link": item.get("url", ""),
                 "journal": item.get("journal", ""),
                 "pmid": item.get("pmid"),
@@ -331,8 +442,26 @@ class AllergyInsightCollector:
                 "authors": item.get("authors", ""),
                 "pub_date": str(item.get("year", "")),
                 "abstract": item.get("abstract", ""),
+                "paper_type": item.get("paper_type"),
+                # ▼ N1 신규 필드
+                "allergen_tags": allergen_tags[:5],
+                "primary_allergen": primary,
+                "primary_relevance": (
+                    primary["relevance_score"] if primary else 0
+                ),
+                "specific_items": specific_items[:5],
+                "keywords": keywords[:8],
             })
-        return result
+
+        # primary relevance 우선, 그 다음 발행 연도로 정렬
+        transformed.sort(
+            key=lambda p: (
+                p.get("primary_relevance") or 0,
+                p.get("pub_date") or "",
+            ),
+            reverse=True,
+        )
+        return transformed
 
     def _build_news_groups(self, news_items: list[dict]) -> list[dict]:
         """뉴스를 카테고리별로 그룹핑"""
@@ -397,7 +526,9 @@ class AllergyInsightCollector:
         return result
 
     async def collect_daily_report(
-        self, exclude_ids: Optional[list[int]] = None
+        self,
+        exclude_ids: Optional[list[int]] = None,
+        exclude_companies: Optional[list[str]] = None,
     ) -> Dict:
         """일일 리포트 수집.
 
@@ -407,8 +538,11 @@ class AllergyInsightCollector:
         Args:
             exclude_ids: NewsLetterPlatform `sent_articles` 최근 N일 기사 ID.
                 헤드라인·company_digest 양쪽에서 풀 단계에서 원천 제외.
+            exclude_companies: 최근 N일 발송된 기업명. company_digest 의 일 단위
+                반복 노출(같은 기업이 7일 풀에서 매일 재선정) 방지용 클라이언트 필터.
         """
         recent_excl = list(exclude_ids or [])
+        recent_companies = list(exclude_companies or [])
         try:
             # 1. 핵심 헤드라인 수집 (공개 API, 1기업 1헤드라인)
             headlines_payload = await self._collect_headlines_today(
@@ -417,10 +551,24 @@ class AllergyInsightCollector:
             top_headlines = headlines_payload.get("headlines", [])
             excluded_ids = headlines_payload.get("excluded_ids", [])
 
-            # 2. 기업 동향 다이제스트 (헤드라인 선정분 + 최근 발송 이력 동시 제외)
+            # 2. 기업 동향 다이제스트
+            #   - 풀에서 헤드라인 선정분 + 최근 발송 기사 ID 제외
+            #   - 결과에서 최근 발송 기업 + 오늘 헤드라인에 이미 잡힌 기업 dedup
             digest_excl = sorted({*excluded_ids, *recent_excl})
+            today_headline_companies = [
+                (h.get("company_name") or "").strip()
+                for h in top_headlines
+                if h.get("company_name")
+            ]
+            digest_company_excl = sorted({
+                *recent_companies,
+                *today_headline_companies,
+            })
             company_digest = await self._collect_company_digest(
-                days=7, exclude_ids=digest_excl
+                days=7,
+                exclude_ids=digest_excl,
+                exclude_companies=digest_company_excl,
+                target_count=5,
             )
 
             # 3. 논문 수집 (공개 API)
@@ -483,16 +631,22 @@ class AllergyInsightCollector:
             return {}
 
     async def collect_all(
-        self, exclude_ids: Optional[list[int]] = None
+        self,
+        exclude_ids: Optional[list[int]] = None,
+        exclude_companies: Optional[list[str]] = None,
     ) -> Dict[str, Any]:
         """전체 데이터 수집.
 
         Args:
-            exclude_ids: 최근 발송 이력 — daily 리포트 수집에 전달.
+            exclude_ids: 최근 발송 기사 ID — daily 리포트 수집에 전달.
+            exclude_companies: 최근 발송 기업명 — company_digest dedup 에 전달.
         """
         result = {}
 
-        daily_report = await self.collect_daily_report(exclude_ids=exclude_ids)
+        daily_report = await self.collect_daily_report(
+            exclude_ids=exclude_ids,
+            exclude_companies=exclude_companies,
+        )
         if daily_report:
             result["daily_report"] = daily_report
 

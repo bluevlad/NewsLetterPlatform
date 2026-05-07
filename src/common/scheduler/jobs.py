@@ -92,21 +92,31 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
 
     try:
         if newsletter_type == "daily":
-            # dedup 활성 테넌트는 최근 발송 이력을 exclude_ids 로 전달하여
-            # 수집/선정 단계에서 원천 제외.
+            # dedup 활성 테넌트는 최근 발송 이력을 exclude_ids/exclude_companies
+            # 로 전달하여 수집/선정 단계에서 원천 제외.
             recent_ids: list[int] = []
+            recent_companies: list[str] = []
             if tenant.dedup_recent_days:
                 with get_session() as session:
                     recent_ids = SentArticleRepository.list_recent_article_ids(
                         session, tenant_id, days=tenant.dedup_recent_days
                     )
-                if recent_ids:
+                    recent_companies = (
+                        SentArticleRepository.list_recent_company_names(
+                            session, tenant_id, days=tenant.dedup_recent_days
+                        )
+                    )
+                if recent_ids or recent_companies:
                     logger.info(
                         f"[{tenant_id}] dedup: 최근 {tenant.dedup_recent_days}일 "
-                        f"발송 기사 {len(recent_ids)}건 제외 대상"
+                        f"발송 기사 {len(recent_ids)}건 / 기업 {len(recent_companies)}건 "
+                        "제외 대상"
                     )
             collected = asyncio.run(
-                tenant.collect_data(exclude_ids=recent_ids or None)
+                tenant.collect_data(
+                    exclude_ids=recent_ids or None,
+                    exclude_companies=recent_companies or None,
+                )
             )
         else:
             # weekly/monthly: 요약 데이터 수집

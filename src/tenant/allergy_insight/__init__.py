@@ -81,25 +81,42 @@ class AllergyInsightTenant(BaseTenant):
     ) -> List[tuple]:
         """daily 발송 context 에서 sent_articles 기록 대상 추출.
 
-        - top_headlines: (id, url, 'headline')
-        - company_digest[*].representative: (id, url, 'company_digest')
+        - top_headlines: (id, url, 'headline', company_name)
+        - company_digest[*].representative: (id, url, 'company_digest', company_name)
+
+        company_name 은 기업 단위 dedup (company-digest 일 단위 반복 차단) 에 쓰인다.
         """
         entries: List[tuple] = []
         for h in context.get("top_headlines") or []:
             aid = h.get("id")
             if aid is not None:
-                entries.append((int(aid), h.get("url"), "headline"))
+                entries.append((
+                    int(aid),
+                    h.get("url"),
+                    "headline",
+                    h.get("company_name") or None,
+                ))
         for c in context.get("company_digest") or []:
             rep = c.get("representative") or {}
             aid = rep.get("id")
             if aid is not None:
-                entries.append((int(aid), rep.get("url"), "company_digest"))
+                entries.append((
+                    int(aid),
+                    rep.get("url"),
+                    "company_digest",
+                    c.get("company_name") or None,
+                ))
         return entries
 
     async def collect_data(
-        self, *, exclude_ids: Optional[List[int]] = None
+        self, *,
+        exclude_ids: Optional[List[int]] = None,
+        exclude_companies: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        return await self._collector.collect_all(exclude_ids=exclude_ids)
+        return await self._collector.collect_all(
+            exclude_ids=exclude_ids,
+            exclude_companies=exclude_companies,
+        )
 
     def format_report(self, collected_data: Dict[str, Any]) -> Dict[str, Any]:
         return self._formatter.format(collected_data)
