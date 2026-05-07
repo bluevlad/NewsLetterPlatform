@@ -65,6 +65,11 @@ class AllergyInsightFormatter:
             "papers": daily_report.get("papers", []),
             "drug_updates": drug_updates,
             "weekly_metrics": daily_report.get("weekly_metrics") or {},
+            # N2 신규 (collector 가 산출, formatter 는 패스스루)
+            "spotlight": daily_report.get("spotlight"),
+            "treatments": daily_report.get("treatments") or {},
+            "trends_rising": daily_report.get("trends_rising", []),
+            "trends_declining": daily_report.get("trends_declining", []),
             "drug_section_color": DRUG_SECTION_COLOR,
             "drug_section_bg": DRUG_SECTION_BG,
             "stats": daily_report.get("stats", {
@@ -342,7 +347,7 @@ class AllergyInsightFormatter:
 
     @staticmethod
     def _empty_context() -> Dict[str, Any]:
-        """데이터 없을 시 빈 기본값 (Phase 1 키만)."""
+        """데이터 없을 시 빈 기본값 (Phase 1 + N2 키)."""
         now = datetime.now()
         return {
             "report_date": now,
@@ -351,6 +356,11 @@ class AllergyInsightFormatter:
             "papers": [],
             "drug_updates": _empty_drug_updates(),
             "weekly_metrics": {},
+            # N2 신규
+            "spotlight": None,
+            "treatments": {},
+            "trends_rising": [],
+            "trends_declining": [],
             "drug_section_color": DRUG_SECTION_COLOR,
             "drug_section_bg": DRUG_SECTION_BG,
             "stats": {
