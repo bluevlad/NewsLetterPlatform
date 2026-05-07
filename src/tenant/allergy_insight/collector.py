@@ -6,17 +6,23 @@ API Endpoints:
   - POST /api/auth/simple/login → JWT 토큰 획득
   - GET  /api/admin/news → 뉴스 전체 목록 (Bearer 인증, 주간/월간용)
   - GET  /api/admin/news/stats → 뉴스 통계 (Bearer 인증)
-  - GET  /api/papers → 논문 목록 (공개)
+  - GET  /api/papers → 논문 목록 (공개, allergen_links/keywords 포함)
 
 Redesign Phase 1 endpoints (NEWSLETTER_REDESIGN_SPEC §3.2):
   - GET  /api/public/analytics/headlines/today → 핵심 헤드라인 Top-N (P1 구현 완료)
-  - GET  /api/public/analytics/company-digest → 기업 동향 다이제스트 (P1 구현 완료)
+  - GET  /api/public/analytics/company-digest → 기업 동향 다이제스트
+        (B1 확장: exclude_companies / category_mix / since_date / event_class /
+         is_new_company)
   - GET  /api/public/drugs/updates → 약물 업데이트 (P2 예정)
   - GET  /api/public/analytics/weekly-metrics → 주간 메트릭 (P3 예정)
+
+N2 신규 인용 endpoints (전문가용 섹션):
+  - GET  /api/public/analytics/allergen-trend/ranking → 상승/하락 알러젠 랭킹
+  - GET  /api/public/analytics/treatments/overview → 신흥 치료법 통계
 """
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 import httpx
@@ -220,9 +226,22 @@ class AllergyInsightCollector:
                 "limit_per_company": 1,
                 # 백엔드 default 20 → 클라이언트 필터 여유분 확보를 위해 더 넓게
                 "max_companies": 40,
+                # B1 활용: 풀 단계에서 카테고리 다양성 강제 → 클라이언트 dedup 부담↓
+                "category_mix": "true",
+                "max_per_category": 3,
             }
             if exclude_ids:
                 params["exclude_ids"] = ",".join(str(i) for i in exclude_ids)
+            if excluded_companies:
+                # B1 신규: 풀 단계에서 회사명(name_kr) 차단
+                params["exclude_companies"] = ",".join(sorted(excluded_companies))
+            # B1 신규: since_date 를 window_days 일 전으로 명시.
+            # pool 자체는 동일(7일)이지만 응답에 is_new_company 가 채워져
+            # "지난 N 일 이내 처음 등장한 기업"을 템플릿에서 강조 가능.
+            since_marker = (
+                datetime.now(timezone.utc).date() - timedelta(days=window_days)
+            ).isoformat()
+            params["since_date"] = since_marker
             raw = await self._get(
                 "/api/public/analytics/company-digest",
                 auth_required=False,
@@ -326,6 +345,202 @@ class AllergyInsightCollector:
                 f"AllergyInsight 약물 업데이트 수집 실패 (빈 구조 폴백): {e}"
             )
             return empty
+
+    # ─────────────────────────────────────────────────────────────
+    # N2: 전문가용 신규 섹션 — 알러지 인사이트 스폿라이트 / 신흥 치료법 /
+    # 알러젠 트렌드. 모두 공개 API, fail-safe (실패 시 빈 구조).
+    # Spec: /api/public/analytics/{allergen-trend,treatments}
+    # ─────────────────────────────────────────────────────────────
+
+    # 알러젠 코드 → 한글 라벨 (백엔드 영문 코드 그대로 노출하면 가독성↓)
+    _ALLERGEN_LABEL_KR = {
+        "fish": "어류",
+        "shellfish": "갑각류",
+        "milk": "우유",
+        "egg": "계란",
+        "peanut": "땅콩",
+        "tree_nut": "견과류",
+        "walnut": "호두",
+        "almond": "아몬드",
+        "cashew": "캐슈넛",
+        "pecan": "피칸",
+        "soy": "대두",
+        "wheat": "밀",
+        "sesame": "참깨",
+        "buckwheat": "메밀",
+        "peach": "복숭아",
+        "tomato": "토마토",
+        "kiwi": "키위",
+        "banana": "바나나",
+        "avocado": "아보카도",
+        "celery": "셀러리",
+        "mustard": "겨자",
+        "cat": "고양이",
+        "dog": "개",
+        "horse": "말",
+        "pollen": "꽃가루",
+        "ragweed": "돼지풀",
+        "birch": "자작나무",
+        "grass": "잔디",
+        "mugwort": "쑥",
+        "dust_mite": "집먼지진드기",
+        "mold": "곰팡이",
+        "cockroach": "바퀴벌레",
+        "latex": "라텍스",
+        "bee_venom": "벌독",
+        "drug": "약물",
+        "penicillin": "페니실린",
+    }
+
+    _LINK_TYPE_KR = {
+        "symptom": "증상",
+        "dietary": "식이",
+        "mechanism": "기전",
+        "diagnosis": "진단",
+        "treatment": "치료",
+        "prevention": "예방",
+        "epidemiology": "역학",
+        "emergency": "응급",
+        "general": "일반",
+    }
+
+    def _allergen_label(self, code: str) -> str:
+        """알러젠 코드 → 한글 라벨. 매핑 없으면 코드 원문 유지."""
+        if not code:
+            return ""
+        return self._ALLERGEN_LABEL_KR.get(code.lower(), code)
+
+    async def _collect_allergen_ranking(
+        self,
+        direction: str = "rising",
+        limit: int = 5,
+    ) -> list[dict]:
+        """알러젠 상승/하락 랭킹 수집.
+
+        direction: rising / declining / stable / new (백엔드 패턴 준수).
+        실패 또는 빈 응답 → 빈 리스트.
+
+        Returns: [{allergen_code, label_kr, paper_count, total_papers,
+                   mention_rate, change_rate, top_link_types: [...]}]
+        """
+        try:
+            raw = await self._get(
+                "/api/public/analytics/allergen-trend/ranking",
+                auth_required=False,
+                params={"direction": direction, "limit": limit},
+            )
+            body = self._unwrap(raw)
+            allergens = body.get("allergens", []) or []
+            result = []
+            for a in allergens:
+                code = a.get("allergen_code") or ""
+                top_link_types = a.get("top_link_types") or []
+                # 한글 라벨 부착
+                lt_display = [
+                    {
+                        "type": lt.get("type"),
+                        "label": self._LINK_TYPE_KR.get(
+                            (lt.get("type") or "").lower(), lt.get("type")
+                        ),
+                        "count": lt.get("count", 0),
+                    }
+                    for lt in top_link_types[:3]
+                ]
+                result.append({
+                    "allergen_code": code,
+                    "label_kr": self._allergen_label(code),
+                    "paper_count": a.get("paper_count", 0),
+                    "total_papers": a.get("total_papers", 0),
+                    "mention_rate": a.get("mention_rate", 0.0),
+                    "change_rate": a.get("change_rate", 0.0),
+                    "top_link_types": lt_display,
+                })
+            logger.info(
+                f"AllergyInsight 알러젠 랭킹 수집 완료 ({direction}): {len(result)}건"
+            )
+            return result
+        except Exception as e:
+            logger.warning(
+                f"AllergyInsight 알러젠 랭킹({direction}) 수집 실패 "
+                f"(빈 리스트 폴백): {e}"
+            )
+            return []
+
+    async def _collect_treatments_overview(self) -> Dict[str, Any]:
+        """신흥 치료법 통계 수집.
+
+        백엔드 응답: {latest_year, total_treatments, by_type, rising_treatments,
+                     top_treatments: [{treatment_name, treatment_type, paper_count,
+                                       trend_direction}]}
+        실패 시 빈 구조 폴백.
+        """
+        empty = {
+            "latest_year": None,
+            "total_treatments": 0,
+            "by_type": {},
+            "top_emerging": [],
+        }
+        try:
+            raw = await self._get(
+                "/api/public/analytics/treatments/overview",
+                auth_required=False,
+            )
+            body = self._unwrap(raw)
+            top_treatments = body.get("top_treatments", []) or []
+            rising = body.get("rising_treatments", []) or []
+            # rising 우선, 없으면 top_treatments 중 trend_direction == "new" 만
+            emerging_pool = rising or [
+                t for t in top_treatments
+                if (t.get("trend_direction") or "").lower() in ("new", "rising")
+            ]
+            top_emerging = [
+                {
+                    "name": t.get("treatment_name") or "",
+                    "type": (t.get("treatment_type") or "").lower(),
+                    "paper_count": t.get("paper_count", 0),
+                    "direction": t.get("trend_direction") or "new",
+                }
+                for t in emerging_pool[:6]
+                if t.get("treatment_name")
+            ]
+            result = {
+                "latest_year": body.get("latest_year"),
+                "total_treatments": body.get("total_treatments", 0),
+                "by_type": body.get("by_type", {}) or {},
+                "top_emerging": top_emerging,
+            }
+            logger.info(
+                f"AllergyInsight 신흥 치료법 수집 완료: "
+                f"top_emerging={len(top_emerging)}건"
+            )
+            return result
+        except Exception as e:
+            logger.warning(
+                f"AllergyInsight 신흥 치료법 수집 실패 (빈 구조 폴백): {e}"
+            )
+            return empty
+
+    async def _collect_spotlight(
+        self, rotation_seed: int = 0, candidate_limit: int = 8
+    ) -> Optional[Dict[str, Any]]:
+        """오늘의 알러지 스폿라이트 1건.
+
+        rising 랭킹 상위 candidate_limit 중 rotation_seed 로 1건 선정 → 일별 회전.
+        Returns: 단일 dict 또는 None (데이터 없음).
+        """
+        candidates = await self._collect_allergen_ranking(
+            direction="rising", limit=candidate_limit
+        )
+        if not candidates:
+            return None
+        idx = rotation_seed % len(candidates)
+        chosen = candidates[idx]
+        # 추가 표시용 필드
+        return {
+            **chosen,
+            "rotation_index": idx,
+            "candidate_total": len(candidates),
+        }
 
     async def _collect_weekly_metrics(
         self, report_date: Optional[str] = None, window_days: int = 7
@@ -591,6 +806,20 @@ class AllergyInsightCollector:
             if date.today().weekday() == 0:
                 weekly_metrics = await self._collect_weekly_metrics()
 
+            # 7. N2 신규 — 알러지 인사이트 스폿라이트 / 신흥 치료법 / 알러젠 트렌드.
+            #    모두 fail-safe 폴백, 빈 결과면 템플릿이 섹션 자동 숨김.
+            today = date.today()
+            # 월·일을 합쳐 회전 — 같은 달 내 매일 다른 인덱스 보장
+            rotation_seed = today.toordinal()
+            spotlight = await self._collect_spotlight(rotation_seed=rotation_seed)
+            treatments = await self._collect_treatments_overview()
+            trends_rising = await self._collect_allergen_ranking(
+                direction="rising", limit=5
+            )
+            trends_declining = await self._collect_allergen_ranking(
+                direction="declining", limit=5
+            )
+
             now = datetime.now(timezone.utc).isoformat()
 
             report = {
@@ -601,6 +830,11 @@ class AllergyInsightCollector:
                 "papers": paper_items[:20],
                 "drug_updates": drug_updates,
                 "weekly_metrics": weekly_metrics,
+                # N2 신규
+                "spotlight": spotlight,
+                "treatments": treatments,
+                "trends_rising": trends_rising,
+                "trends_declining": trends_declining,
                 "stats": {
                     "news_count": raw_stats.get(
                         "total_news", len(top_headlines)
@@ -622,7 +856,10 @@ class AllergyInsightCollector:
                 f"헤드라인 {len(top_headlines)}건, "
                 f"기업다이제스트 {len(company_digest)}건, "
                 f"논문 {len(paper_items)}건, "
-                f"약물 {drug_updates.get('total', 0)}건"
+                f"약물 {drug_updates.get('total', 0)}건, "
+                f"스폿라이트={'1건' if spotlight else '0건'}, "
+                f"신흥치료법={len(treatments.get('top_emerging', []))}건, "
+                f"트렌드(상승/하락)={len(trends_rising)}/{len(trends_declining)}"
             )
             return report
 

@@ -86,6 +86,54 @@
         </tr>
         {% endif %}
 
+        <!-- 🔬 알러지 인사이트 스폿라이트 (N2 신규, 1건, 일별 회전) -->
+        {% if spotlight %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #5e35b1; color: #4527a0; font-size: 18px;">
+                    🔬 오늘의 알러지 스폿라이트
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td style="background-color: #f3e5f5; border-left: 4px solid #5e35b1; border-radius: 0 8px 8px 0; padding: 18px 20px;">
+                            <p style="margin: 0 0 8px 0;">
+                                <span style="display: inline-block; background-color: #5e35b1; color: #ffffff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px;">상승 트렌드</span>
+                                <span style="font-size: 19px; font-weight: 700; color: #311b92; margin-left: 10px;">{{ spotlight.label_kr or spotlight.allergen_code }}</span>
+                                {% if spotlight.allergen_code and spotlight.label_kr and spotlight.label_kr != spotlight.allergen_code %}
+                                <span style="color: #888888; font-size: 12px; margin-left: 6px;">{{ spotlight.allergen_code }}</span>
+                                {% endif %}
+                            </p>
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 10px;">
+                                <tr>
+                                    <td style="padding: 4px 8px 4px 0; vertical-align: top;">
+                                        <p style="margin: 0; color: #5e35b1; font-size: 11px; font-weight: 600;">관련 논문</p>
+                                        <p style="margin: 2px 0 0 0; color: #311b92; font-size: 18px; font-weight: 700;">{{ spotlight.paper_count }}<span style="font-size: 12px; font-weight: 500; color: #555555;">/{{ spotlight.total_papers }}</span></p>
+                                    </td>
+                                    <td style="padding: 4px 8px; vertical-align: top;">
+                                        <p style="margin: 0; color: #5e35b1; font-size: 11px; font-weight: 600;">언급 비율</p>
+                                        <p style="margin: 2px 0 0 0; color: #311b92; font-size: 18px; font-weight: 700;">{{ (spotlight.mention_rate * 100)|round(2) }}<span style="font-size: 12px; font-weight: 500;">%</span></p>
+                                    </td>
+                                    <td style="padding: 4px 0 4px 8px; vertical-align: top;">
+                                        <p style="margin: 0; color: #5e35b1; font-size: 11px; font-weight: 600;">전년 대비</p>
+                                        <p style="margin: 2px 0 0 0; color: #c62828; font-size: 18px; font-weight: 700;">+{{ spotlight.change_rate|round(1) }}<span style="font-size: 12px; font-weight: 500;">%</span></p>
+                                    </td>
+                                </tr>
+                            </table>
+                            {% if spotlight.top_link_types %}
+                            <p style="margin: 12px 0 0 0; color: #555555; font-size: 12px;">
+                                주요 연관 영역:
+                                {% for lt in spotlight.top_link_types %}
+                                <span style="display: inline-block; background-color: #ffffff; color: #5e35b1; font-size: 11px; padding: 2px 8px; border-radius: 4px; margin-right: 4px; border: 1px solid #d1c4e9;">{{ lt.label }} {{ lt.count }}</span>
+                                {% endfor %}
+                            </p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
         <!-- 헤드라인 전용 empty state (headlines 비어있으나 타 섹션 존재 시) -->
         {% if not top_headlines and (company_digest or papers) %}
         <tr>
@@ -111,6 +159,12 @@
                         <td style="background-color: #fafafa; border-left: 4px solid #546e7a; border-radius: 0 8px 8px 0; padding: 14px 16px;">
                             <p style="margin: 0 0 6px 0;">
                                 <span style="font-size: 15px; font-weight: 700; color: #263238;">{{ company.company_name }}</span>
+                                {% if company.is_new_company %}
+                                <span style="display: inline-block; background-color: #1b5e20; color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; margin-left: 6px;">NEW</span>
+                                {% endif %}
+                                {% if company.event_class %}
+                                <span style="display: inline-block; background-color: #eceff1; color: #455a64; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em;">{{ company.event_class }}</span>
+                                {% endif %}
                                 <span style="color: #888888; font-size: 12px; margin-left: 8px;">지난 7일 {{ company.count_7d }}건</span>
                                 {% if company.avg_importance %}
                                 <span style="color: #e53935; font-size: 11px; margin-left: 6px;">평균 중요도 {{ (company.avg_importance * 100)|int }}%</span>
@@ -225,6 +279,45 @@
         </tr>
         {% endif %}
 
+        <!-- 💉 신흥 치료법 (N2 신규, treatments/overview top_emerging) -->
+        {% if treatments and treatments.top_emerging %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #00838f; color: #006064; font-size: 18px;">
+                    💉 신흥 치료법 <span style="color: #888888; font-size: 13px; font-weight: normal; margin-left: 8px;">{% if treatments.latest_year %}{{ treatments.latest_year }}년 기준{% endif %}</span>
+                </h2>
+                {% for tx in treatments.top_emerging[:5] %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 8px;">
+                    <tr>
+                        <td style="background-color: #e0f7fa; border-radius: 6px; padding: 10px 14px;">
+                            <p style="margin: 0;">
+                                <span style="font-size: 14px; font-weight: 600; color: #006064;">{{ tx.name }}</span>
+                                {% if tx.type %}
+                                <span style="display: inline-block; background-color: #00838f; color: #ffffff; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em;">{{ tx.type }}</span>
+                                {% endif %}
+                                {% if tx.direction == 'new' %}
+                                <span style="color: #1b5e20; font-size: 11px; font-weight: 600; margin-left: 6px;">NEW</span>
+                                {% elif tx.direction == 'rising' %}
+                                <span style="color: #c62828; font-size: 11px; font-weight: 600; margin-left: 6px;">↑ rising</span>
+                                {% endif %}
+                                <span style="color: #888888; font-size: 11px; margin-left: 6px;">관련 논문 {{ tx.paper_count }}건</span>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                {% endfor %}
+                {% if treatments.by_type %}
+                <p style="margin: 10px 0 0 0; color: #006064; font-size: 11px;">
+                    유형 분포:
+                    {% for k, v in treatments.by_type.items() %}
+                    <span style="margin-right: 8px;">{{ k }} {{ v }}</span>
+                    {% endfor %}
+                </p>
+                {% endif %}
+            </td>
+        </tr>
+        {% endif %}
+
         <!-- Papers Section -->
         {% if papers %}
         <tr>
@@ -269,6 +362,67 @@
                     외 {{ papers|length - 5 }}건의 논문이 있습니다...
                 </p>
                 {% endif %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- 🌡 알러젠 트렌드 (N2 신규, allergen-trend/ranking 상승·하락) -->
+        {% if trends_rising or trends_declining %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #ef6c00; color: #e65100; font-size: 18px;">
+                    🌡 알러젠 트렌드 <span style="color: #888888; font-size: 13px; font-weight: normal; margin-left: 8px;">논문 언급 기준</span>
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        {% if trends_rising %}
+                        <td valign="top" style="width: 50%; padding-right: 6px;">
+                            <p style="margin: 0 0 8px 0; color: #c62828; font-size: 13px; font-weight: 700;">↑ 상승 Top {{ trends_rising|length }}</p>
+                            {% for a in trends_rising[:5] %}
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 6px;">
+                                <tr>
+                                    <td style="background-color: #ffebee; border-radius: 6px; padding: 8px 12px;">
+                                        <p style="margin: 0; font-size: 13px; font-weight: 600; color: #b71c1c;">
+                                            {{ a.label_kr or a.allergen_code }}
+                                            <span style="color: #c62828; font-size: 12px; margin-left: 4px;">+{{ a.change_rate|round(1) }}%</span>
+                                        </p>
+                                        <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">
+                                            논문 {{ a.paper_count }}건
+                                            {% if a.top_link_types %} ·
+                                            {% for lt in a.top_link_types[:2] %}{{ lt.label }}{% if not loop.last %}/{% endif %}{% endfor %}
+                                            {% endif %}
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                            {% endfor %}
+                        </td>
+                        {% endif %}
+                        {% if trends_declining %}
+                        <td valign="top" style="width: 50%; padding-left: 6px;">
+                            <p style="margin: 0 0 8px 0; color: #1565c0; font-size: 13px; font-weight: 700;">↓ 하락 Top {{ trends_declining|length }}</p>
+                            {% for a in trends_declining[:5] %}
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 6px;">
+                                <tr>
+                                    <td style="background-color: #e3f2fd; border-radius: 6px; padding: 8px 12px;">
+                                        <p style="margin: 0; font-size: 13px; font-weight: 600; color: #0d47a1;">
+                                            {{ a.label_kr or a.allergen_code }}
+                                            <span style="color: #1565c0; font-size: 12px; margin-left: 4px;">{{ a.change_rate|round(1) }}%</span>
+                                        </p>
+                                        <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">
+                                            논문 {{ a.paper_count }}건
+                                            {% if a.top_link_types %} ·
+                                            {% for lt in a.top_link_types[:2] %}{{ lt.label }}{% if not loop.last %}/{% endif %}{% endfor %}
+                                            {% endif %}
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                            {% endfor %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                </table>
             </td>
         </tr>
         {% endif %}

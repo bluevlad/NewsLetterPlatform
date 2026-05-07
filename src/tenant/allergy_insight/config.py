@@ -47,5 +47,20 @@ BRAND_CONFIG = BrandConfig(
             title="약물 업데이트",
             description="openFDA·MFDS 기반 알러지 치료제 승인·라벨 변경·경고를 요약합니다",
         ),
+        BrandFeature(
+            icon="&#x1F52C;",
+            title="알러지 인사이트 스폿라이트",
+            description="매일 다른 알러젠을 골라 논문 추세·관련 영역을 한눈에 보여드립니다",
+        ),
+        BrandFeature(
+            icon="&#x1F489;",
+            title="신흥 치료법",
+            description="신규/상승 추세의 알러지 치료법(면역요법·생물학제 등)을 큐레이션합니다",
+        ),
+        BrandFeature(
+            icon="&#x1F321;",
+            title="알러젠 트렌드",
+            description="논문 언급 기준 상승·하락 알러젠 Top 5 와 주요 연관 영역을 제공합니다",
+        ),
     ],
 )
