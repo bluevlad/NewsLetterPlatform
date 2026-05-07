@@ -163,6 +163,7 @@ class SentArticle(Base):
     section = Column(String(30), nullable=False)
     sent_date = Column(Date, nullable=False)
     sent_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    company_name = Column(String(200))
 
     __table_args__ = (
         UniqueConstraint(
@@ -171,6 +172,7 @@ class SentArticle(Base):
         ),
         Index("idx_sent_articles_tenant_time", "tenant_id", "sent_at"),
         Index("idx_sent_articles_lookup", "tenant_id", "article_id"),
+        Index("idx_sent_articles_company", "tenant_id", "company_name"),
     )
 
     def __repr__(self):

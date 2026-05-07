@@ -101,19 +101,25 @@ class BaseTenant(ABC):
         `dedup_recent_days` 활성 테넌트가 오버라이드.
 
         Returns:
-            [(article_id: int, article_url: Optional[str], section: str), ...]
+            4-튜플 `(article_id, article_url, section, company_name)` 권장.
+            기업 정보가 없는 섹션은 company_name=None.
+            (구버전 3-튜플도 repository 가 호환)
         """
         return []
 
     @abstractmethod
     async def collect_data(
-        self, *, exclude_ids: Optional[List[int]] = None
+        self, *,
+        exclude_ids: Optional[List[int]] = None,
+        exclude_companies: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """데이터 수집 (원본 서비스 API 호출).
 
         Args:
             exclude_ids: `dedup_recent_days` 활성 테넌트에서 최근 발송된
                 기사 ID 를 수집/선정 단계에서 원천 제외. 미활성 테넌트는 무시.
+            exclude_companies: 최근 발송된 기업명 — company-digest 등에서
+                기업 단위 dedup 에 사용. 미활성 테넌트는 무시.
 
         Returns:
             수집된 데이터 딕셔너리 (data_type: data)

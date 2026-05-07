@@ -61,6 +61,7 @@ def init_db(database_url: str = "sqlite:///./data/newsletterplatform.db") -> Non
 
     _migrate_send_history_newsletter_type(_engine)
     _migrate_subscriber_send_slot(_engine)
+    _migrate_sent_articles_company_name(_engine)
 
 
 def _migrate_subscriber_send_slot(engine) -> None:
@@ -81,6 +82,30 @@ def _migrate_subscriber_send_slot(engine) -> None:
                 logger.info("subscribers 테이블에 send_slot 컬럼 추가 + 기존 행 'late' 일괄 배정 완료")
     except Exception as e:
         logger.debug(f"subscribers send_slot 마이그레이션 스킵: {e}")
+
+
+def _migrate_sent_articles_company_name(engine) -> None:
+    """sent_articles 테이블에 company_name 컬럼 추가 + 기업명 인덱스.
+
+    company-digest 일 단위 반복 노출을 차단하기 위해, 발송 기록을
+    기업명 단위로도 조회 가능하게 한다.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(sent_articles)"))
+            columns = [row[1] for row in result]
+            if "company_name" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE sent_articles ADD COLUMN company_name VARCHAR(200)"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_sent_articles_company "
+                    "ON sent_articles (tenant_id, company_name)"
+                ))
+                conn.commit()
+                logger.info("sent_articles 테이블에 company_name 컬럼 + 인덱스 추가 완료")
+    except Exception as e:
+        logger.debug(f"sent_articles company_name 마이그레이션 스킵: {e}")
 
 
 def _migrate_send_history_newsletter_type(engine) -> None:
@@ -896,13 +921,41 @@ class SentArticleRepository:
         return [row[0] for row in rows]
 
     @staticmethod
-    def record_sent_articles(session: Session, tenant_id: str,
-                             sent_date: date,
-                             entries: list[tuple[int, Optional[str], str]]) -> int:
+    def list_recent_company_names(session: Session, tenant_id: str,
+                                   days: int = 7) -> list[str]:
+        """최근 N일 내 해당 테넌트에서 발송된 기업명 목록.
+
+        company-digest 일 단위 반복 노출 차단용. 헤드라인/디그스트 양쪽에
+        남긴 company_name 을 모두 모으되 None/빈문자열은 제외한다.
+        """
+        cutoff = _today_start_utc() - timedelta(days=days)
+        rows = (
+            session.query(SentArticle.company_name)
+            .filter(
+                and_(
+                    SentArticle.tenant_id == tenant_id,
+                    SentArticle.sent_at >= cutoff,
+                    SentArticle.company_name.isnot(None),
+                    SentArticle.company_name != "",
+                )
+            )
+            .order_by(SentArticle.sent_at.desc())
+            .distinct()
+            .all()
+        )
+        return [row[0] for row in rows]
+
+    @staticmethod
+    def record_sent_articles(
+        session: Session, tenant_id: str,
+        sent_date: date,
+        entries: list[tuple],
+    ) -> int:
         """발송된 기사 이력을 기록 (멱등: 중복 키는 무시).
 
         Args:
-            entries: [(article_id, article_url, section), ...]
+            entries: 4-튜플 `(article_id, article_url, section, company_name)` 권장.
+                3-튜플 `(article_id, article_url, section)` 도 호환(기업명 None).
 
         Returns:
             실제로 신규 INSERT 된 건수.
@@ -911,17 +964,25 @@ class SentArticleRepository:
             return 0
 
         from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-        payload = [
-            {
+        payload = []
+        for entry in entries:
+            if len(entry) == 4:
+                aid, url, section, company = entry
+            elif len(entry) == 3:
+                aid, url, section = entry
+                company = None
+            else:
+                continue
+            if aid is None or not section:
+                continue
+            payload.append({
                 "tenant_id": tenant_id,
                 "article_id": aid,
                 "article_url": url,
                 "section": section,
                 "sent_date": sent_date,
-            }
-            for aid, url, section in entries
-            if aid is not None and section
-        ]
+                "company_name": (company or None),
+            })
         if not payload:
             return 0
         stmt = sqlite_insert(SentArticle).values(payload)
