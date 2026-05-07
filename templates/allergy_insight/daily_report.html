@@ -346,6 +346,12 @@
                             {% if paper.title_kr %}
                             <p style="margin: 0 0 6px 0; color: #1565c0; font-size: 12px;">{{ paper.title_kr }}</p>
                             {% endif %}
+                            {% if paper.clinical_implication %}
+                            <p style="margin: 6px 0 6px 0; padding: 8px 10px; background-color: #ffffff; border-left: 3px solid #1565c0; color: #0d47a1; font-size: 12px; line-height: 1.5; font-style: italic;">
+                                <span style="font-style: normal; font-weight: 700; font-size: 11px; color: #1565c0;">💡 임상 함의</span>
+                                &nbsp;{{ paper.clinical_implication }}
+                            </p>
+                            {% endif %}
                             <p style="margin: 0; color: #666666; font-size: 11px;">
                                 {{ paper.journal or '' }}
                                 {% if paper.pmid %} | PMID: {{ paper.pmid }}{% endif %}
