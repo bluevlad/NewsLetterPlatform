@@ -20,3 +20,41 @@ tenants:
       primary_color_dark: "#1b5e20"
       accent_color: "#66bb6a"
       color_scheme: "Green"
+
+  standup:
+    display_name: "StandUp 주간 인사이트"
+    description: "LogAnalyzer · GitHub QA · Auto-Tobe 통합 주간 인사이트 (StandUp 합성)"
+    api_base_url: "${STANDUP_API_URL}"
+    email_subject_prefix: "[StandUp]"
+    email_template: "standup/weekly_report.html"
+    schedule:
+      # weekly only — 매주 월요일 09:30 발송
+      weekly_day_of_week: "mon"
+      weekly_collect_hour: 8
+      weekly_collect_minute: 0
+      weekly_send_hour: 9
+      weekly_send_minute: 30
+    is_active: true
+    brand:
+      primary_color: "#ef4444"
+      primary_color_dark: "#b91c1c"
+      accent_color: "#fca5a5"
+      color_scheme: "Red"
+
+  tech-briefing:
+    display_name: "TechBriefing Java/React 일일 브리핑"
+    description: "GitHub Releases · NVD CVE · 공식 블로그 RSS 합성 일일 기술 브리핑 (Java/React)"
+    api_base_url: "(N/A — 외부 GitHub/NVD/RSS 직접 호출)"
+    email_subject_prefix: "[TechBriefing]"
+    email_template: "tech_briefing/daily_report.html"
+    schedule:
+      collect_hour: 6
+      collect_minute: 30
+      send_hour: 8
+      send_minute: 0
+    is_active: true
+    brand:
+      primary_color: "#1d4ed8"
+      primary_color_dark: "#1e3a8a"
+      accent_color: "#06b6d4"
+      color_scheme: "Blue/Cyan"

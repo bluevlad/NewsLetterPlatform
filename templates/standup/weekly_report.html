@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StandUp 주간 인사이트</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; background-color: #fef2f2;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 720px; margin: 0 auto; background-color: #ffffff;">
+
+        <!-- Header -->
+        <tr>
+            <td style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); padding: 36px 30px; text-align: center;">
+                <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 700; letter-spacing: -0.3px;">StandUp Insight</h1>
+                <p style="margin: 8px 0 0 0; color: #fecaca; font-size: 16px; font-weight: 600;">주간 인사이트 보고</p>
+                <p style="margin: 14px 0 0 0; color: #ffffff; font-size: 15px;">
+                    {{ period_start.strftime('%Y.%m.%d') }} ~ {{ period_end.strftime('%Y.%m.%d') }}
+                </p>
+            </td>
+        </tr>
+
+        <!-- Headline -->
+        {% if headline %}
+        <tr>
+            <td style="padding: 24px 30px 0 30px;">
+                <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 14px 18px; border-radius: 4px;">
+                    <div style="color: #b91c1c; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;">Headline</div>
+                    <div style="color: #111827; font-size: 16px; line-height: 1.55; font-weight: 600;">{{ headline }}</div>
+                </div>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- KPI Cards -->
+        <tr>
+            <td style="padding: 24px 30px 4px 30px;">
+                <h2 style="margin: 0 0 14px 0; padding-bottom: 8px; border-bottom: 3px solid #ef4444; color: #b91c1c; font-size: 18px;">
+                    1. 주간 KPI
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td width="25%" style="text-align: center; padding: 12px 4px;">
+                            <div style="background:#fef2f2; border-radius:8px; padding:14px 6px;">
+                                <div style="color:#b91c1c; font-size:24px; font-weight:700;">{{ stats.total_events }}</div>
+                                <div style="color:#7f1d1d; font-size:11px; margin-top:4px;">총 이벤트</div>
+                            </div>
+                        </td>
+                        <td width="25%" style="text-align: center; padding: 12px 4px;">
+                            <div style="background:#fee2e2; border-radius:8px; padding:14px 6px;">
+                                <div style="color:#991b1b; font-size:24px; font-weight:700;">{{ stats.critical_count }}</div>
+                                <div style="color:#7f1d1d; font-size:11px; margin-top:4px;">Critical</div>
+                            </div>
+                        </td>
+                        <td width="25%" style="text-align: center; padding: 12px 4px;">
+                            <div style="background:#ffedd5; border-radius:8px; padding:14px 6px;">
+                                <div style="color:#9a3412; font-size:24px; font-weight:700;">{{ stats.high_count }}</div>
+                                <div style="color:#7c2d12; font-size:11px; margin-top:4px;">High</div>
+                            </div>
+                        </td>
+                        <td width="25%" style="text-align: center; padding: 12px 4px;">
+                            <div style="background:#fef9c3; border-radius:8px; padding:14px 6px;">
+                                <div style="color:#854d0e; font-size:24px; font-weight:700;">{{ stats.medium_count }}</div>
+                                <div style="color:#78350f; font-size:11px; margin-top:4px;">Medium</div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+
+        <!-- Severity Distribution -->
+        {% if severity_buckets %}
+        <tr>
+            <td style="padding: 18px 30px 0 30px;">
+                <div style="color:#374151; font-size:13px; font-weight:600; margin-bottom:8px;">심각도 분포</div>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        {% for b in severity_buckets %}
+                        <td style="padding: 4px 6px;">
+                            <div style="background-color: {{ b.bg }}; border-radius:6px; padding:8px 10px; text-align:center;">
+                                <div style="color:{{ b.color }}; font-size:13px; font-weight:700;">{{ b.label }}</div>
+                                <div style="color:{{ b.color }}; font-size:18px; font-weight:700; margin-top:2px;">{{ b.count }}</div>
+                            </div>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Source / Service Aggregation -->
+        {% if by_source or by_service %}
+        <tr>
+            <td style="padding: 26px 30px 0 30px;">
+                <h2 style="margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 3px solid #ef4444; color: #b91c1c; font-size: 18px;">
+                    2. 소스 · 서비스 분포
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    {% if by_source %}
+                    <tr>
+                        <td style="padding: 4px 0;">
+                            <div style="color:#374151; font-size:12px; font-weight:600; margin-bottom:6px;">소스별</div>
+                            <div style="font-size:0;">
+                                {% for s in by_source %}
+                                <span style="display:inline-block; background:#fef2f2; color:#b91c1c; padding:5px 10px; border-radius:14px; margin:2px 4px 2px 0; font-size:12px; font-weight:600;">
+                                    {{ s.label }} <span style="color:#7f1d1d;">{{ s.count }}</span>
+                                </span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% if by_service %}
+                    <tr>
+                        <td style="padding: 10px 0 4px 0;">
+                            <div style="color:#374151; font-size:12px; font-weight:600; margin-bottom:6px;">서비스별</div>
+                            <div style="font-size:0;">
+                                {% for s in by_service %}
+                                <span style="display:inline-block; background:#f1f5f9; color:#334155; padding:5px 10px; border-radius:14px; margin:2px 4px 2px 0; font-size:12px; font-weight:600;">
+                                    {{ s.label }} <span style="color:#475569;">{{ s.count }}</span>
+                                </span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Top Events (severity-priority) -->
+        {% if top_events %}
+        <tr>
+            <td style="padding: 26px 30px 0 30px;">
+                <h2 style="margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 3px solid #ef4444; color: #b91c1c; font-size: 18px;">
+                    3. 핵심 이벤트
+                </h2>
+                {% for ev in top_events %}
+                <div style="margin-bottom:12px; padding:12px 14px; background:#ffffff; border:1px solid #e5e7eb; border-left:4px solid {{ ev.severity_color }}; border-radius:4px;">
+                    <div style="margin-bottom:6px;">
+                        <span style="display:inline-block; background:{{ ev.severity_bg }}; color:{{ ev.severity_color }}; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;">{{ ev.severity_label }}</span>
+                        <span style="color:#6b7280; font-size:11px; margin-left:6px;">{{ ev.source_label }} · {{ ev.occurred_at_display }}{% if ev.service_tag %} · {{ ev.service_tag }}{% endif %}</span>
+                    </div>
+                    <div style="color:#111827; font-size:14px; font-weight:600; line-height:1.45;">{{ ev.title_safe }}</div>
+                    {% if ev.raw_excerpt_safe %}
+                    <div style="color:#4b5563; font-size:12px; line-height:1.5; margin-top:5px;">{{ ev.raw_excerpt_safe[:240] }}{% if ev.raw_excerpt_safe|length > 240 %}…{% endif %}</div>
+                    {% endif %}
+                    {% if ev.source_url %}
+                    <div style="margin-top:6px;"><a href="{{ ev.source_url }}" style="color:#b91c1c; font-size:11px; text-decoration:none;">원문 ↗</a></div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Events by severity cluster -->
+        {% if events_by_severity %}
+        <tr>
+            <td style="padding: 22px 30px 0 30px;">
+                <h2 style="margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 3px solid #ef4444; color: #b91c1c; font-size: 18px;">
+                    4. 심각도별 클러스터
+                </h2>
+                {% for cluster in events_by_severity %}
+                <div style="margin-bottom:18px;">
+                    <div style="display:inline-block; background:{{ cluster.bg }}; color:{{ cluster.color }}; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:700; margin-bottom:8px;">
+                        {{ cluster.label }} · {{ cluster.total }}건
+                    </div>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                        {% for ev in cluster.events %}
+                        <tr>
+                            <td style="padding:8px 10px; border-bottom:1px solid #f3f4f6;">
+                                <div style="color:#111827; font-size:13px; font-weight:600; line-height:1.4;">{{ ev.title_safe }}</div>
+                                <div style="color:#6b7280; font-size:11px; margin-top:3px;">{{ ev.source_label }}{% if ev.service_tag %} · {{ ev.service_tag }}{% endif %} · {{ ev.occurred_at_display }}</div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                    {% if cluster.total > cluster.events|length %}
+                    <div style="color:#6b7280; font-size:11px; padding:6px 10px;">+ {{ cluster.total - cluster.events|length }}건 추가</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- LogAnalyzer summary (raw KPI passthrough) -->
+        {% if loganalyzer_summary and loganalyzer_summary.total_errors %}
+        <tr>
+            <td style="padding: 22px 30px 0 30px;">
+                <h2 style="margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 3px solid #ef4444; color: #b91c1c; font-size: 18px;">
+                    5. LogAnalyzer 요약
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td width="33%" style="padding:6px;">
+                            <div style="background:#fef2f2; padding:10px; border-radius:6px; text-align:center;">
+                                <div style="color:#b91c1c; font-size:18px; font-weight:700;">{{ loganalyzer_summary.total_errors }}</div>
+                                <div style="color:#7f1d1d; font-size:11px;">총 에러</div>
+                            </div>
+                        </td>
+                        <td width="33%" style="padding:6px;">
+                            <div style="background:#fee2e2; padding:10px; border-radius:6px; text-align:center;">
+                                <div style="color:#991b1b; font-size:18px; font-weight:700;">{{ loganalyzer_summary.critical or 0 }}</div>
+                                <div style="color:#7f1d1d; font-size:11px;">Critical</div>
+                            </div>
+                        </td>
+                        <td width="33%" style="padding:6px;">
+                            <div style="background:#ffedd5; padding:10px; border-radius:6px; text-align:center;">
+                                <div style="color:#9a3412; font-size:18px; font-weight:700;">{{ loganalyzer_summary.high or 0 }}</div>
+                                <div style="color:#7c2d12; font-size:11px;">High</div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% if loganalyzer_summary.open_groups %}
+                    <tr>
+                        <td colspan="3" style="padding:8px 6px 0 6px; color:#6b7280; font-size:12px;">
+                            오픈 에러 그룹 <strong style="color:#b91c1c;">{{ loganalyzer_summary.open_groups }}</strong>건
+                            {% if loganalyzer_summary.resolved_groups %} / 해결 {{ loganalyzer_summary.resolved_groups }}건{% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Footer -->
+        <tr>
+            <td style="padding: 32px 30px 26px 30px;">
+                <div style="border-top:1px solid #e5e7eb; padding-top:14px; color:#6b7280; font-size:11px; line-height:1.6;">
+                    이 뉴스레터는 NewsLetterPlatform 이 StandUp Insight 합성 결과를 재포맷하여 발송합니다.
+                    원본 합성 노트: {% if source_subject %}<em>{{ source_subject }}</em>{% else %}—{% endif %}<br>
+                    생성 시각: {{ generated_at.strftime('%Y-%m-%d %H:%M') }}
+                </div>
+                <div style="margin-top:14px; color:#9ca3af; font-size:11px;">
+                    구독을 원하지 않으시면 <a href="__UNSUBSCRIBE_URL__" style="color:#b91c1c; text-decoration:underline;">여기</a>에서 해지할 수 있습니다.
+                </div>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

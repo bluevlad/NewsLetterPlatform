@@ -47,11 +47,30 @@ class Settings(BaseSettings):
     allergy_monthly_send_hour: int = Field(default=10, env="ALLERGY_MONTHLY_SEND_HOUR")
     allergy_monthly_send_minute: int = Field(default=0, env="ALLERGY_MONTHLY_SEND_MINUTE")
 
+    # 스케줄러 - StandUp (Weekly: 매주 월요일 합성 결과 기준)
+    standup_weekly_day_of_week: str = Field(default="mon", env="STANDUP_WEEKLY_DAY_OF_WEEK")
+    standup_weekly_collect_hour: int = Field(default=8, env="STANDUP_WEEKLY_COLLECT_HOUR")
+    standup_weekly_collect_minute: int = Field(default=0, env="STANDUP_WEEKLY_COLLECT_MINUTE")
+    standup_weekly_send_hour: int = Field(default=9, env="STANDUP_WEEKLY_SEND_HOUR")
+    standup_weekly_send_minute: int = Field(default=30, env="STANDUP_WEEKLY_SEND_MINUTE")
+
     # 테넌트 API URLs
     allergy_insight_api_url: str = Field(
         default="http://localhost:9040",
         env="ALLERGY_INSIGHT_API_URL"
     )
+    standup_api_url: str = Field(
+        default="http://host.docker.internal:9060",
+        env="STANDUP_API_URL"
+    )
+
+    # 스케줄러 - TechBriefing (Daily, Java/React 기술 뉴스레터)
+    tech_collect_hour: int = Field(default=6, env="TECH_COLLECT_HOUR")
+    tech_collect_minute: int = Field(default=30, env="TECH_COLLECT_MINUTE")
+    tech_send_hour: int = Field(default=8, env="TECH_SEND_HOUR")
+    tech_send_minute: int = Field(default=0, env="TECH_SEND_MINUTE")
+    # 선택 — GitHub API rate limit 완화용 (60/h → 5000/h). 빈 값이면 unauthenticated.
+    tech_github_token: str = Field(default="", env="TECH_GITHUB_TOKEN")
     allergy_insight_admin_name: str = Field(
         default="",
         env="ALLERGY_INSIGHT_ADMIN_NAME"

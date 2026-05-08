@@ -38,3 +38,6 @@ pyyaml>=6.0.0
 
 # Rate limiting (구독 폼 어뷰즈 방어)
 slowapi>=0.1.9
+
+# RSS parsing (tech-briefing 테넌트 — 공식 블로그 피드 수집)
+feedparser>=6.0.10

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechBriefing Java/React 일일 브리핑</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; background-color: #eff6ff;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 720px; margin: 0 auto; background-color: #ffffff;">
+
+        <!-- Header -->
+        <tr>
+            <td style="background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%); padding: 36px 30px; text-align: center;">
+                <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 700; letter-spacing: -0.3px;">TechBriefing</h1>
+                <p style="margin: 8px 0 0 0; color: #bfdbfe; font-size: 16px; font-weight: 600;">Java · React 일일 브리핑</p>
+                <p style="margin: 14px 0 0 0; color: #ffffff; font-size: 15px;">
+                    {{ report_date.strftime('%Y.%m.%d (%a)') }}
+                </p>
+            </td>
+        </tr>
+
+        <!-- Stats strip -->
+        <tr>
+            <td style="padding: 22px 30px 4px 30px;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td width="33%" style="padding: 6px;">
+                            <div style="background:#eff6ff; border-radius:8px; padding:14px 8px; text-align:center;">
+                                <div style="color:#1d4ed8; font-size:22px; font-weight:700;">{{ stats.release_count }}</div>
+                                <div style="color:#1e3a8a; font-size:11px; margin-top:4px;">릴리즈</div>
+                            </div>
+                        </td>
+                        <td width="33%" style="padding: 6px;">
+                            <div style="background:#fef2f2; border-radius:8px; padding:14px 8px; text-align:center;">
+                                <div style="color:#b91c1c; font-size:22px; font-weight:700;">{{ stats.cve_count }}</div>
+                                <div style="color:#7f1d1d; font-size:11px; margin-top:4px;">CVE</div>
+                            </div>
+                        </td>
+                        <td width="33%" style="padding: 6px;">
+                            <div style="background:#ecfeff; border-radius:8px; padding:14px 8px; text-align:center;">
+                                <div style="color:#0e7490; font-size:22px; font-weight:700;">{{ stats.rss_count }}</div>
+                                <div style="color:#155e75; font-size:11px; margin-top:4px;">아티클</div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+
+        <!-- Section 1: 오늘의 헤드라인 -->
+        {% if headlines %}
+        <tr>
+            <td style="padding: 24px 30px 0 30px;">
+                <h2 style="margin: 0 0 14px 0; padding-bottom: 8px; border-bottom: 3px solid #1d4ed8; color: #1e3a8a; font-size: 18px;">
+                    🎯 오늘의 헤드라인
+                </h2>
+                {% for h in headlines %}
+                <div style="margin-bottom:14px; padding:14px 16px; background:#ffffff; border:1px solid #e5e7eb; border-left:4px solid #1d4ed8; border-radius:4px;">
+                    <div style="margin-bottom:6px;">
+                        <span style="display:inline-block; background:{{ h.ecosystem_bg }}; color:{{ h.ecosystem_color }}; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;">{{ h.ecosystem_label }}</span>
+                        <span style="display:inline-block; background:#eff6ff; color:#1d4ed8; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; margin-left:4px;">tier {{ h.tier }}</span>
+                        <span style="color:#6b7280; font-size:11px; margin-left:6px;">
+                            {% if h.source == 'github_release' %}GitHub Release{% elif h.source == 'nvd_cve' %}CVE{% elif h.source == 'rss_blog' %}{{ h.blog_label }}{% else %}{{ h.source }}{% endif %}
+                            · {{ h.published_display }}
+                            · score {{ h.importance_score }}
+                        </span>
+                    </div>
+                    <div style="color:#111827; font-size:15px; font-weight:600; line-height:1.45;">
+                        {% if h.url %}<a href="{{ h.url }}" style="color:#111827; text-decoration:none;">{{ h.title_safe }}</a>{% else %}{{ h.title_safe }}{% endif %}
+                    </div>
+                    {% if h.summary_safe %}
+                    <div style="color:#4b5563; font-size:12px; line-height:1.55; margin-top:6px;">{{ h.summary_safe }}</div>
+                    {% endif %}
+                    {% if h.source == 'nvd_cve' and h.cvss %}
+                    <div style="margin-top:6px;"><span style="display:inline-block; background:#fef2f2; color:#b91c1c; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700;">CVSS {{ h.cvss }}{% if h.severity %} · {{ h.severity|upper }}{% endif %}</span></div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Section 2: 릴리즈 & 보안 -->
+        {% if releases_security.total %}
+        <tr>
+            <td style="padding: 24px 30px 0 30px;">
+                <h2 style="margin: 0 0 14px 0; padding-bottom: 8px; border-bottom: 3px solid #1d4ed8; color: #1e3a8a; font-size: 18px;">
+                    🚀 릴리즈 &amp; 보안 <span style="color:#888888; font-size:13px; font-weight:normal; margin-left:8px;">{{ releases_security.total }}건</span>
+                </h2>
+
+                {% if releases_security.new_releases %}
+                <div style="margin-bottom:18px;">
+                    <div style="display:inline-block; background:#dcfce7; color:#15803d; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:700; margin-bottom:8px;">
+                        New Releases · {{ releases_security.new_releases|length }}
+                    </div>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                        {% for r in releases_security.new_releases %}
+                        <tr>
+                            <td style="padding:8px 10px; border-bottom:1px solid #f3f4f6;">
+                                <div style="color:#111827; font-size:13px; font-weight:600; line-height:1.45;">
+                                    {% if r.url %}<a href="{{ r.url }}" style="color:#111827; text-decoration:none;">{{ r.project_short }} {{ r.tag }}</a>{% else %}{{ r.project_short }} {{ r.tag }}{% endif %}
+                                </div>
+                                <div style="color:#6b7280; font-size:11px; margin-top:3px;">
+                                    <span style="color:{{ r.ecosystem_color }};">{{ r.ecosystem_label }}</span>
+                                    · {{ r.published_display }}
+                                    · score {{ r.importance_score }}
+                                </div>
+                                {% if r.summary_safe %}
+                                <div style="color:#4b5563; font-size:12px; line-height:1.5; margin-top:4px;">{{ r.summary_safe[:200] }}{% if r.summary_safe|length > 200 %}…{% endif %}</div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+                {% endif %}
+
+                {% if releases_security.breaking_changes %}
+                <div style="margin-bottom:18px;">
+                    <div style="display:inline-block; background:#fef9c3; color:#854d0e; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:700; margin-bottom:8px;">
+                        Breaking Changes · {{ releases_security.breaking_changes|length }}
+                    </div>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                        {% for r in releases_security.breaking_changes %}
+                        <tr>
+                            <td style="padding:8px 10px; border-bottom:1px solid #f3f4f6;">
+                                <div style="color:#111827; font-size:13px; font-weight:600; line-height:1.45;">
+                                    {% if r.url %}<a href="{{ r.url }}" style="color:#111827; text-decoration:none;">{{ r.project_short }} {{ r.tag }}</a>{% else %}{{ r.project_short }} {{ r.tag }}{% endif %}
+                                </div>
+                                <div style="color:#6b7280; font-size:11px; margin-top:3px;">
+                                    <span style="color:{{ r.ecosystem_color }};">{{ r.ecosystem_label }}</span>
+                                    · {{ r.published_display }}
+                                </div>
+                                {% if r.summary_safe %}
+                                <div style="color:#4b5563; font-size:12px; line-height:1.5; margin-top:4px;">{{ r.summary_safe[:200] }}{% if r.summary_safe|length > 200 %}…{% endif %}</div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+                {% endif %}
+
+                {% if releases_security.cves %}
+                <div style="margin-bottom:18px;">
+                    <div style="display:inline-block; background:#fee2e2; color:#991b1b; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:700; margin-bottom:8px;">
+                        CVE · {{ releases_security.cves|length }}
+                    </div>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                        {% for c in releases_security.cves %}
+                        <tr>
+                            <td style="padding:8px 10px; border-bottom:1px solid #f3f4f6;">
+                                <div style="color:#111827; font-size:13px; font-weight:600; line-height:1.45;">
+                                    {% if c.url %}<a href="{{ c.url }}" style="color:#111827; text-decoration:none;">{{ c.cve_id }}</a>{% else %}{{ c.cve_id }}{% endif %}
+                                    {% if c.cvss %}<span style="display:inline-block; background:#fef2f2; color:#b91c1c; padding:1px 6px; border-radius:8px; font-size:10px; font-weight:700; margin-left:6px;">CVSS {{ c.cvss }}{% if c.severity %} · {{ c.severity|upper }}{% endif %}</span>{% endif %}
+                                </div>
+                                <div style="color:#6b7280; font-size:11px; margin-top:3px;">매칭 키워드: {{ c.matched_keyword }} · {{ c.published_display }}</div>
+                                {% if c.summary_safe %}
+                                <div style="color:#4b5563; font-size:12px; line-height:1.5; margin-top:4px;">{{ c.summary_safe[:240] }}{% if c.summary_safe|length > 240 %}…{% endif %}</div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+                {% endif %}
+
+                {% if releases_security.deprecations %}
+                <div style="margin-bottom:8px;">
+                    <div style="display:inline-block; background:#ede9fe; color:#6d28d9; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:700; margin-bottom:8px;">
+                        Deprecations · {{ releases_security.deprecations|length }}
+                    </div>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                        {% for r in releases_security.deprecations %}
+                        <tr>
+                            <td style="padding:8px 10px; border-bottom:1px solid #f3f4f6;">
+                                <div style="color:#111827; font-size:13px; font-weight:600; line-height:1.45;">
+                                    {% if r.url %}<a href="{{ r.url }}" style="color:#111827; text-decoration:none;">{{ r.project_short }} {{ r.tag }}</a>{% else %}{{ r.project_short }} {{ r.tag }}{% endif %}
+                                </div>
+                                <div style="color:#6b7280; font-size:11px; margin-top:3px;">{{ r.ecosystem_label }} · {{ r.published_display }}</div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+                {% endif %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Section 3: 키워드 트렌드 -->
+        {% if keywords_rising %}
+        <tr>
+            <td style="padding: 24px 30px 0 30px;">
+                <h2 style="margin: 0 0 14px 0; padding-bottom: 8px; border-bottom: 3px solid #06b6d4; color: #155e75; font-size: 18px;">
+                    📈 키워드 트렌드 <span style="color:#888888; font-size:13px; font-weight:normal; margin-left:8px;">상승 가중치 기준</span>
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    {% for kw in keywords_rising %}
+                    <tr>
+                        <td style="padding:8px 10px; border-bottom:1px solid #f3f4f6;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="vertical-align:top;">
+                                        <span style="display:inline-block; background:#ecfeff; color:#0e7490; padding:4px 10px; border-radius:14px; font-size:13px; font-weight:700;">{{ kw.keyword }}</span>
+                                        {% if kw.co_keywords %}
+                                        <span style="color:#6b7280; font-size:11px; margin-left:6px;">동반: {% for co in kw.co_keywords %}{{ co }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td style="text-align:right; vertical-align:top; color:#0e7490; font-size:12px; font-weight:700; white-space:nowrap;">w {{ kw.weight }}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Empty state -->
+        {% if not headlines and not releases_security.total and not keywords_rising %}
+        <tr>
+            <td style="padding: 40px 30px; text-align:center; color:#6b7280;">
+                오늘은 신호가 잡힌 항목이 없습니다. 내일 다시 받아보세요.
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Footer -->
+        <tr>
+            <td style="padding: 32px 30px 26px 30px;">
+                <div style="border-top:1px solid #e5e7eb; padding-top:14px; color:#6b7280; font-size:11px; line-height:1.6;">
+                    데이터 소스: GitHub Releases · NVD CVE · 공식 블로그 RSS (Spring · React · Kotlin · TypeScript · Next.js · Vite).<br>
+                    중요도 score = tier + source weight + CVSS boost − age penalty (0~10).<br>
+                    생성 시각: {{ generated_at.strftime('%Y-%m-%d %H:%M') }}
+                </div>
+                <div style="margin-top:14px; color:#9ca3af; font-size:11px;">
+                    구독을 원하지 않으시면 <a href="__UNSUBSCRIBE_URL__" style="color:#1d4ed8; text-decoration:underline;">여기</a>에서 해지할 수 있습니다.
+                </div>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
