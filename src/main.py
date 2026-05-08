@@ -19,6 +19,8 @@ from src.common.scheduler.jobs import (
 )
 from src.tenant.registry import get_registry
 from src.tenant.allergy_insight import AllergyInsightTenant
+from src.tenant.standup import StandUpTenant
+from src.tenant.tech_briefing import TechBriefingTenant
 
 # 로깅 설정
 logging.basicConfig(
@@ -37,9 +39,11 @@ logger = logging.getLogger(__name__)
 
 
 def register_tenants():
-    """테넌트 등록 - AllergyInsight"""
+    """테넌트 등록 - AllergyInsight + StandUp"""
     registry = get_registry()
     registry.register(AllergyInsightTenant())
+    registry.register(StandUpTenant())
+    registry.register(TechBriefingTenant())
     logger.info(f"테넌트 등록 완료: {registry.get_active_ids()}")
 
 
