@@ -6,7 +6,8 @@
 import asyncio
 import logging
 import time
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+from types import SimpleNamespace
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -25,6 +26,41 @@ from ...config import settings
 from ...tenant.registry import get_registry
 
 logger = logging.getLogger(__name__)
+
+# 주말 테스트 모드: KST(UTC+9) 기준 주말이면 관리자에게만 발송
+_KST = timezone(timedelta(hours=9))
+_WEEKEND_TEST_SLOT = "early"  # 주말엔 early 슬롯만 발송 (mid/late는 스킵)
+
+
+def _is_weekend_kst() -> bool:
+    """KST 기준 오늘이 토(5)/일(6)요일이면 True"""
+    return datetime.now(_KST).weekday() >= 5
+
+
+def _get_admin_recipients(session, tenant_id: str) -> list:
+    """SUPER_ADMIN_EMAILS 를 발송 대상 객체 리스트로 변환.
+
+    - 해당 테넌트에 admin 이메일이 구독자로 등록되어 있으면 그 Subscriber 사용
+    - 등록되어 있지 않으면 SimpleNamespace 로 대체 (id=0, unsubscribe 무효 토큰)
+    """
+    if not settings.super_admin_emails:
+        return []
+    admins = [
+        e.strip() for e in settings.super_admin_emails.split(",")
+        if e.strip()
+    ]
+    recipients = []
+    for email in admins:
+        sub = SubscriberRepository.get_active_by_email(session, tenant_id, email)
+        if sub:
+            recipients.append(sub)
+        else:
+            recipients.append(SimpleNamespace(
+                id=0,
+                email=email,
+                unsubscribe_token="weekend-test-noop",
+            ))
+    return recipients
 
 
 def _get_period_range(newsletter_type: str) -> tuple[date, date]:
@@ -185,6 +221,25 @@ def run_send_job(
         logger.error(f"[{tenant_id}] 테넌트를 찾을 수 없습니다.")
         return
 
+    # 주말 테스트 모드 판정 — 자동 스케줄(=manual=False)에만 적용
+    weekend_test = (
+        not manual
+        and getattr(tenant, "weekend_test_mode", True)
+        and _is_weekend_kst()
+    )
+    if weekend_test:
+        # 주말엔 early 슬롯만 1회 관리자 테스트 발송. mid/late 는 스킵.
+        if slot and slot != _WEEKEND_TEST_SLOT:
+            logger.info(
+                f"{log_prefix} 주말 — early 슬롯만 관리자 테스트 발송, "
+                f"{slot} 슬롯 스킵"
+            )
+            return
+        log_prefix = f"{log_prefix}[weekend_test]"
+        logger.info(f"{log_prefix} 주말 관리자 테스트 모드로 발송")
+
+    send_mode = "weekend_test" if weekend_test else "normal"
+
     sender = get_sender()
     if not sender.is_configured:
         logger.warning(f"[{tenant_id}] Gmail 설정이 완료되지 않아 발송을 건너뜁니다.")
@@ -219,8 +274,8 @@ def run_send_job(
                 logger.error(f"{log_prefix} 템플릿 렌더링 실패: {e}")
                 return
 
-        # 아카이브 저장 (수동 발송은 아카이브 생략 — 동일 날짜 중복 방지)
-        if not manual:
+        # 아카이브 저장 (수동/주말 테스트 발송은 아카이브 생략 — 동일 날짜 중복 방지)
+        if not manual and not weekend_test:
             try:
                 NewsletterArchiveRepository.save(
                     session, tenant_id, newsletter_type, subject, html_content
@@ -229,8 +284,15 @@ def run_send_job(
             except Exception as e:
                 logger.warning(f"{log_prefix} 아카이브 저장 실패 (발송은 계속): {e}")
 
-        # 구독자 조회 (슬롯 필터링)
-        if slot:
+        # 구독자 조회 — 주말 테스트는 SUPER_ADMIN_EMAILS 만, 평일은 슬롯 필터링
+        if weekend_test:
+            subscribers = _get_admin_recipients(session, tenant_id)
+            if not subscribers:
+                logger.warning(
+                    f"{log_prefix} SUPER_ADMIN_EMAILS 가 비어 있어 주말 테스트 발송 스킵"
+                )
+                return
+        elif slot:
             subscribers = SubscriberRepository.get_active_by_slot(session, tenant_id, slot)
         else:
             subscribers = SubscriberRepository.get_all_active(session, tenant_id)
@@ -239,9 +301,9 @@ def run_send_job(
             logger.warning(f"[{tenant_id}] 등록된 구독자가 없습니다.")
             return
 
-        # 중복 방지: 수동 발송은 dedup 스킵
+        # 중복 방지: 수동/주말 테스트 발송은 dedup 스킵
         sent_ids: set[int] = set()
-        if not manual:
+        if not manual and not weekend_test:
             if newsletter_type == "daily":
                 sent_ids = SendHistoryRepository.get_sent_today_subscriber_ids(
                     session, tenant_id, newsletter_type="daily"
@@ -282,14 +344,15 @@ def run_send_job(
         # 1차 배치 발송
         results = sender.send_batch_efficient(messages)
 
-        # 1차 결과 기록 (history_type으로 저장하여 자동/수동 이력 분리)
+        # 1차 결과 기록 (history_type / send_mode 로 자동·수동·주말테스트 분리)
         failed_items = []
         sent_count = 0
         for subscriber, msg, result in zip(target_subscribers, messages, results):
             SendHistoryRepository.create(
                 session, tenant_id, subscriber.id,
                 subject, result.success, result.error_message,
-                newsletter_type=history_type
+                newsletter_type=history_type,
+                send_mode=send_mode,
             )
             if result.success:
                 sent_count += 1
@@ -310,7 +373,8 @@ def run_send_job(
                     SendHistoryRepository.create(
                         session, tenant_id, subscriber.id,
                         subject, True, None,
-                        newsletter_type=history_type
+                        newsletter_type=history_type,
+                        send_mode=send_mode,
                     )
                     sent_count += 1
                     logger.info(f"{log_prefix} 재시도 발송 성공: {subscriber.email}")
@@ -319,10 +383,11 @@ def run_send_job(
                         f"{log_prefix} 재시도 발송 실패: {subscriber.email} - {retry_result.error_message}"
                     )
 
-        # dedup: 발송 성공 기사 이력 기록 (자동 daily 발송만, 수동은 제외)
+        # dedup: 발송 성공 기사 이력 기록 (자동 daily 정식 발송만, 수동·주말테스트 제외)
         if (
             sent_count >= 1
             and not manual
+            and not weekend_test
             and newsletter_type == "daily"
             and tenant.dedup_recent_days
         ):

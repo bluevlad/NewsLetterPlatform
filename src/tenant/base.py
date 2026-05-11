@@ -93,6 +93,16 @@ class BaseTenant(ABC):
         """
         return None
 
+    @property
+    def weekend_test_mode(self) -> bool:
+        """주말(토/일) 발송을 일반 구독자가 아닌 SUPER_ADMIN_EMAILS 로만 보낼지 여부.
+
+        True(기본): 주말은 early 슬롯에만 관리자 1명에게 테스트 발송, dedup 미기록,
+                    SendHistory.send_mode='weekend_test' 로 기록되어 통계에서 제외 가능.
+        False: 평일·주말 동일하게 정식 발송.
+        """
+        return True
+
     def extract_sent_article_entries(
         self, context: Dict[str, Any]
     ) -> List[tuple]:

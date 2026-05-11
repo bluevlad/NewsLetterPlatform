@@ -70,6 +70,9 @@ class SendHistory(Base):
     subscriber_id = Column(Integer, nullable=False)
     subject = Column(String(500))
     newsletter_type = Column(String(20), default="daily", nullable=False)
+    # 발송 모드: 'normal'(정식 발송) | 'weekend_test'(주말 관리자 테스트)
+    # | 추후 'manual'/'preview' 등 확장 가능. 통계 집계 시 'normal'만 필터링.
+    send_mode = Column(String(20), default="normal", nullable=False)
     is_success = Column(Boolean, default=False)
     error_message = Column(Text)
     sent_at = Column(DateTime, default=datetime.utcnow)
@@ -78,6 +81,7 @@ class SendHistory(Base):
         Index("idx_send_history_tenant_date", "tenant_id", "sent_at"),
         Index("idx_send_history_subscriber", "subscriber_id"),
         Index("idx_send_history_type", "tenant_id", "newsletter_type", "sent_at"),
+        Index("idx_send_history_mode", "tenant_id", "send_mode", "sent_at"),
     )
 
     def __repr__(self):
