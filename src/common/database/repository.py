@@ -60,6 +60,7 @@ def init_db(database_url: str = "sqlite:///./data/newsletterplatform.db") -> Non
     Base.metadata.create_all(bind=_engine)
 
     _migrate_send_history_newsletter_type(_engine)
+    _migrate_send_history_send_mode(_engine)
     _migrate_subscriber_send_slot(_engine)
     _migrate_sent_articles_company_name(_engine)
 
@@ -122,6 +123,30 @@ def _migrate_send_history_newsletter_type(engine) -> None:
                 logger.info("send_history 테이블에 newsletter_type 컬럼 추가 완료")
     except Exception as e:
         logger.debug(f"send_history 마이그레이션 스킵: {e}")
+
+
+def _migrate_send_history_send_mode(engine) -> None:
+    """send_history 테이블에 send_mode 컬럼 추가 (주말 관리자 테스트 모드 분리용).
+
+    'normal' = 정식 발송, 'weekend_test' = 주말 관리자 테스트.
+    통계/대시보드는 기본적으로 'normal'만 집계해야 한다.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(send_history)"))
+            columns = [row[1] for row in result]
+            if "send_mode" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE send_history ADD COLUMN send_mode VARCHAR(20) DEFAULT 'normal' NOT NULL"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_send_history_mode "
+                    "ON send_history (tenant_id, send_mode, sent_at)"
+                ))
+                conn.commit()
+                logger.info("send_history 테이블에 send_mode 컬럼 + 인덱스 추가 완료")
+    except Exception as e:
+        logger.debug(f"send_history send_mode 마이그레이션 스킵: {e}")
 
 
 @contextmanager
@@ -327,12 +352,14 @@ class SendHistoryRepository:
     @staticmethod
     def create(session: Session, tenant_id: str, subscriber_id: int,
                subject: str, is_success: bool, error_message: str = None,
-               newsletter_type: str = "daily") -> SendHistory:
+               newsletter_type: str = "daily",
+               send_mode: str = "normal") -> SendHistory:
         history = SendHistory(
             tenant_id=tenant_id,
             subscriber_id=subscriber_id,
             subject=subject,
             newsletter_type=newsletter_type,
+            send_mode=send_mode,
             is_success=is_success,
             error_message=error_message
         )
