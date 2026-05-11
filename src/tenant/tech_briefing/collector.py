@@ -7,6 +7,8 @@ LLM 호출은 MVP 범위 외 (raw description / RSS summary 그대로 사용, tr
 import asyncio
 import logging
 import re
+import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -62,6 +64,34 @@ class TechBriefingCollector:
 
     def __init__(self):
         self._gh_token = settings.tech_github_token or ""
+        self._metrics: list[dict] = []
+
+    def drain_metrics(self) -> list[dict]:
+        m, self._metrics = self._metrics, []
+        return m
+
+    @contextmanager
+    def _track(self, *, data_type: str, api_path: str):
+        started = time.monotonic()
+        metric: dict = {
+            "data_type": data_type,
+            "api_path": api_path,
+            "raw_count": 0,
+            "final_count": 0,
+            "excluded_by_ids": 0,
+            "excluded_by_companies": 0,
+            "effective_days": None,
+            "fallback_used": False,
+            "error": None,
+        }
+        try:
+            yield metric
+        except Exception as e:
+            metric["error"] = str(e)[:480]
+            raise
+        finally:
+            metric["latency_ms"] = int((time.monotonic() - started) * 1000)
+            self._metrics.append(metric)
 
     # ─── GitHub Releases ──────────────────────────────────────────
 
@@ -138,15 +168,29 @@ class TechBriefingCollector:
             async with semaphore:
                 return await _one(*args)
 
-        results = await asyncio.gather(
-            *[_bounded(args) for args in GITHUB_REPOS],
-            return_exceptions=False,
-        )
-        flat: List[Dict[str, Any]] = []
-        for r in results:
-            flat.extend(r)
-        logger.info(f"GitHub releases 수집: {len(flat)}건")
-        return flat
+        with self._track(
+            data_type="github_releases",
+            api_path="https://api.github.com/repos/{owner}/{repo}/releases",
+        ) as m:
+            try:
+                results = await asyncio.gather(
+                    *[_bounded(args) for args in GITHUB_REPOS],
+                    return_exceptions=False,
+                )
+                flat: List[Dict[str, Any]] = []
+                for r in results:
+                    flat.extend(r)
+                # raw_count: repo 호출 수, final_count: 정규화된 release 수
+                m["raw_count"] = len(GITHUB_REPOS)
+                m["final_count"] = len(flat)
+                # 토큰 없는 경우 동시성 제약(2) 으로 풀 확장 fallback 신호
+                if not self._gh_token:
+                    m["fallback_used"] = True
+                logger.info(f"GitHub releases 수집: {len(flat)}건")
+                return flat
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                raise
 
     # ─── NVD CVE feed ─────────────────────────────────────────────
 
@@ -167,78 +211,93 @@ class TechBriefingCollector:
 
         seen_ids: set[str] = set()
         all_cves: List[Dict[str, Any]] = []
+        cve_errors = 0
 
-        for kw in NVD_KEYWORDS:
-            params = {
-                "keywordSearch": kw,
-                "pubStartDate": _fmt(start_dt),
-                "pubEndDate": _fmt(end_dt),
-                "resultsPerPage": 20,
-            }
-            try:
-                async def _request():
-                    response = await client.get(url, params=params, timeout=API_TIMEOUT)
-                    if response.status_code == 403:
-                        raise RuntimeError("NVD 403 — rate limit 초과 의심")
-                    response.raise_for_status()
-                    return response.json()
+        with self._track(
+            data_type="cves",
+            api_path="https://services.nvd.nist.gov/rest/json/cves/2.0",
+        ) as m:
+            m["effective_days"] = NVD_LOOKBACK_DAYS
+            for kw in NVD_KEYWORDS:
+                params = {
+                    "keywordSearch": kw,
+                    "pubStartDate": _fmt(start_dt),
+                    "pubEndDate": _fmt(end_dt),
+                    "resultsPerPage": 20,
+                }
+                try:
+                    async def _request():
+                        response = await client.get(url, params=params, timeout=API_TIMEOUT)
+                        if response.status_code == 403:
+                            raise RuntimeError("NVD 403 — rate limit 초과 의심")
+                        response.raise_for_status()
+                        return response.json()
 
-                payload = await retry_async(_request, max_retries=2, base_delay=2.0)
-            except Exception as e:
-                logger.warning(f"NVD CVE 실패 [{kw}]: {e}")
-                continue
-
-            for vuln in payload.get("vulnerabilities", []) or []:
-                cve = vuln.get("cve") or {}
-                cve_id = cve.get("id") or ""
-                if not cve_id or cve_id in seen_ids:
+                    payload = await retry_async(_request, max_retries=2, base_delay=2.0)
+                except Exception as e:
+                    cve_errors += 1
+                    logger.warning(f"NVD CVE 실패 [{kw}]: {e}")
                     continue
-                seen_ids.add(cve_id)
 
-                descs = cve.get("descriptions") or []
-                en_desc = next(
-                    (d.get("value") for d in descs if d.get("lang") == "en"),
-                    "",
-                )
+                for vuln in payload.get("vulnerabilities", []) or []:
+                    cve = vuln.get("cve") or {}
+                    cve_id = cve.get("id") or ""
+                    if not cve_id or cve_id in seen_ids:
+                        continue
+                    seen_ids.add(cve_id)
 
-                # CVSS v3.1 우선, 없으면 v3.0, 없으면 v2.
-                metrics = cve.get("metrics") or {}
-                cvss = None
-                severity = None
-                for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
-                    arr = metrics.get(key) or []
-                    if arr:
-                        item0 = arr[0]
-                        cvss_data = item0.get("cvssData") or {}
-                        cvss = cvss_data.get("baseScore")
-                        severity = (
-                            cvss_data.get("baseSeverity")
-                            or item0.get("baseSeverity")
-                            or ""
-                        ).lower() or None
-                        break
+                    descs = cve.get("descriptions") or []
+                    en_desc = next(
+                        (d.get("value") for d in descs if d.get("lang") == "en"),
+                        "",
+                    )
 
-                published = _parse_iso(cve.get("published"))
+                    # CVSS v3.1 우선, 없으면 v3.0, 없으면 v2.
+                    metrics = cve.get("metrics") or {}
+                    cvss = None
+                    severity = None
+                    for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+                        arr = metrics.get(key) or []
+                        if arr:
+                            item0 = arr[0]
+                            cvss_data = item0.get("cvssData") or {}
+                            cvss = cvss_data.get("baseScore")
+                            severity = (
+                                cvss_data.get("baseSeverity")
+                                or item0.get("baseSeverity")
+                                or ""
+                            ).lower() or None
+                            break
 
-                all_cves.append({
-                    "source": "nvd_cve",
-                    "project": kw,
-                    "project_short": kw,
-                    "ecosystem": _ecosystem_for_keyword(kw),
-                    "tier": "S",  # CVE 는 자동으로 S 가중 (보안 신호 가장 큼)
-                    "title": f"{cve_id} ({kw})",
-                    "cve_id": cve_id,
-                    "url": f"https://nvd.nist.gov/vuln/detail/{cve_id}",
-                    "published_at": published,
-                    "summary": _strip_html(en_desc, max_len=320),
-                    "cvss": cvss,
-                    "severity": severity,
-                    "matched_keyword": kw,
-                    "dedup_key": f"cve:{cve_id}",
-                })
-            # rate limit 보호 — keyword 간 짧은 간격.
-            await asyncio.sleep(0.7 if self._gh_token else 1.2)
+                    published = _parse_iso(cve.get("published"))
 
+                    all_cves.append({
+                        "source": "nvd_cve",
+                        "project": kw,
+                        "project_short": kw,
+                        "ecosystem": _ecosystem_for_keyword(kw),
+                        "tier": "S",  # CVE 는 자동으로 S 가중 (보안 신호 가장 큼)
+                        "title": f"{cve_id} ({kw})",
+                        "cve_id": cve_id,
+                        "url": f"https://nvd.nist.gov/vuln/detail/{cve_id}",
+                        "published_at": published,
+                        "summary": _strip_html(en_desc, max_len=320),
+                        "cvss": cvss,
+                        "severity": severity,
+                        "matched_keyword": kw,
+                        "dedup_key": f"cve:{cve_id}",
+                    })
+                # rate limit 보호 — keyword 간 짧은 간격.
+                await asyncio.sleep(0.7 if self._gh_token else 1.2)
+
+            m["raw_count"] = len(NVD_KEYWORDS)
+            m["final_count"] = len(all_cves)
+            if cve_errors:
+                # 일부 키워드 실패는 부분 fallback 으로 표시 (전부 실패 아니면 error 비움)
+                if cve_errors >= len(NVD_KEYWORDS):
+                    m["error"] = f"all keywords failed (n={cve_errors})"
+                else:
+                    m["fallback_used"] = True
         logger.info(f"NVD CVE 수집: {len(all_cves)}건 (unique)")
         return all_cves
 
@@ -314,16 +373,28 @@ class TechBriefingCollector:
                 })
             return entries
 
-        results = await asyncio.gather(
-            *[_one(label, url, eco, tier)
-              for label, url, eco, tier in RSS_FEEDS],
-            return_exceptions=False,
-        )
-        flat: List[Dict[str, Any]] = []
-        for r in results:
-            flat.extend(r)
-        logger.info(f"RSS 수집: {len(flat)}건")
-        return flat
+        with self._track(
+            data_type="rss",
+            api_path="(rss feeds)",
+        ) as m:
+            try:
+                results = await asyncio.gather(
+                    *[_one(label, url, eco, tier)
+                      for label, url, eco, tier in RSS_FEEDS],
+                    return_exceptions=False,
+                )
+                flat: List[Dict[str, Any]] = []
+                for r in results:
+                    flat.extend(r)
+                # _one 은 실패도 [] 로 폴백하므로 fetch 실패와 본문 없음을 구분할 수 없다.
+                # raw_count = feed 수, final_count = 모은 엔트리 수만 적재 (충분히 운영용).
+                m["raw_count"] = len(RSS_FEEDS)
+                m["final_count"] = len(flat)
+                logger.info(f"RSS 수집: {len(flat)}건")
+                return flat
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                raise
 
     # ─── 통합 수집 ─────────────────────────────────────────────────
 

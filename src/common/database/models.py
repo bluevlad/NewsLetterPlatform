@@ -210,6 +210,48 @@ class EmailVerification(Base):
         return f"<EmailVerification(tenant={self.tenant_id}, email='{self.email}')>"
 
 
+class CollectionMetric(Base):
+    """수집 단계 메트릭 (테넌트 × 데이터 타입 × 엔드포인트)
+
+    `run_collect_job` 1회당 collector 가 호출한 각 API 엔드포인트 단위로 1행.
+    회귀 감지/V1 digest 실효성 측정/staleness 알림의 공통 입력 테이블.
+    """
+    __tablename__ = "collection_metrics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(50), nullable=False)
+    # 'daily' | 'weekly' | 'monthly' — run_collect_job 의 newsletter_type
+    newsletter_type = Column(String(20), default="daily", nullable=False)
+    # 수집 단위 (예: 'headlines', 'company_digest', 'papers', 'github_releases')
+    data_type = Column(String(50), nullable=False)
+    api_path = Column(String(200))                  # 실제 호출 경로 (POST alias 면 alias 경로)
+    raw_count = Column(Integer, default=0, nullable=False)
+    final_count = Column(Integer, default=0, nullable=False)
+    excluded_by_ids = Column(Integer, default=0, nullable=False)
+    excluded_by_companies = Column(Integer, default=0, nullable=False)
+    effective_days = Column(Integer)                # 실제 사용된 lookback 윈도 (nullable)
+    fallback_used = Column(Boolean, default=False, nullable=False)  # 풀 확장/POST alias 발동
+    latency_ms = Column(Integer, default=0, nullable=False)
+    error = Column(String(500))                     # 실패 시 메시지 (nullable)
+    collected_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_collection_metrics_tenant_time",
+              "tenant_id", "collected_at"),
+        Index("idx_collection_metrics_type_time",
+              "tenant_id", "data_type", "collected_at"),
+        Index("idx_collection_metrics_fallback",
+              "tenant_id", "fallback_used", "collected_at"),
+    )
+
+    def __repr__(self):
+        return (
+            f"<CollectionMetric(tenant={self.tenant_id}, type={self.data_type}, "
+            f"raw={self.raw_count}, final={self.final_count}, "
+            f"fallback={self.fallback_used})>"
+        )
+
+
 class BounceLog(Base):
     """이메일 bounce 이력 (NDR 자동 처리)
 
