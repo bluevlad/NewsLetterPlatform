@@ -91,6 +91,9 @@ class StandUpTenant(BaseTenant):
             return {}
         return await self._collector.collect_weekly(date_from, date_to)
 
+    def extract_collection_metrics(self) -> List[Dict[str, Any]]:
+        return self._collector.drain_metrics()
+
     def format_summary_report(self, newsletter_type: str,
                               history_data: list,
                               collected_data: Dict[str, Any] = None) -> Dict[str, Any]:

@@ -22,6 +22,8 @@ N2 신규 인용 endpoints (전문가용 섹션):
 """
 
 import logging
+import time
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -43,6 +45,49 @@ class AllergyInsightCollector:
             api_base_url or settings.allergy_insight_api_url
         ).rstrip("/")
         self._token: Optional[str] = None
+        # 수집 메트릭 누적. drain_metrics() 호출 시 비워진다.
+        self._metrics: list[dict] = []
+
+    def drain_metrics(self) -> list[dict]:
+        """누적된 _metrics 를 반환하고 내부 버퍼를 비운다."""
+        m, self._metrics = self._metrics, []
+        return m
+
+    @contextmanager
+    def _track(
+        self,
+        *,
+        data_type: str,
+        api_path: str,
+        excluded_by_ids: int = 0,
+        excluded_by_companies: int = 0,
+    ):
+        """수집 메트릭 추적 컨텍스트 매니저.
+
+        각 `_collect_*` 메서드가 `with self._track(...) as m:` 로 감싼다.
+        본문에서 `m["raw_count"]` 등을 직접 갱신한다. 예외가 발생해도 finally 에서
+        latency 와 함께 _metrics 에 append 한다 (부분 실패도 가시화).
+        """
+        started = time.monotonic()
+        metric: dict = {
+            "data_type": data_type,
+            "api_path": api_path,
+            "raw_count": 0,
+            "final_count": 0,
+            "excluded_by_ids": int(excluded_by_ids or 0),
+            "excluded_by_companies": int(excluded_by_companies or 0),
+            "effective_days": None,
+            "fallback_used": False,
+            "error": None,
+        }
+        try:
+            yield metric
+        except Exception as e:
+            metric["error"] = str(e)[:480]
+            raise
+        finally:
+            metric["latency_ms"] = int((time.monotonic() - started) * 1000)
+            self._metrics.append(metric)
 
     async def _login(self) -> str:
         """관리자 로그인으로 JWT 토큰 획득"""
@@ -115,20 +160,48 @@ class AllergyInsightCollector:
 
     async def _collect_news(self, page_size: int = 100) -> list[dict]:
         """뉴스 전체 목록 수집 (주간/월간용) - GET /api/admin/news"""
-        data = await self._get(f"/api/admin/news?page=1&page_size={page_size}")
-        return data.get("items", [])
+        with self._track(data_type="news", api_path="/api/admin/news") as m:
+            try:
+                data = await self._get(
+                    f"/api/admin/news?page=1&page_size={page_size}"
+                )
+                items = data.get("items", []) or []
+                m["raw_count"] = len(items)
+                m["final_count"] = len(items)
+                return items
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                raise
 
     async def _collect_news_stats(self) -> dict:
         """뉴스 통계 수집 - GET /api/admin/news/stats"""
-        return await self._get("/api/admin/news/stats")
+        with self._track(
+            data_type="news_stats", api_path="/api/admin/news/stats"
+        ) as m:
+            try:
+                data = await self._get("/api/admin/news/stats")
+                m["raw_count"] = 1
+                m["final_count"] = 1
+                return data
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                raise
 
     async def _collect_papers(self, page_size: int = 100) -> list[dict]:
         """논문 목록 수집 - GET /api/papers (공개 API)"""
-        data = await self._get(
-            f"/api/papers?page=1&page_size={page_size}",
-            auth_required=False,
-        )
-        return data.get("items", [])
+        with self._track(data_type="papers", api_path="/api/papers") as m:
+            try:
+                data = await self._get(
+                    f"/api/papers?page=1&page_size={page_size}",
+                    auth_required=False,
+                )
+                items = data.get("items", []) or []
+                m["raw_count"] = len(items)
+                m["final_count"] = len(items)
+                return items
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                raise
 
     # ─────────────────────────────────────────────────────────────
     # Redesign Phase 1 endpoints (fail-safe: 실패 시 빈 구조 반환)
@@ -154,47 +227,66 @@ class AllergyInsightCollector:
         """
         exclude_ids = [int(i) for i in (exclude_ids or [])]
         exclude_csv = ",".join(str(i) for i in exclude_ids)
-        try:
-            if exclude_csv and len(exclude_csv) > self._GET_EXCLUDE_IDS_BUDGET:
-                logger.info(
-                    f"AllergyInsight 헤드라인: exclude_ids={len(exclude_ids)}건 → POST alias 사용"
-                )
-                raw = await self._post(
-                    "/api/public/analytics/headlines/today:select",
-                    auth_required=False,
-                    json_body={
+        with self._track(
+            data_type="headlines",
+            api_path="/api/public/analytics/headlines/today",
+            excluded_by_ids=len(exclude_ids),
+        ) as m:
+            try:
+                if exclude_csv and len(exclude_csv) > self._GET_EXCLUDE_IDS_BUDGET:
+                    logger.info(
+                        f"AllergyInsight 헤드라인: exclude_ids={len(exclude_ids)}건 → POST alias 사용"
+                    )
+                    m["api_path"] = "/api/public/analytics/headlines/today:select"
+                    m["fallback_used"] = True
+                    raw = await self._post(
+                        "/api/public/analytics/headlines/today:select",
+                        auth_required=False,
+                        json_body={
+                            "limit": limit,
+                            "one_per_company": True,
+                            "fallback_days": [1, 2],
+                            "exclude_ids": exclude_ids,
+                        },
+                    )
+                else:
+                    params: Dict[str, Any] = {
                         "limit": limit,
-                        "one_per_company": True,
-                        "fallback_days": [1, 2],
-                        "exclude_ids": exclude_ids,
-                    },
+                        "one_per_company": "true",
+                        "fallback_days": "1,2",
+                    }
+                    if exclude_csv:
+                        params["exclude_ids"] = exclude_csv
+                    raw = await self._get(
+                        "/api/public/analytics/headlines/today",
+                        auth_required=False,
+                        params=params,
+                    )
+                body = self._unwrap(raw)
+                headlines = body.get("headlines", []) or []
+                excluded_ids = body.get("excluded_ids", []) or []
+                # 백엔드가 meta.effective_days 를 노출하면 사용, 없으면 None.
+                meta = body.get("meta") or {}
+                eff = meta.get("effective_days") if isinstance(meta, dict) else None
+                if eff is not None:
+                    m["effective_days"] = int(eff)
+                    if int(eff) > 1:
+                        # lookback 자동 확장도 fallback 신호로 표시
+                        m["fallback_used"] = True
+                # raw_count: 백엔드가 본 풀 크기 추정 (반환 + 백엔드 제외분)
+                m["raw_count"] = len(headlines) + len(excluded_ids)
+                m["final_count"] = len(headlines)
+                logger.info(
+                    f"AllergyInsight 헤드라인 수집 완료: {len(headlines)}건 "
+                    f"(exclude {len(exclude_ids)})"
                 )
-            else:
-                params: Dict[str, Any] = {
-                    "limit": limit,
-                    "one_per_company": "true",
-                    "fallback_days": "1,2",
-                }
-                if exclude_csv:
-                    params["exclude_ids"] = exclude_csv
-                raw = await self._get(
-                    "/api/public/analytics/headlines/today",
-                    auth_required=False,
-                    params=params,
+                return {"headlines": headlines, "excluded_ids": excluded_ids}
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                logger.warning(
+                    f"AllergyInsight 헤드라인 수집 실패 (빈 구조 폴백): {e}"
                 )
-            body = self._unwrap(raw)
-            headlines = body.get("headlines", []) or []
-            excluded_ids = body.get("excluded_ids", []) or []
-            logger.info(
-                f"AllergyInsight 헤드라인 수집 완료: {len(headlines)}건 "
-                f"(exclude {len(exclude_ids)})"
-            )
-            return {"headlines": headlines, "excluded_ids": excluded_ids}
-        except Exception as e:
-            logger.warning(
-                f"AllergyInsight 헤드라인 수집 실패 (빈 구조 폴백): {e}"
-            )
-            return {"headlines": [], "excluded_ids": []}
+                return {"headlines": [], "excluded_ids": []}
 
     async def _collect_company_digest(
         self,
@@ -272,35 +364,54 @@ class AllergyInsightCollector:
                     break
             return kept
 
-        try:
-            companies_7d = await _fetch(7)
-            filtered = _apply_filters(companies_7d)
-            if len(filtered) < target_count:
-                # 풀이 부족하면 14일로 확장 후 한 번 더 시도
-                companies_14d = await _fetch(14)
-                seen_names = {c.get("company_name") for c in filtered}
-                extra_pool = [
-                    c for c in companies_14d
-                    if c.get("company_name") not in seen_names
-                ]
-                extra_filtered = _apply_filters(
-                    extra_pool, max_per_category=3
+        with self._track(
+            data_type="company_digest",
+            api_path="/api/public/analytics/company-digest",
+            excluded_by_ids=len(exclude_ids or []),
+            excluded_by_companies=len(excluded_companies),
+        ) as m:
+            try:
+                companies_7d = await _fetch(7)
+                filtered = _apply_filters(companies_7d)
+                m["effective_days"] = 7
+                if len(filtered) < target_count:
+                    # 풀이 부족하면 14일로 확장 후 한 번 더 시도
+                    m["fallback_used"] = True
+                    m["effective_days"] = 14
+                    companies_14d = await _fetch(14)
+                    seen_names = {c.get("company_name") for c in filtered}
+                    extra_pool = [
+                        c for c in companies_14d
+                        if c.get("company_name") not in seen_names
+                    ]
+                    extra_filtered = _apply_filters(
+                        extra_pool, max_per_category=3
+                    )
+                    filtered.extend(
+                        extra_filtered[: target_count - len(filtered)]
+                    )
+                # raw_count 는 7일 풀 크기, fallback 발동 시 14일 풀로 갱신
+                m["raw_count"] = (
+                    len(companies_7d)
+                    if not m["fallback_used"]
+                    else len(companies_7d) + max(
+                        0, len(filtered) - len(companies_7d)
+                    )
                 )
-                filtered.extend(
-                    extra_filtered[: target_count - len(filtered)]
+                m["final_count"] = len(filtered)
+                logger.info(
+                    f"AllergyInsight 기업 다이제스트 수집 완료: "
+                    f"raw={len(companies_7d)} → filtered={len(filtered)} "
+                    f"(exclude_ids={len(exclude_ids or [])}, "
+                    f"exclude_companies={len(excluded_companies)})"
                 )
-            logger.info(
-                f"AllergyInsight 기업 다이제스트 수집 완료: "
-                f"raw={len(companies_7d)} → filtered={len(filtered)} "
-                f"(exclude_ids={len(exclude_ids or [])}, "
-                f"exclude_companies={len(excluded_companies)})"
-            )
-            return filtered
-        except Exception as e:
-            logger.warning(
-                f"AllergyInsight 기업 다이제스트 수집 실패 (빈 리스트 폴백): {e}"
-            )
-            return []
+                return filtered
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                logger.warning(
+                    f"AllergyInsight 기업 다이제스트 수집 실패 (빈 리스트 폴백): {e}"
+                )
+                return []
 
     async def _collect_drug_updates(self, days: int = 7) -> Dict[str, Any]:
         """약물·처방제 업데이트 수집 (openFDA + MFDS).
@@ -317,34 +428,42 @@ class AllergyInsightCollector:
             "recalls": [],
             "total": 0,
         }
-        try:
-            raw = await self._get(
-                "/api/public/drugs/updates",
-                auth_required=False,
-                params={"days": days, "type": "all"},
-            )
-            body = self._unwrap(raw)
-            result = {
-                "new_approvals": body.get("new_approvals", []) or [],
-                "label_changes": body.get("label_changes", []) or [],
-                "blackbox_warnings": body.get("blackbox_warnings", []) or [],
-                "recalls": body.get("recalls", []) or [],
-            }
-            result["total"] = (
-                len(result["new_approvals"])
-                + len(result["label_changes"])
-                + len(result["blackbox_warnings"])
-                + len(result["recalls"])
-            )
-            logger.info(
-                f"AllergyInsight 약물 업데이트 수집 완료: total={result['total']}"
-            )
-            return result
-        except Exception as e:
-            logger.warning(
-                f"AllergyInsight 약물 업데이트 수집 실패 (빈 구조 폴백): {e}"
-            )
-            return empty
+        with self._track(
+            data_type="drug_updates",
+            api_path="/api/public/drugs/updates",
+        ) as m:
+            m["effective_days"] = days
+            try:
+                raw = await self._get(
+                    "/api/public/drugs/updates",
+                    auth_required=False,
+                    params={"days": days, "type": "all"},
+                )
+                body = self._unwrap(raw)
+                result = {
+                    "new_approvals": body.get("new_approvals", []) or [],
+                    "label_changes": body.get("label_changes", []) or [],
+                    "blackbox_warnings": body.get("blackbox_warnings", []) or [],
+                    "recalls": body.get("recalls", []) or [],
+                }
+                result["total"] = (
+                    len(result["new_approvals"])
+                    + len(result["label_changes"])
+                    + len(result["blackbox_warnings"])
+                    + len(result["recalls"])
+                )
+                m["raw_count"] = result["total"]
+                m["final_count"] = result["total"]
+                logger.info(
+                    f"AllergyInsight 약물 업데이트 수집 완료: total={result['total']}"
+                )
+                return result
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                logger.warning(
+                    f"AllergyInsight 약물 업데이트 수집 실패 (빈 구조 폴백): {e}"
+                )
+                return empty
 
     # ─────────────────────────────────────────────────────────────
     # N2: 전문가용 신규 섹션 — 알러지 인사이트 스폿라이트 / 신흥 치료법 /
@@ -414,57 +533,67 @@ class AllergyInsightCollector:
         self,
         direction: str = "rising",
         limit: int = 5,
+        track_label: Optional[str] = None,
     ) -> list[dict]:
         """알러젠 상승/하락 랭킹 수집.
 
         direction: rising / declining / stable / new (백엔드 패턴 준수).
+        track_label: 메트릭 data_type 오버라이드. spotlight 처럼 동일 엔드포인트를
+            다른 의미로 호출할 때 중복 라벨 방지용. None 이면 'allergen_trend_<direction>'.
         실패 또는 빈 응답 → 빈 리스트.
 
         Returns: [{allergen_code, label_kr, paper_count, total_papers,
                    mention_rate, change_rate, top_link_types: [...]}]
         """
-        try:
-            raw = await self._get(
-                "/api/public/analytics/allergen-trend/ranking",
-                auth_required=False,
-                params={"direction": direction, "limit": limit},
-            )
-            body = self._unwrap(raw)
-            allergens = body.get("allergens", []) or []
-            result = []
-            for a in allergens:
-                code = a.get("allergen_code") or ""
-                top_link_types = a.get("top_link_types") or []
-                # 한글 라벨 부착
-                lt_display = [
-                    {
-                        "type": lt.get("type"),
-                        "label": self._LINK_TYPE_KR.get(
-                            (lt.get("type") or "").lower(), lt.get("type")
-                        ),
-                        "count": lt.get("count", 0),
-                    }
-                    for lt in top_link_types[:3]
-                ]
-                result.append({
-                    "allergen_code": code,
-                    "label_kr": self._allergen_label(code),
-                    "paper_count": a.get("paper_count", 0),
-                    "total_papers": a.get("total_papers", 0),
-                    "mention_rate": a.get("mention_rate", 0.0),
-                    "change_rate": a.get("change_rate", 0.0),
-                    "top_link_types": lt_display,
-                })
-            logger.info(
-                f"AllergyInsight 알러젠 랭킹 수집 완료 ({direction}): {len(result)}건"
-            )
-            return result
-        except Exception as e:
-            logger.warning(
-                f"AllergyInsight 알러젠 랭킹({direction}) 수집 실패 "
-                f"(빈 리스트 폴백): {e}"
-            )
-            return []
+        with self._track(
+            data_type=(track_label or f"allergen_trend_{direction}"),
+            api_path="/api/public/analytics/allergen-trend/ranking",
+        ) as m:
+            try:
+                raw = await self._get(
+                    "/api/public/analytics/allergen-trend/ranking",
+                    auth_required=False,
+                    params={"direction": direction, "limit": limit},
+                )
+                body = self._unwrap(raw)
+                allergens = body.get("allergens", []) or []
+                result = []
+                for a in allergens:
+                    code = a.get("allergen_code") or ""
+                    top_link_types = a.get("top_link_types") or []
+                    # 한글 라벨 부착
+                    lt_display = [
+                        {
+                            "type": lt.get("type"),
+                            "label": self._LINK_TYPE_KR.get(
+                                (lt.get("type") or "").lower(), lt.get("type")
+                            ),
+                            "count": lt.get("count", 0),
+                        }
+                        for lt in top_link_types[:3]
+                    ]
+                    result.append({
+                        "allergen_code": code,
+                        "label_kr": self._allergen_label(code),
+                        "paper_count": a.get("paper_count", 0),
+                        "total_papers": a.get("total_papers", 0),
+                        "mention_rate": a.get("mention_rate", 0.0),
+                        "change_rate": a.get("change_rate", 0.0),
+                        "top_link_types": lt_display,
+                    })
+                m["raw_count"] = len(allergens)
+                m["final_count"] = len(result)
+                logger.info(
+                    f"AllergyInsight 알러젠 랭킹 수집 완료 ({direction}): {len(result)}건"
+                )
+                return result
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                logger.warning(
+                    f"AllergyInsight 알러젠 랭킹({direction}) 수집 실패 "
+                    f"(빈 리스트 폴백): {e}"
+                )
+                return []
 
     async def _collect_treatments_overview(self) -> Dict[str, Any]:
         """신흥 치료법 통계 수집.
@@ -480,45 +609,54 @@ class AllergyInsightCollector:
             "by_type": {},
             "top_emerging": [],
         }
-        try:
-            raw = await self._get(
-                "/api/public/analytics/treatments/overview",
-                auth_required=False,
-            )
-            body = self._unwrap(raw)
-            top_treatments = body.get("top_treatments", []) or []
-            rising = body.get("rising_treatments", []) or []
-            # rising 우선, 없으면 top_treatments 중 trend_direction == "new" 만
-            emerging_pool = rising or [
-                t for t in top_treatments
-                if (t.get("trend_direction") or "").lower() in ("new", "rising")
-            ]
-            top_emerging = [
-                {
-                    "name": t.get("treatment_name") or "",
-                    "type": (t.get("treatment_type") or "").lower(),
-                    "paper_count": t.get("paper_count", 0),
-                    "direction": t.get("trend_direction") or "new",
+        with self._track(
+            data_type="treatments",
+            api_path="/api/public/analytics/treatments/overview",
+        ) as m:
+            try:
+                raw = await self._get(
+                    "/api/public/analytics/treatments/overview",
+                    auth_required=False,
+                )
+                body = self._unwrap(raw)
+                top_treatments = body.get("top_treatments", []) or []
+                rising = body.get("rising_treatments", []) or []
+                # rising 우선, 없으면 top_treatments 중 trend_direction == "new" 만
+                emerging_pool = rising or [
+                    t for t in top_treatments
+                    if (t.get("trend_direction") or "").lower() in ("new", "rising")
+                ]
+                top_emerging = [
+                    {
+                        "name": t.get("treatment_name") or "",
+                        "type": (t.get("treatment_type") or "").lower(),
+                        "paper_count": t.get("paper_count", 0),
+                        "direction": t.get("trend_direction") or "new",
+                    }
+                    for t in emerging_pool[:6]
+                    if t.get("treatment_name")
+                ]
+                result = {
+                    "latest_year": body.get("latest_year"),
+                    "total_treatments": body.get("total_treatments", 0),
+                    "by_type": body.get("by_type", {}) or {},
+                    "top_emerging": top_emerging,
                 }
-                for t in emerging_pool[:6]
-                if t.get("treatment_name")
-            ]
-            result = {
-                "latest_year": body.get("latest_year"),
-                "total_treatments": body.get("total_treatments", 0),
-                "by_type": body.get("by_type", {}) or {},
-                "top_emerging": top_emerging,
-            }
-            logger.info(
-                f"AllergyInsight 신흥 치료법 수집 완료: "
-                f"top_emerging={len(top_emerging)}건"
-            )
-            return result
-        except Exception as e:
-            logger.warning(
-                f"AllergyInsight 신흥 치료법 수집 실패 (빈 구조 폴백): {e}"
-            )
-            return empty
+                m["raw_count"] = (
+                    len(top_treatments) + len(rising)
+                )
+                m["final_count"] = len(top_emerging)
+                logger.info(
+                    f"AllergyInsight 신흥 치료법 수집 완료: "
+                    f"top_emerging={len(top_emerging)}건"
+                )
+                return result
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                logger.warning(
+                    f"AllergyInsight 신흥 치료법 수집 실패 (빈 구조 폴백): {e}"
+                )
+                return empty
 
     async def _collect_spotlight(
         self, rotation_seed: int = 0, candidate_limit: int = 8
@@ -529,7 +667,9 @@ class AllergyInsightCollector:
         Returns: 단일 dict 또는 None (데이터 없음).
         """
         candidates = await self._collect_allergen_ranking(
-            direction="rising", limit=candidate_limit
+            direction="rising",
+            limit=candidate_limit,
+            track_label="spotlight",
         )
         if not candidates:
             return None
@@ -552,23 +692,32 @@ class AllergyInsightCollector:
              "top_companies": [...], "drug_updates_summary": {...}}
             실패 시 빈 dict. 템플릿이 falsy 체크로 섹션 숨김.
         """
-        try:
-            params: Dict[str, Any] = {"window_days": window_days}
-            if report_date:
-                params["report_date"] = report_date
-            raw = await self._get(
-                "/api/public/analytics/weekly-metrics",
-                auth_required=False,
-                params=params,
-            )
-            body = self._unwrap(raw)
-            logger.info("AllergyInsight 주간 메트릭 수집 완료")
-            return body or {}
-        except Exception as e:
-            logger.warning(
-                f"AllergyInsight 주간 메트릭 수집 실패 (빈 dict 폴백): {e}"
-            )
-            return {}
+        with self._track(
+            data_type="weekly_metrics",
+            api_path="/api/public/analytics/weekly-metrics",
+        ) as m:
+            m["effective_days"] = window_days
+            try:
+                params: Dict[str, Any] = {"window_days": window_days}
+                if report_date:
+                    params["report_date"] = report_date
+                raw = await self._get(
+                    "/api/public/analytics/weekly-metrics",
+                    auth_required=False,
+                    params=params,
+                )
+                body = self._unwrap(raw)
+                if body:
+                    m["raw_count"] = 1
+                    m["final_count"] = 1
+                logger.info("AllergyInsight 주간 메트릭 수집 완료")
+                return body or {}
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                logger.warning(
+                    f"AllergyInsight 주간 메트릭 수집 실패 (빈 dict 폴백): {e}"
+                )
+                return {}
 
     def _transform_news(self, raw_items: list[dict]) -> list[dict]:
         """v2.0.0 뉴스 아이템 → daily_report top_news 포맷 변환"""

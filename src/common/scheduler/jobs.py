@@ -15,7 +15,8 @@ from apscheduler.triggers.cron import CronTrigger
 from ..database.repository import (
     get_session, CollectedDataRepository,
     SubscriberRepository, SendHistoryRepository,
-    NewsletterArchiveRepository, SentArticleRepository
+    NewsletterArchiveRepository, SentArticleRepository,
+    CollectionMetricRepository,
 )
 from ..delivery.gmail_sender import get_sender
 from ..delivery.bounce_processor import run_bounce_processor
@@ -190,6 +191,24 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
         logger.exception(
             f"[{tenant_id}]{type_label} 데이터 수집 중 오류: {e}. "
             "이전 캐시 데이터로 발송됩니다."
+        )
+
+    # 수집 메트릭 영속화 — 성공/실패 무관(부분 수집도 가시화).
+    # collector 가 누적해 둔 _metrics 를 1회 drain 후 DB 기록한다.
+    try:
+        collection_metrics = tenant.extract_collection_metrics()
+        if collection_metrics:
+            with get_session() as session:
+                CollectionMetricRepository.record_many(
+                    session, tenant_id, newsletter_type, collection_metrics
+                )
+            logger.info(
+                f"[{tenant_id}]{type_label} collection_metrics 기록: "
+                f"{len(collection_metrics)}건"
+            )
+    except Exception as e:
+        logger.warning(
+            f"[{tenant_id}]{type_label} collection_metrics 기록 실패: {e}"
         )
 
     update_health("collect")

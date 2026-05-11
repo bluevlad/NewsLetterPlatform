@@ -6,6 +6,8 @@
 """
 
 import logging
+import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone, date as date_t
 from typing import Any, Dict, List, Optional
 
@@ -26,6 +28,34 @@ class StandUpCollector:
         self.api_base_url = (
             api_base_url or settings.standup_api_url
         ).rstrip("/")
+        self._metrics: list[dict] = []
+
+    def drain_metrics(self) -> list[dict]:
+        m, self._metrics = self._metrics, []
+        return m
+
+    @contextmanager
+    def _track(self, *, data_type: str, api_path: str):
+        started = time.monotonic()
+        metric: dict = {
+            "data_type": data_type,
+            "api_path": api_path,
+            "raw_count": 0,
+            "final_count": 0,
+            "excluded_by_ids": 0,
+            "excluded_by_companies": 0,
+            "effective_days": None,
+            "fallback_used": False,
+            "error": None,
+        }
+        try:
+            yield metric
+        except Exception as e:
+            metric["error"] = str(e)[:480]
+            raise
+        finally:
+            metric["latency_ms"] = int((time.monotonic() - started) * 1000)
+            self._metrics.append(metric)
 
     async def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         url = f"{self.api_base_url}{path}"
@@ -39,14 +69,22 @@ class StandUpCollector:
         return await retry_async(_request)
 
     async def _list_newsletters(self, limit: int = 5) -> List[Dict[str, Any]]:
-        try:
-            data = await self._get(
-                "/api/v1/insight/newsletters", params={"limit": limit}
-            )
-            return data if isinstance(data, list) else []
-        except Exception as e:
-            logger.warning(f"StandUp /insight/newsletters 실패: {e}")
-            return []
+        with self._track(
+            data_type="newsletters",
+            api_path="/api/v1/insight/newsletters",
+        ) as m:
+            try:
+                data = await self._get(
+                    "/api/v1/insight/newsletters", params={"limit": limit}
+                )
+                items = data if isinstance(data, list) else []
+                m["raw_count"] = len(items)
+                m["final_count"] = len(items)
+                return items
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                logger.warning(f"StandUp /insight/newsletters 실패: {e}")
+                return []
 
     async def _list_events(
         self,
@@ -54,15 +92,24 @@ class StandUpCollector:
         limit: int = 200,
         source_type: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        try:
-            params: Dict[str, Any] = {"days": days, "limit": limit}
-            if source_type:
-                params["source_type"] = source_type
-            data = await self._get("/api/v1/insight/events", params=params)
-            return data if isinstance(data, list) else []
-        except Exception as e:
-            logger.warning(f"StandUp /insight/events 실패: {e}")
-            return []
+        with self._track(
+            data_type="events",
+            api_path="/api/v1/insight/events",
+        ) as m:
+            m["effective_days"] = days
+            try:
+                params: Dict[str, Any] = {"days": days, "limit": limit}
+                if source_type:
+                    params["source_type"] = source_type
+                data = await self._get("/api/v1/insight/events", params=params)
+                items = data if isinstance(data, list) else []
+                m["raw_count"] = len(items)
+                m["final_count"] = len(items)
+                return items
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                logger.warning(f"StandUp /insight/events 실패: {e}")
+                return []
 
     @staticmethod
     def _parse_dt(value: Optional[str]) -> Optional[str]:
