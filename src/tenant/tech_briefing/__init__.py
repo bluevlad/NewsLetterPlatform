@@ -76,6 +76,9 @@ class TechBriefingTenant(BaseTenant):
             exclude_companies=exclude_companies,
         )
 
+    def extract_collection_metrics(self) -> List[Dict[str, Any]]:
+        return self._collector.drain_metrics()
+
     def format_report(self, collected_data: Dict[str, Any]) -> Dict[str, Any]:
         return self._formatter.format(collected_data)
 
