@@ -4,6 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > 도메인/URL/포트 규칙: [Claude-Opus-bluevlad/standards/infrastructure/DOMAIN_MANAGEMENT.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/infrastructure/DOMAIN_MANAGEMENT.md) — `https://도메인:포트` 사용 금지
 > 발송 유형 분리: [Claude-Opus-bluevlad/standards/newsletterplatform/SEND_TYPE_SEPARATION.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/newsletterplatform/SEND_TYPE_SEPARATION.md) — **메일 발송 관련 수정 시 반드시 참조**
+> 주말 관리자 테스트 발송: [Claude-Opus-bluevlad/standards/newsletterplatform/WEEKEND_ADMIN_TEST_MODE.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/newsletterplatform/WEEKEND_ADMIN_TEST_MODE.md) — 평일/주말 발송 분리, `send_mode` 축, dedup 풀 격리
 
 ## 실행 환경 감지 (SSH 재접속 금지)
 
