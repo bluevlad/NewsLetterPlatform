@@ -103,6 +103,28 @@ class BaseTenant(ABC):
         """
         return True
 
+    def extract_collection_metrics(self) -> List[Dict[str, Any]]:
+        """직전 `collect_data` / `collect_summary_data` 호출에서 누적된 수집 메트릭.
+
+        반환되는 dict 리스트는 `CollectionMetricRepository.record_many` 가 그대로
+        소비한다. 기본 구현은 빈 리스트 — collector 가 메트릭을 누적하는 테넌트만
+        오버라이드한다.
+
+        각 dict 의 키 (모두 optional, `data_type` 만 필수):
+          - `data_type` (str, 필수): 'headlines' / 'company_digest' / 'github_releases' …
+          - `api_path` (str): 실제 호출 경로
+          - `raw_count` / `final_count` (int)
+          - `excluded_by_ids` / `excluded_by_companies` (int)
+          - `effective_days` (int|None)
+          - `fallback_used` (bool)
+          - `latency_ms` (int)
+          - `error` (str|None)
+
+        구현은 collector 의 `drain_metrics()` 를 그대로 반환하는 게 일반적.
+        스케줄러는 매 `run_collect_job` 마다 1회 호출하므로 호출 즉시 비워야 한다.
+        """
+        return []
+
     def extract_sent_article_entries(
         self, context: Dict[str, Any]
     ) -> List[tuple]:
