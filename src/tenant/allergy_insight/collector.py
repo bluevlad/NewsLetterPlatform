@@ -35,6 +35,9 @@ from ...config import settings
 logger = logging.getLogger(__name__)
 
 API_TIMEOUT = 60.0
+# trust_env=False: OrbStack 런타임이 컨테이너에 자동 주입하는 NO_PROXY 의 IPv6 CIDR
+# 항목(fd07:.../64 형식)이 httpx URLPattern 파서를 깨뜨림 (InvalidURL: Invalid port).
+# 내부 호출에 외부 proxy 가 필요 없으므로 환경 변수 자체를 신뢰하지 않는다.
 
 
 class AllergyInsightCollector:
@@ -99,7 +102,7 @@ class AllergyInsightCollector:
         }
 
         async def _request():
-            async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=API_TIMEOUT, trust_env=False) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 data = response.json()
@@ -123,7 +126,7 @@ class AllergyInsightCollector:
             headers["Authorization"] = f"Bearer {self._token}"
 
         async def _request():
-            async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=API_TIMEOUT, trust_env=False) as client:
                 response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
                 return response.json()
@@ -143,7 +146,7 @@ class AllergyInsightCollector:
             headers["Authorization"] = f"Bearer {self._token}"
 
         async def _request():
-            async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=API_TIMEOUT, trust_env=False) as client:
                 response = await client.post(url, headers=headers, json=json_body)
                 response.raise_for_status()
                 return response.json()

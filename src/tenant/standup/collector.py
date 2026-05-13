@@ -61,7 +61,7 @@ class StandUpCollector:
         url = f"{self.api_base_url}{path}"
 
         async def _request():
-            async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=API_TIMEOUT, trust_env=False) as client:
                 response = await client.get(url, params=params)
                 response.raise_for_status()
                 return response.json()
