@@ -89,7 +89,7 @@ async def verify_turnstile(token: str, secret: str, remote_ip: Optional[str] = N
         payload["remoteip"] = remote_ip
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
             resp = await client.post(
                 "https://challenges.cloudflare.com/turnstile/v0/siteverify",
                 data=payload,
