@@ -8,6 +8,7 @@ import logging
 import time
 from datetime import datetime, date, timedelta, timezone
 from types import SimpleNamespace
+from typing import Optional
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -18,6 +19,7 @@ from ..database.repository import (
     NewsletterArchiveRepository, SentArticleRepository,
     CollectionMetricRepository,
 )
+from ..database.models import CollectionMetric
 from ..delivery.gmail_sender import get_sender
 from ..delivery.bounce_processor import run_bounce_processor
 from ..template.renderer import get_renderer
@@ -32,10 +34,30 @@ logger = logging.getLogger(__name__)
 _KST = timezone(timedelta(hours=9))
 _WEEKEND_TEST_SLOT = "early"  # 주말엔 early 슬롯만 발송 (mid/late는 스킵)
 
+# Stale-cache admin alert: 캐시 데이터가 24시간 초과면 일반 구독자 발송 중단,
+# SUPER_ADMIN_EMAILS 에만 STALE 배너로 발송. (FRESHNESS_PLAN AC-8 / 트랙 F P6)
+STALE_CACHE_THRESHOLD_SECONDS = 24 * 3600
+
 
 def _is_weekend_kst() -> bool:
     """KST 기준 오늘이 토(5)/일(6)요일이면 True"""
     return datetime.now(_KST).weekday() >= 5
+
+
+def _latest_collection_error(session, tenant_id: str) -> Optional[str]:
+    """최근 24h 내 가장 최신 collection_metrics.error 메시지. STALE 배너 메타용."""
+    since = datetime.utcnow() - timedelta(hours=24)
+    row = (
+        session.query(CollectionMetric.error)
+        .filter(
+            CollectionMetric.tenant_id == tenant_id,
+            CollectionMetric.collected_at >= since,
+            CollectionMetric.error.isnot(None),
+        )
+        .order_by(CollectionMetric.collected_at.desc())
+        .first()
+    )
+    return row[0] if row else None
 
 
 def _get_admin_recipients(session, tenant_id: str) -> list:
@@ -258,6 +280,7 @@ def run_send_job(
         logger.info(f"{log_prefix} 주말 관리자 테스트 모드로 발송")
 
     send_mode = "weekend_test" if weekend_test else "normal"
+    stale_alert = False  # P6 stale-cache 가드 (daily 만 평가, 아래에서 결정)
 
     sender = get_sender()
     if not sender.is_configured:
@@ -269,9 +292,40 @@ def run_send_job(
     with get_session() as session:
         if newsletter_type == "daily":
             # 기존 daily 로직
-            context, template_name, subject = _prepare_daily_send(
+            (context, template_name, subject,
+             max_cache_age, oldest_collected_at) = _prepare_daily_send(
                 session, tenant_id, tenant, type_label
             )
+
+            # P6: 캐시 24h 초과 + 자동 발송이면 stale alert 모드 진입.
+            # 수동(manual)·주말테스트(weekend_test)는 그대로 진행 — 운영자 의도.
+            if (
+                context is not None
+                and not manual
+                and not weekend_test
+                and max_cache_age is not None
+                and max_cache_age > STALE_CACHE_THRESHOLD_SECONDS
+            ):
+                stale_alert = True
+                send_mode = "stale_admin_alert"
+                hours = int(max_cache_age // 3600)
+                log_prefix = f"{log_prefix}[stale_alert]"
+                logger.warning(
+                    f"{log_prefix} 캐시 {hours}h 초과 — 일반 구독자 발송 중단, "
+                    f"SUPER_ADMIN_EMAILS 에만 STALE 배너 발송"
+                )
+                # 템플릿용 stale 메타데이터 주입 (배너 렌더)
+                last_error = _latest_collection_error(session, tenant_id)
+                context["stale_alert"] = {
+                    "max_cache_age_hours": hours,
+                    "last_collected_at": (
+                        oldest_collected_at.isoformat()
+                        if oldest_collected_at else None
+                    ),
+                    "last_error": last_error,
+                }
+                # 제목 prefix
+                subject = f"[⚠️STALE] {subject}"
         else:
             # weekly/monthly 로직
             context, template_name, subject = _prepare_summary_send(
@@ -293,8 +347,8 @@ def run_send_job(
                 logger.error(f"{log_prefix} 템플릿 렌더링 실패: {e}")
                 return
 
-        # 아카이브 저장 (수동/주말 테스트 발송은 아카이브 생략 — 동일 날짜 중복 방지)
-        if not manual and not weekend_test:
+        # 아카이브 저장 (수동/주말 테스트/stale alert 는 아카이브 생략)
+        if not manual and not weekend_test and not stale_alert:
             try:
                 NewsletterArchiveRepository.save(
                     session, tenant_id, newsletter_type, subject, html_content
@@ -303,12 +357,12 @@ def run_send_job(
             except Exception as e:
                 logger.warning(f"{log_prefix} 아카이브 저장 실패 (발송은 계속): {e}")
 
-        # 구독자 조회 — 주말 테스트는 SUPER_ADMIN_EMAILS 만, 평일은 슬롯 필터링
-        if weekend_test:
+        # 구독자 조회 — 주말 테스트·stale alert 는 SUPER_ADMIN_EMAILS 만, 평일은 슬롯 필터링
+        if weekend_test or stale_alert:
             subscribers = _get_admin_recipients(session, tenant_id)
             if not subscribers:
                 logger.warning(
-                    f"{log_prefix} SUPER_ADMIN_EMAILS 가 비어 있어 주말 테스트 발송 스킵"
+                    f"{log_prefix} SUPER_ADMIN_EMAILS 가 비어 있어 발송 스킵"
                 )
                 return
         elif slot:
@@ -320,9 +374,9 @@ def run_send_job(
             logger.warning(f"[{tenant_id}] 등록된 구독자가 없습니다.")
             return
 
-        # 중복 방지: 수동/주말 테스트 발송은 dedup 스킵
+        # 중복 방지: 수동/주말 테스트/stale alert 발송은 dedup 스킵
         sent_ids: set[int] = set()
-        if not manual and not weekend_test:
+        if not manual and not weekend_test and not stale_alert:
             if newsletter_type == "daily":
                 sent_ids = SendHistoryRepository.get_sent_today_subscriber_ids(
                     session, tenant_id, newsletter_type="daily"
@@ -402,11 +456,14 @@ def run_send_job(
                         f"{log_prefix} 재시도 발송 실패: {subscriber.email} - {retry_result.error_message}"
                     )
 
-        # dedup: 발송 성공 기사 이력 기록 (자동 daily 정식 발송만, 수동·주말테스트 제외)
+        # dedup: 발송 성공 기사 이력 기록 (자동 daily 정식 발송만, 수동·주말테스트·stale alert 제외)
+        # stale_alert 는 캐시된 과거 기사를 admin 에게 재발송한 것이므로 sent_articles 풀을
+        # 오염시키면 안 됨 (다음날 정상 발송 시 잘못 dedup 될 위험).
         if (
             sent_count >= 1
             and not manual
             and not weekend_test
+            and not stale_alert
             and newsletter_type == "daily"
             and tenant.dedup_recent_days
         ):
@@ -427,36 +484,52 @@ def run_send_job(
 
 
 def _prepare_daily_send(session, tenant_id, tenant, type_label):
-    """daily 발송용 데이터 준비"""
+    """daily 발송용 데이터 준비.
+
+    Returns:
+        (context, template_name, subject, max_cache_age_seconds, oldest_collected_at)
+        - max_cache_age_seconds: daily 대상 데이터 중 가장 오래된 캐시의 경과 초.
+          stale 가드(P6) 분기 판단에 사용. 데이터 없으면 None.
+        - oldest_collected_at: 가장 오래된 collected_at (UTC datetime). STALE 배너
+          메타데이터에 사용. None 가능.
+        실패 시 (None, None, None, None, None).
+    """
     collected_with_time = CollectedDataRepository.get_all_latest_with_time(session, tenant_id)
 
     if not collected_with_time:
         logger.warning(f"[{tenant_id}] 발송할 수집 데이터가 없습니다.")
-        return None, None, None
+        return None, None, None, None, None
 
-    # 캐시 데이터 staleness 검사 (24시간 기준)
+    # 캐시 데이터 staleness 검사 (24시간 기준 경고). 가장 오래된 캐시 age 도 같이 산출.
     now = datetime.utcnow()
     collected_data = {}
+    max_cache_age_seconds: Optional[float] = None
+    oldest_collected_at: Optional[datetime] = None
     for data_type, (data_dict, collected_at) in collected_with_time.items():
         # weekly/monthly prefixed 데이터 제외
         if data_type.startswith("weekly_") or data_type.startswith("monthly_"):
             continue
         collected_data[data_type] = data_dict
-        if collected_at and (now - collected_at).total_seconds() > 24 * 3600:
-            logger.warning(
-                f"[{tenant_id}] '{data_type}' 데이터가 24시간 이상 경과 "
-                f"(수집 시각: {collected_at.isoformat()}). 캐시 데이터로 발송합니다."
-            )
+        if collected_at:
+            age = (now - collected_at).total_seconds()
+            if max_cache_age_seconds is None or age > max_cache_age_seconds:
+                max_cache_age_seconds = age
+                oldest_collected_at = collected_at
+            if age > 24 * 3600:
+                logger.warning(
+                    f"[{tenant_id}] '{data_type}' 데이터가 24시간 이상 경과 "
+                    f"(수집 시각: {collected_at.isoformat()}). 캐시 데이터로 발송합니다."
+                )
 
     try:
         context = tenant.format_report(collected_data)
     except Exception as e:
         logger.error(f"[{tenant_id}] 데이터 포매팅 실패: {e}")
-        return None, None, None
+        return None, None, None, None, None
 
     template_name = tenant.get_email_template("daily")
     subject = tenant.generate_subject(newsletter_type="daily")
-    return context, template_name, subject
+    return context, template_name, subject, max_cache_age_seconds, oldest_collected_at
 
 
 def _prepare_summary_send(session, tenant_id, tenant, newsletter_type, type_label):
