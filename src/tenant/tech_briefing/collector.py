@@ -417,7 +417,7 @@ class TechBriefingCollector:
             }
             전부 실패시 빈 dict.
         """
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=API_TIMEOUT, trust_env=False) as client:
             github_task = self._fetch_github_releases(client)
             cve_task = self._fetch_cves(client)
             rss_task = self._fetch_rss(client)
