@@ -826,6 +826,25 @@ class NewsletterArchiveRepository:
             NewsletterArchive.id == archive_id
         ).first()
 
+    @staticmethod
+    def get_latest_before(
+        session: Session,
+        tenant_id: str,
+        newsletter_type: str,
+        before_date: date,
+    ) -> Optional[NewsletterArchive]:
+        """before_date 이전 가장 최근 archive. duplicate-content 가드(AC-9)용."""
+        return (
+            session.query(NewsletterArchive)
+            .filter(
+                NewsletterArchive.tenant_id == tenant_id,
+                NewsletterArchive.newsletter_type == newsletter_type,
+                NewsletterArchive.sent_date < before_date,
+            )
+            .order_by(NewsletterArchive.sent_date.desc())
+            .first()
+        )
+
 
 class EmailVerificationRepository:
     """이메일 인증 저장소"""
