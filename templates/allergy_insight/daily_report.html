@@ -16,6 +16,22 @@
             </td>
         </tr>
 
+        {% if duplicate_alert %}
+        <!-- DUPLICATE alert 배너 (관리자 전용 발송 표시 — AC-9) -->
+        <tr>
+            <td style="background-color: #fff8e1; border-left: 4px solid #d84315; padding: 18px 22px;">
+                <p style="margin: 0 0 8px 0; color: #bf360c; font-size: 15px; font-weight: 700;">
+                    ⚠️ DUPLICATE CONTENT — 관리자 전용 발송
+                </p>
+                <p style="margin: 0 0 10px 0; color: #5d4037; font-size: 13px; line-height: 1.5;">
+                    오늘 생성된 뉴스레터가 <strong>직전 발송({{ duplicate_alert.previous_sent_date }})</strong>과
+                    컨텐츠가 동일하여 일반 구독자에게는 발송되지 않았습니다.
+                    백엔드의 신규 데이터 유입을 확인해 주세요.
+                </p>
+            </td>
+        </tr>
+        {% endif %}
+
         {% if stale_alert %}
         <!-- STALE alert 배너 (관리자 전용 발송 표시) -->
         <tr>
