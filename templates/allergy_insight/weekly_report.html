@@ -11,7 +11,7 @@
         <tr>
             <td style="background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%); padding: 40px 30px; text-align: center;">
                 <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">AllergyInsight</h1>
-                <p style="margin: 10px 0 0 0; color: #a5d6a7; font-size: 18px; font-weight: 600;">Weekly Statistics Report</p>
+                <p style="margin: 10px 0 0 0; color: #a5d6a7; font-size: 18px; font-weight: 600;">주간 통계 리포트</p>
                 <p style="margin: 14px 0 0 0; color: #ffffff; font-size: 16px;">
                     {{ period_start.strftime('%Y.%m.%d') }} ~ {{ period_end.strftime('%Y.%m.%d') }}
                 </p>
@@ -22,43 +22,43 @@
         <tr>
             <td style="padding: 30px 30px 10px 30px;">
                 <h2 style="margin: 0 0 18px 0; padding-bottom: 10px; border-bottom: 3px solid #2e7d32; color: #2e7d32; font-size: 19px;">
-                    1. Weekly Overview
+                    1. 주간 개요
                 </h2>
                 <table width="100%" cellpadding="0" cellspacing="0">
                     <tr>
                         <td width="25%" style="text-align: center; padding: 12px 4px;">
                             <table width="100%" cellpadding="0" cellspacing="0">
                                 <tr><td style="background-color: #e8f5e9; border-radius: 8px; padding: 16px 8px; text-align: center;">
-                                    <p style="margin: 0; color: #888888; font-size: 12px;">Data Days</p>
+                                    <p style="margin: 0; color: #888888; font-size: 12px;">수집일수</p>
                                     <p style="margin: 6px 0 0 0; color: #1b5e20; font-size: 28px; font-weight: 700;">{{ summary.days_with_data }}</p>
-                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">days</p>
+                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">일</p>
                                 </td></tr>
                             </table>
                         </td>
                         <td width="25%" style="text-align: center; padding: 12px 4px;">
                             <table width="100%" cellpadding="0" cellspacing="0">
                                 <tr><td style="background-color: #e8f5e9; border-radius: 8px; padding: 16px 8px; text-align: center;">
-                                    <p style="margin: 0; color: #888888; font-size: 12px;">News</p>
+                                    <p style="margin: 0; color: #888888; font-size: 12px;">뉴스</p>
                                     <p style="margin: 6px 0 0 0; color: #2e7d32; font-size: 28px; font-weight: 700;">{{ summary.total_news }}</p>
-                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">avg {{ summary.daily_avg_news }}/day</p>
+                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">일평균 {{ summary.daily_avg_news }}건</p>
                                 </td></tr>
                             </table>
                         </td>
                         <td width="25%" style="text-align: center; padding: 12px 4px;">
                             <table width="100%" cellpadding="0" cellspacing="0">
                                 <tr><td style="background-color: #e3f2fd; border-radius: 8px; padding: 16px 8px; text-align: center;">
-                                    <p style="margin: 0; color: #888888; font-size: 12px;">Papers</p>
+                                    <p style="margin: 0; color: #888888; font-size: 12px;">논문</p>
                                     <p style="margin: 6px 0 0 0; color: #1565c0; font-size: 28px; font-weight: 700;">{{ summary.total_papers }}</p>
-                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">avg {{ summary.daily_avg_papers }}/day</p>
+                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">일평균 {{ summary.daily_avg_papers }}건</p>
                                 </td></tr>
                             </table>
                         </td>
                         <td width="25%" style="text-align: center; padding: 12px 4px;">
                             <table width="100%" cellpadding="0" cellspacing="0">
                                 <tr><td style="background-color: #fff3e0; border-radius: 8px; padding: 16px 8px; text-align: center;">
-                                    <p style="margin: 0; color: #888888; font-size: 12px;">Companies</p>
+                                    <p style="margin: 0; color: #888888; font-size: 12px;">기업수</p>
                                     <p style="margin: 6px 0 0 0; color: #ef6c00; font-size: 28px; font-weight: 700;">{{ summary.total_companies }}</p>
-                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">tracked</p>
+                                    <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">추적 중</p>
                                 </td></tr>
                             </table>
                         </td>
@@ -68,7 +68,7 @@
                     <tr>
                         <td style="text-align: center; padding: 8px; background-color: #fafafa; border-radius: 6px;">
                             <span style="color: #666666; font-size: 13px;">
-                                Avg Importance Score: <strong style="color: #e53935;">{{ (summary.avg_importance * 100)|int }}%</strong>
+                                평균 중요도 점수: <strong style="color: #e53935;">{{ (summary.avg_importance * 100)|int }}%</strong>
                             </span>
                         </td>
                     </tr>
@@ -81,7 +81,7 @@
         <tr>
             <td style="padding: 25px 30px 10px 30px;">
                 <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #2e7d32; color: #2e7d32; font-size: 19px;">
-                    2. Category Distribution
+                    2. 카테고리 분포
                 </h2>
                 <table width="100%" cellpadding="0" cellspacing="0">
                     {% for cat in category_distribution %}
@@ -103,13 +103,14 @@
         </tr>
         {% endif %}
 
-        <!-- Section 3: Hot Keywords -->
-        {% if top_keywords %}
+        <!-- Section 3: Hot Keywords (top_keywords_status로 누락 사유 명시) -->
+        {% if top_keywords or top_keywords_status %}
         <tr>
             <td style="padding: 25px 30px 10px 30px;">
                 <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #ef6c00; color: #ef6c00; font-size: 19px;">
-                    3. Hot Keywords TOP {{ top_keywords|length }}
+                    3. 핫 키워드{% if top_keywords %} TOP {{ top_keywords|length }}{% endif %}
                 </h2>
+                {% if top_keywords %}
                 <table width="100%" cellpadding="0" cellspacing="0">
                     {% for kw in top_keywords %}
                     <tr>
@@ -126,6 +127,21 @@
                     </tr>
                     {% endfor %}
                 </table>
+                {% else %}
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td style="background-color: #fff8e1; border-left: 4px solid #ef6c00; border-radius: 4px; padding: 14px 16px;">
+                            <p style="margin: 0 0 6px 0; color: #e65100; font-size: 13px; font-weight: 600;">
+                                ⚠ 이번 주 키워드 신호가 부족합니다
+                            </p>
+                            <p style="margin: 0; color: #6d4c00; font-size: 12px; line-height: 1.55;">
+                                {{ top_keywords_status.message }}
+                                {% if top_keywords_status.hint %}<br><span style="color: #8d6e63;">{{ top_keywords_status.hint }}</span>{% endif %}
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                {% endif %}
             </td>
         </tr>
         {% endif %}
@@ -135,7 +151,7 @@
         <tr>
             <td style="padding: 25px 30px 10px 30px;">
                 <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #37474f; color: #37474f; font-size: 19px;">
-                    4. News vs Papers
+                    4. 뉴스 vs 논문 비중
                 </h2>
                 <table width="100%" cellpadding="0" cellspacing="0">
                     {% for ct in content_type_distribution %}
@@ -162,19 +178,19 @@
         <tr>
             <td style="padding: 25px 30px 10px 30px;">
                 <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #e53935; color: #e53935; font-size: 19px;">
-                    5. Importance Analysis
+                    5. 중요도 분석
                 </h2>
                 <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 14px;">
                     <tr>
                         <td style="text-align: center; padding: 16px; background-color: #ffebee; border-radius: 8px;">
-                            <p style="margin: 0; color: #888888; font-size: 12px;">Average Importance Score</p>
+                            <p style="margin: 0; color: #888888; font-size: 12px;">평균 중요도 점수</p>
                             <p style="margin: 8px 0 0 0; color: #e53935; font-size: 36px; font-weight: 700;">{{ (importance_analysis.avg_score * 100)|int }}%</p>
                         </td>
                     </tr>
                 </table>
                 <table width="100%" cellpadding="0" cellspacing="0">
                     <tr>
-                        <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">High (&ge;70%)</td>
+                        <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">상 (&ge;70%)</td>
                         <td style="padding: 6px 0;">
                             <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; border-radius: 4px;">
                                 <tr>
@@ -186,7 +202,7 @@
                         <td width="90" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">{{ importance_analysis.high_count }}건 ({{ importance_analysis.high_percent }}%)</td>
                     </tr>
                     <tr>
-                        <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">Mid (40~70%)</td>
+                        <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">중 (40~70%)</td>
                         <td style="padding: 6px 0;">
                             <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; border-radius: 4px;">
                                 <tr>
@@ -198,7 +214,7 @@
                         <td width="90" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">{{ importance_analysis.mid_count }}건 ({{ importance_analysis.mid_percent }}%)</td>
                     </tr>
                     <tr>
-                        <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">Low (&lt;40%)</td>
+                        <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">하 (&lt;40%)</td>
                         <td style="padding: 6px 0;">
                             <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; border-radius: 4px;">
                                 <tr>
@@ -219,7 +235,7 @@
         <tr>
             <td style="padding: 25px 30px 10px 30px;">
                 <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #1565c0; color: #1565c0; font-size: 19px;">
-                    6. Top Journals
+                    6. 주요 저널
                 </h2>
                 <table width="100%" cellpadding="0" cellspacing="0">
                     {% for j in top_journals %}
@@ -246,14 +262,14 @@
         <tr>
             <td style="padding: 25px 30px 10px 30px;">
                 <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #5e35b1; color: #4527a0; font-size: 19px;">
-                    📈 Weekly Metrics
+                    📈 주간 지표 변동
                     {% if weekly_metrics.period %}
                     <span style="color: #888888; font-size: 12px; font-weight: normal; margin-left: 8px;">{{ weekly_metrics.period.start }} ~ {{ weekly_metrics.period.end }}</span>
                     {% endif %}
                 </h2>
 
                 {% if weekly_metrics.top_keywords %}
-                <p style="margin: 8px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">🔥 Hot Keywords</p>
+                <p style="margin: 8px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">🔥 핫 키워드</p>
                 <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 12px;">
                     {% for kw in weekly_metrics.top_keywords[:10] %}
                     <tr>
@@ -268,13 +284,13 @@
                 {% endif %}
 
                 {% if weekly_metrics.top_companies %}
-                <p style="margin: 10px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">🏢 Top Companies</p>
+                <p style="margin: 10px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">🏢 주요 기업</p>
                 <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 12px;">
                     {% for c in weekly_metrics.top_companies[:10] %}
                     <tr>
                         <td style="padding: 4px 0; color: #263238; font-size: 13px;">
                             <span style="display: inline-block; width: 20px; color: #888888; font-size: 11px;">{{ loop.index }}.</span>
-                            {{ c.company_name }} <span style="color: #888888; font-size: 11px;">({{ c.count }}건)</span>
+                            {{ c.company_name }} <span style="color: #888888; font-size: 11px;">{{ c.count }}건</span>
                         </td>
                     </tr>
                     {% endfor %}
@@ -283,9 +299,9 @@
 
                 {% if weekly_metrics.drug_updates_summary %}
                 {% set ds = weekly_metrics.drug_updates_summary %}
-                <p style="margin: 10px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">💊 Drug Updates Summary</p>
+                <p style="margin: 10px 0 6px 0; color: #4527a0; font-size: 13px; font-weight: 600;">💊 의약품 업데이트 요약</p>
                 <p style="margin: 0; color: #555555; font-size: 12px;">
-                    New {{ ds.new_count or 0 }} · Label {{ ds.label_change_count or 0 }} · Warning {{ ds.warning_count or 0 }} · Recall {{ ds.recall_count or 0 }}
+                    신규 {{ ds.new_count or 0 }} · 라벨변경 {{ ds.label_change_count or 0 }} · 경고 {{ ds.warning_count or 0 }} · 리콜 {{ ds.recall_count or 0 }}
                 </p>
                 {% endif %}
             </td>
@@ -297,7 +313,7 @@
         <tr>
             <td style="padding: 25px 30px 10px 30px;">
                 <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #1b5e20; color: #1b5e20; font-size: 19px;">
-                    7. Key News TOP 3
+                    7. 핵심 뉴스 TOP 3
                 </h2>
 
                 {% for item in top_news %}
@@ -321,7 +337,7 @@
                                 {% if item.source %} {{ item.source }}{% endif %}
                                 {% if item.pub_date %} &middot; {{ item.pub_date }}{% endif %}
                                 {% if item.importance_score %}
-                                <span style="color: #e53935; margin-left: 6px;">Score {{ (item.importance_score * 100)|int }}%</span>
+                                <span style="color: #e53935; margin-left: 6px;">중요도 {{ (item.importance_score * 100)|int }}%</span>
                                 {% endif %}
                             </p>
                             {% if item.summary %}
@@ -342,7 +358,7 @@
         <tr>
             <td style="padding: 40px 30px; text-align: center;">
                 <p style="color: #888888; font-size: 16px;">
-                    No data collected for this week.
+                    이번 주에 수집된 데이터가 없습니다.
                 </p>
             </td>
         </tr>
