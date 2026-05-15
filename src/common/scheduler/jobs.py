@@ -815,6 +815,137 @@ def run_adhoc_send(
     return result
 
 
+def run_insight_brief_job(tenant_id: str) -> None:
+    """진단키트 부서용 1페이지 인사이트 브리프 발송 (Phase 6).
+
+    config/tenants.yaml 의 insight_brief.enabled=true 일 때 cron 으로 호출.
+    수신자는 환경변수 ALLERGY_INSIGHT_BRIEF_RECIPIENTS (콤마 구분, 미설정시 skip).
+
+    데이터 경로:
+        collected_data_history (84일치)
+        → WeeklyInsightAggregator (버킷·매트릭스·anomaly·entity·data_quality)
+        → weekly_insight.html 렌더 → Gmail 발송
+    """
+    import os
+    from datetime import datetime as _dt
+    from ..database.repository import get_session_factory
+    from ...tenant.allergy_insight.insight_aggregator import (
+        WeeklyInsightAggregator,
+        load_insight_brief_config,
+    )
+
+    logger.info("[%s] insight_brief 발송 작업 시작", tenant_id)
+
+    ib_config = load_insight_brief_config(tenant_id)
+    if not ib_config.get("enabled"):
+        logger.info("[%s] insight_brief enabled=false → 작업 종료", tenant_id)
+        return
+
+    recipients_env = os.getenv("ALLERGY_INSIGHT_BRIEF_RECIPIENTS", "").strip()
+    recipients = [r.strip() for r in recipients_env.split(",") if r.strip()]
+    if not recipients:
+        logger.warning(
+            "[%s] insight_brief 수신자 미설정 "
+            "(ALLERGY_INSIGHT_BRIEF_RECIPIENTS) → 발송 건너뜀",
+            tenant_id,
+        )
+        return
+
+    weeks = int(ib_config.get("lookback_weeks", 12))
+    watch_list = ib_config.get("watch_list") or {}
+    watch_counts = {
+        "keywords": len(watch_list.get("keywords", [])),
+        "companies": len(watch_list.get("companies", [])),
+        "entities": len(watch_list.get("entities", [])),
+    }
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        date_to = date.today()
+        date_from = date_to - timedelta(days=weeks * 7 - 1)
+        history_data = CollectedDataRepository.get_history_range(
+            session, tenant_id, date_from, date_to
+        )
+
+    if not history_data:
+        logger.warning(
+            "[%s] insight_brief: %d주 누적 데이터 없음 → 발송 건너뜀",
+            tenant_id, weeks,
+        )
+        return
+
+    agg = WeeklyInsightAggregator(watch_list=watch_list)
+    buckets = agg.aggregate_weekly_buckets(history_data, weeks=weeks)
+    keyword_matrix = agg.compute_keyword_matrix(
+        buckets, watch_list.get("keywords", [])
+    )
+    summary_metrics = agg.compute_summary_metrics(buckets)
+    anomalies = agg.detect_anomalies(buckets, keyword_matrix=keyword_matrix)
+    entity_trends = agg.extract_entity_trends(
+        buckets, watch_companies=watch_list.get("companies", [])
+    )
+    data_quality = agg.compute_data_quality(buckets, history_data)
+    headline = agg.generate_headline(anomalies, keyword_matrix)
+    agenda_candidates = agg.render_agenda_candidates(anomalies, keyword_matrix)
+
+    context = {
+        "headline": headline,
+        "summary_metrics": summary_metrics,
+        "keyword_matrix": keyword_matrix,
+        "anomalies": anomalies,
+        "entity_trends": entity_trends,
+        "agenda_candidates": agenda_candidates,
+        "data_quality": data_quality,
+        "watch_counts": watch_counts,
+        "generated_at": _dt.now(),
+    }
+
+    renderer = get_renderer()
+    html_content = renderer.render(
+        "allergy_insight/weekly_insight.html", context
+    )
+
+    sender = get_sender()
+    if not sender.is_configured:
+        logger.warning("[%s] Gmail 미설정 → insight_brief 발송 건너뜀", tenant_id)
+        return
+
+    period_label = (
+        f"{summary_metrics.get('period_start')} ~ "
+        f"{summary_metrics.get('period_end')}"
+    )
+    subject = (
+        f"[AllergyInsight] 진단키트 주간 인사이트 브리프 ({period_label})"
+    )
+
+    success_count = 0
+    for recipient in recipients:
+        try:
+            result = sender.send(
+                recipient=recipient,
+                subject=subject,
+                html_content=html_content,
+                sender_name="AllergyInsight Insight Brief",
+            )
+            if result.success:
+                success_count += 1
+            else:
+                logger.error(
+                    "[%s] insight_brief 발송 실패 %s: %s",
+                    tenant_id, recipient, result.error_message,
+                )
+        except Exception as exc:
+            logger.exception(
+                "[%s] insight_brief 발송 중 오류 %s: %s",
+                tenant_id, recipient, exc,
+            )
+
+    logger.info(
+        "[%s] insight_brief 발송 완료: %d/%d 성공",
+        tenant_id, success_count, len(recipients),
+    )
+
+
 def register_all_jobs(scheduler: BlockingScheduler) -> None:
     """TenantRegistry 순회하며 모든 작업 등록.
 
@@ -941,6 +1072,41 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
                         f"[{tid}] monthly 발송 등록 [{s['key']}]: "
                         f"매월 {day_display} {s_hour:02d}:{s_minute:02d}"
                     )
+
+    # === AllergyInsight 진단키트 부서 인사이트 브리프 (Phase 6) ===
+    # config/tenants.yaml 의 insight_brief.enabled=true 일 때만 cron 등록.
+    # 수신자: 환경변수 ALLERGY_INSIGHT_BRIEF_RECIPIENTS (콤마 구분).
+    try:
+        from ...tenant.allergy_insight.insight_aggregator import (
+            load_insight_brief_config,
+        )
+        ib_config = load_insight_brief_config("allergy-insight")
+        if ib_config.get("enabled"):
+            sch = ib_config.get("schedule") or {}
+            scheduler.add_job(
+                run_insight_brief_job,
+                trigger=CronTrigger(
+                    day_of_week=sch.get("weekly_day_of_week", "mon"),
+                    hour=sch.get("weekly_send_hour", 7),
+                    minute=sch.get("weekly_send_minute", 0),
+                ),
+                args=["allergy-insight"],
+                id="insight_brief_allergy_insight",
+                name="AllergyInsight 진단키트 부서 인사이트 브리프",
+            )
+            logger.info(
+                "[allergy-insight] insight_brief 등록: %s %02d:%02d (lookback=%d주)",
+                sch.get("weekly_day_of_week", "mon"),
+                sch.get("weekly_send_hour", 7),
+                sch.get("weekly_send_minute", 0),
+                ib_config.get("lookback_weeks", 12),
+            )
+        else:
+            logger.info(
+                "[allergy-insight] insight_brief enabled=false → cron 등록 건너뜀"
+            )
+    except Exception as e:
+        logger.warning("[allergy-insight] insight_brief 등록 중 예외: %s", e)
 
     # === Bounce Feedback Loop (30분 주기) ===
     # Gmail inbox에서 NDR 자동 수집 → hard bounce 주소 비활성화 + 재발송 차단
