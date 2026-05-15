@@ -333,3 +333,370 @@ class WeeklyInsightAggregator:
                 ),
             },
         }
+
+    # ------------------------------------------------------------------
+    # Phase 5 — 이상 신호 감지
+    # ------------------------------------------------------------------
+    ANOMALY_Z_THRESHOLD = 2.0
+    KEYWORD_TREND_THRESHOLD = 2.0  # avg_4w / avg_12w 비율 임계
+
+    def detect_anomalies(
+        self,
+        buckets: List[WeeklyBucket],
+        keyword_matrix: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """이상 신호 3종 — KPI z≥+2.0 / 키워드 trend≥2.0 / 신규 진입 엔터티.
+
+        keyword_matrix 가 주어지면 신규 진입(12주 내 첫 등장) 키워드도 추출.
+        """
+        if not buckets:
+            return {
+                "metric_spikes": [],
+                "keyword_surges": [],
+                "new_entrants": {"companies": [], "categories": []},
+            }
+
+        # 1) KPI z-score 스파이크
+        summary = self.compute_summary_metrics(buckets)
+        metric_spikes: List[Dict[str, Any]] = []
+        label_map = {
+            "news_count": "주간 뉴스 유입량",
+            "paper_count": "주간 논문 유입량",
+            "importance_high_count": "고중요도 콘텐츠 건수",
+            "importance_high_ratio": "고중요도 비율",
+        }
+        for key, m in summary["metrics"].items():
+            z = m.get("z_score")
+            if z is None:
+                continue
+            if abs(z) >= self.ANOMALY_Z_THRESHOLD:
+                metric_spikes.append({
+                    "metric": key,
+                    "label": label_map.get(key, key),
+                    "current": m["current"],
+                    "avg_12w": m["avg_12w"],
+                    "z_score": z,
+                    "direction": "up" if z > 0 else "down",
+                })
+
+        # 2) 키워드 급등 (trend_ratio >= 2.0)
+        keyword_surges: List[Dict[str, Any]] = []
+        for row in (keyword_matrix or []):
+            tr = row.get("trend_ratio")
+            if tr is None:
+                continue
+            if tr >= self.KEYWORD_TREND_THRESHOLD and row.get("total_4w", 0) > 0:
+                keyword_surges.append({
+                    "keyword": row["keyword"],
+                    "total_4w": row["total_4w"],
+                    "total_12w": row["total_12w"],
+                    "trend_ratio": tr,
+                })
+        keyword_surges.sort(key=lambda r: -r["trend_ratio"])
+
+        # 3) 신규 진입: 이번 주에만 등장(이전 11주 0건)인 기업/카테고리
+        new_companies = self._extract_new_entrants(
+            buckets, attr="company_counter"
+        )
+        new_categories = self._extract_new_entrants(
+            buckets, attr="category_counter"
+        )
+
+        return {
+            "metric_spikes": metric_spikes,
+            "keyword_surges": keyword_surges,
+            "new_entrants": {
+                "companies": new_companies,
+                "categories": new_categories,
+            },
+        }
+
+    @staticmethod
+    def _extract_new_entrants(
+        buckets: List[WeeklyBucket], attr: str
+    ) -> List[Dict[str, Any]]:
+        """가장 최근 버킷에만 등장한 항목들."""
+        if len(buckets) < 2:
+            return []
+        latest = buckets[-1]
+        history = buckets[:-1]
+        history_keys = set()
+        for b in history:
+            history_keys.update(getattr(b, attr).keys())
+        latest_counter = getattr(latest, attr)
+        new_items = []
+        for k, c in latest_counter.items():
+            if k not in history_keys:
+                new_items.append({"name": k, "count": c})
+        new_items.sort(key=lambda x: -x["count"])
+        return new_items
+
+    # ------------------------------------------------------------------
+    # Phase 5 — 엔터티 트렌드 (companies / entities)
+    # ------------------------------------------------------------------
+    def extract_entity_trends(
+        self,
+        buckets: List[WeeklyBucket],
+        watch_companies: Optional[Iterable[str]] = None,
+        top_n: int = 10,
+    ) -> Dict[str, Any]:
+        """기업·엔터티 누적 등장 TOP N + 4주 Δ.
+
+        watch_companies 가 주어지면 그 목록 우선, 부족하면 자동 TOP 보충.
+        company_counter 외에 keyword_counter 일부도 entity 로 다룰 수 있도록
+        텍스트 매칭은 단순 contains 가 아니라 정확 일치만 본다 (오탐 방지).
+        """
+        if not buckets:
+            return {"top_companies": [], "watch_hits": []}
+
+        n = len(buckets)
+        recent4 = buckets[-4:] if n >= 4 else buckets
+        prev4 = buckets[-8:-4] if n >= 8 else []
+
+        def _total(bs: List[WeeklyBucket], name: str) -> int:
+            return sum(b.company_counter.get(name, 0) for b in bs)
+
+        # 전체 12주 누적 TOP N
+        agg: Counter = Counter()
+        for b in buckets:
+            agg.update(b.company_counter)
+        top_companies: List[Dict[str, Any]] = []
+        for name, total in agg.most_common(top_n):
+            t4 = _total(recent4, name)
+            tp = _total(prev4, name) if prev4 else 0
+            delta_4w = t4 - tp
+            top_companies.append({
+                "name": name,
+                "total_12w": total,
+                "recent_4w": t4,
+                "prev_4w": tp,
+                "delta_4w": delta_4w,
+            })
+
+        # watch_companies 별 hit 통계
+        watch_hits: List[Dict[str, Any]] = []
+        for name in (watch_companies or []):
+            t12 = sum(b.company_counter.get(name, 0) for b in buckets)
+            t4 = _total(recent4, name)
+            tp = _total(prev4, name) if prev4 else 0
+            watch_hits.append({
+                "name": name,
+                "total_12w": t12,
+                "recent_4w": t4,
+                "prev_4w": tp,
+                "delta_4w": t4 - tp,
+            })
+        watch_hits.sort(key=lambda r: (-r["recent_4w"], -r["total_12w"]))
+
+        return {
+            "top_companies": top_companies,
+            "watch_hits": watch_hits,
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 5 — 데이터 품질 워치
+    # ------------------------------------------------------------------
+    def compute_data_quality(
+        self, buckets: List[WeeklyBucket], history_data: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """12주 누적 데이터 품질 — 수집 안정성, 필드 결측률.
+
+        Phase 2 의 top_keywords_status 가 발견한 결측 패턴을 누적 지표로
+        가시화. data_quality 가 회의에서 즉시 인지되도록 % 단위로 노출.
+        """
+        if not buckets:
+            return {
+                "weeks_with_data": 0,
+                "weeks_total": 0,
+                "weeks_zero_data_pct": 0.0,
+                "avg_days_per_week": 0.0,
+                "keyword_missing_pct": None,
+                "total_news_seen": 0,
+            }
+
+        weeks_total = len(buckets)
+        weeks_with_data = sum(1 for b in buckets if b.days_with_data > 0)
+        weeks_zero = weeks_total - weeks_with_data
+        avg_days = round(
+            sum(b.days_with_data for b in buckets) / max(weeks_total, 1), 2
+        )
+
+        # keyword 결측률: history_data 의 모든 top_headlines 항목 중
+        # keyword/search_keyword 가 비어있는 비율
+        total_seen = 0
+        missing = 0
+        for record in history_data:
+            if record.get("data_type") != "daily_report":
+                continue
+            headlines = (
+                (record.get("data") or {}).get("top_headlines")
+                or (record.get("data") or {}).get("top_news")
+                or []
+            )
+            for h in headlines:
+                total_seen += 1
+                kw = h.get("keyword") or h.get("search_keyword")
+                if not kw:
+                    missing += 1
+
+        kw_missing_pct = (
+            round(missing / total_seen * 100, 1) if total_seen > 0 else None
+        )
+
+        return {
+            "weeks_total": weeks_total,
+            "weeks_with_data": weeks_with_data,
+            "weeks_zero_data_pct": round(weeks_zero / weeks_total * 100, 1),
+            "avg_days_per_week": avg_days,
+            "total_news_seen": total_seen,
+            "news_with_missing_keyword": missing,
+            "keyword_missing_pct": kw_missing_pct,
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 6 — 헤드라인 + 어젠다 후보 (룰 기반)
+    # ------------------------------------------------------------------
+    def generate_headline(
+        self,
+        anomalies: Dict[str, List[Dict[str, Any]]],
+        keyword_matrix: List[Dict[str, Any]],
+    ) -> str:
+        """가장 강한 신호 1줄 — 회의 직전에 즉시 인지될 한 줄.
+
+        우선순위: 최상위 키워드 급등 > 최상위 metric 스파이크 >
+        신규 진입 기업 > 디폴트.
+        """
+        kw_surges = anomalies.get("keyword_surges") or []
+        if kw_surges:
+            top = kw_surges[0]
+            return (
+                f"최근 4주간 '{top['keyword']}' 관련 신호가 "
+                f"12주 평균 대비 약 {top['trend_ratio']:.1f}배 증가 "
+                f"— 진단키트 시장 영향 검토 필요."
+            )
+
+        metric_spikes = anomalies.get("metric_spikes") or []
+        if metric_spikes:
+            top = metric_spikes[0]
+            arrow = "▲ 급등" if top["direction"] == "up" else "▼ 급락"
+            return (
+                f"{top['label']} {arrow} (z={top['z_score']:+.1f}) "
+                f"— 평년 {top['avg_12w']} → 이번주 {top['current']}."
+            )
+
+        new_companies = (anomalies.get("new_entrants") or {}).get(
+            "companies"
+        ) or []
+        if new_companies:
+            names = ", ".join(c["name"] for c in new_companies[:3])
+            return f"신규 등장 기업 감지: {names} — 포지셔닝 점검 권고."
+
+        # 디폴트: 활성 watch 키워드 중 4주 빈도 최상위
+        active = [
+            r for r in (keyword_matrix or []) if r.get("total_4w", 0) > 0
+        ]
+        if active:
+            top = active[0]
+            return (
+                f"최근 4주 핵심 키워드: '{top['keyword']}' "
+                f"{top['total_4w']}건 누적."
+            )
+        return "이번 주 특이 신호 없음 — 정상 운영."
+
+    def render_agenda_candidates(
+        self,
+        anomalies: Dict[str, List[Dict[str, Any]]],
+        keyword_matrix: List[Dict[str, Any]],
+        max_items: int = 5,
+    ) -> List[Dict[str, str]]:
+        """회의 어젠다 후보 3~5개 — 이상 신호 → 토론 질문 변환.
+
+        Returns:
+            [{"title": str, "rationale": str, "category": str}, ...]
+        """
+        items: List[Dict[str, str]] = []
+
+        # 키워드 급등 (TOP 2 우선)
+        for surge in (anomalies.get("keyword_surges") or [])[:2]:
+            items.append({
+                "title": (
+                    f"'{surge['keyword']}' 키워드 증가가 우리 제품 "
+                    f"포지셔닝/메시지에 미칠 영향은?"
+                ),
+                "rationale": (
+                    f"최근 4주 {surge['total_4w']}건, "
+                    f"12주 평균 대비 {surge['trend_ratio']:.1f}배"
+                ),
+                "category": "전략",
+            })
+
+        # 신규 진입 기업
+        new_companies = (anomalies.get("new_entrants") or {}).get(
+            "companies"
+        ) or []
+        if new_companies:
+            names = ", ".join(c["name"] for c in new_companies[:3])
+            items.append({
+                "title": (
+                    f"신규 등장 기업({names}) — 진단키트 시장 진입 동향 점검?"
+                ),
+                "rationale": (
+                    f"이전 11주 미등장, 이번 주 신규 "
+                    f"{sum(c['count'] for c in new_companies[:3])}건"
+                ),
+                "category": "경쟁",
+            })
+
+        # KPI 스파이크 (각 방향당 1개)
+        seen_dirs = set()
+        for spike in (anomalies.get("metric_spikes") or []):
+            d = spike["direction"]
+            if d in seen_dirs:
+                continue
+            seen_dirs.add(d)
+            if d == "up":
+                items.append({
+                    "title": (
+                        f"{spike['label']} 급등 원인 분석 — "
+                        f"시장 이슈인가, 일시적 노이즈인가?"
+                    ),
+                    "rationale": (
+                        f"z={spike['z_score']:+.1f}, "
+                        f"평년 {spike['avg_12w']} → {spike['current']}"
+                    ),
+                    "category": "분석",
+                })
+            else:
+                items.append({
+                    "title": (
+                        f"{spike['label']} 급락 — 수집 시스템 점검 또는 "
+                        f"시장 정체 신호인지 확인?"
+                    ),
+                    "rationale": (
+                        f"z={spike['z_score']:+.1f}, "
+                        f"평년 {spike['avg_12w']} → {spike['current']}"
+                    ),
+                    "category": "리스크",
+                })
+
+        # 핵심 watch 키워드 추세 검토 (위에서 못 다룬 trend_ratio 1.5~2.0 구간)
+        moderate = [
+            r for r in keyword_matrix
+            if r.get("trend_ratio") is not None
+            and 1.5 <= r["trend_ratio"] < self.KEYWORD_TREND_THRESHOLD
+            and r.get("total_4w", 0) > 0
+        ][:1]
+        for row in moderate:
+            items.append({
+                "title": (
+                    f"'{row['keyword']}' 추세 강화 관찰 — 모니터링 "
+                    f"강도 상향 필요?"
+                ),
+                "rationale": (
+                    f"trend_ratio={row['trend_ratio']:.2f}, "
+                    f"최근 4주 {row['total_4w']}건"
+                ),
+                "category": "모니터링",
+            })
+
+        return items[:max_items]
