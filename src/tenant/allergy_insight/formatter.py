@@ -89,8 +89,30 @@ class AllergyInsightFormatter:
         Args:
             history_data: [{collected_date, data_type, data}, ...]
             collected_data: 추가 수집 데이터 (optional). weekly_metrics 키가 있으면 전달.
+                `_prev_history` 키가 있으면 직전 주 history_data 로 간주하고 Δ + 자동 코멘트 계산.
         """
-        return self._format_stats_report(history_data, collected_data)
+        result = self._format_stats_report(history_data, collected_data)
+
+        # Phase 3: Week-over-Week Δ + 자동 코멘트
+        # _prev_history 가 부족하면(<2일) Δ 계산을 생략 — 오해 유발 방지
+        prev_history = (collected_data or {}).get("_prev_history") or []
+        prev_days = len({r["collected_date"] for r in prev_history if "collected_date" in r})
+        if prev_history and prev_days >= 2:
+            prev_result = self._format_stats_report(prev_history)
+            result["deltas"] = self._compute_deltas(result, prev_result)
+            result["auto_comments"] = self._generate_comments(
+                result, prev_result, result["deltas"]
+            )
+        else:
+            result["deltas"] = None
+            result["auto_comments"] = []
+            if prev_history:
+                logger.info(
+                    "[allergy_insight][weekly] prev_history 데이터 부족 "
+                    "(prev_days=%d < 2) → Δ 계산 생략",
+                    prev_days,
+                )
+        return result
 
     def format_monthly(self, history_data: list, collected_data: dict = None) -> dict:
         """월간 통계 포매팅 - format_weekly와 동일한 통계 구조 반환
@@ -369,6 +391,125 @@ class AllergyInsightFormatter:
             "drug_section_color": DRUG_SECTION_COLOR,
             "drug_section_bg": DRUG_SECTION_BG,
         }
+
+    @staticmethod
+    def _compute_deltas(curr: dict, prev: dict) -> Dict[str, Any]:
+        """이번 주(curr) vs 직전 주(prev) Δ 계산.
+
+        각 지표마다 abs(절대값 차이) + pct(%) + arrow(▲/▼/─) 동시 산출.
+        분모 0 일 때 pct 는 None 으로 두고 템플릿에서 분기.
+        importance/high/mid/low 는 pp(percentage point) 단위.
+        """
+        def _pct(curr_v: float, prev_v: float) -> float | None:
+            if prev_v in (0, None):
+                return None
+            return round((curr_v - prev_v) / prev_v * 100, 1)
+
+        def _arrow(diff: float) -> str:
+            if diff is None or diff == 0:
+                return "─"
+            return "▲" if diff > 0 else "▼"
+
+        c_sum = curr.get("summary", {})
+        p_sum = prev.get("summary", {})
+        c_imp = curr.get("importance_analysis", {})
+        p_imp = prev.get("importance_analysis", {})
+
+        # 키워드 신규 진입 (이번 주에만 있고 지난주에는 없는 키워드)
+        curr_kws = {k["keyword"] for k in curr.get("top_keywords", [])}
+        prev_kws = {k["keyword"] for k in prev.get("top_keywords", [])}
+        new_keywords = sorted(curr_kws - prev_kws)
+        dropped_keywords = sorted(prev_kws - curr_kws)
+
+        news_abs = c_sum.get("total_news", 0) - p_sum.get("total_news", 0)
+        papers_abs = c_sum.get("total_papers", 0) - p_sum.get("total_papers", 0)
+        comp_abs = c_sum.get("total_companies", 0) - p_sum.get("total_companies", 0)
+        avg_imp_pp = round(
+            (c_sum.get("avg_importance", 0) - p_sum.get("avg_importance", 0)) * 100, 1
+        )
+        high_pp = round(
+            c_imp.get("high_percent", 0) - p_imp.get("high_percent", 0), 1
+        )
+
+        return {
+            "news_abs": news_abs,
+            "news_pct": _pct(c_sum.get("total_news", 0), p_sum.get("total_news", 0)),
+            "news_arrow": _arrow(news_abs),
+            "papers_abs": papers_abs,
+            "papers_pct": _pct(c_sum.get("total_papers", 0), p_sum.get("total_papers", 0)),
+            "papers_arrow": _arrow(papers_abs),
+            "companies_abs": comp_abs,
+            "companies_arrow": _arrow(comp_abs),
+            "avg_importance_pp": avg_imp_pp,
+            "avg_importance_arrow": _arrow(avg_imp_pp),
+            "high_pp": high_pp,
+            "high_arrow": _arrow(high_pp),
+            "prev_period_label": (
+                f"{prev.get('period_start')} ~ {prev.get('period_end')}"
+            ),
+            "new_keywords": new_keywords,
+            "dropped_keywords": dropped_keywords,
+        }
+
+    @staticmethod
+    def _generate_comments(
+        curr: dict, prev: dict, deltas: Dict[str, Any]
+    ) -> list[Dict[str, str]]:
+        """규칙 기반 1줄 한국어 자동 해석 코멘트.
+
+        Returns:
+            [{text, severity}] — severity: "info" | "warning"
+        """
+        comments: list[Dict[str, str]] = []
+        c_sum = curr.get("summary", {})
+        c_imp = curr.get("importance_analysis", {})
+        p_imp = prev.get("importance_analysis", {})
+
+        # 규칙 1: News Δ ≥ +20%
+        news_pct = deltas.get("news_pct")
+        if news_pct is not None and news_pct >= 20:
+            comments.append({
+                "text": (
+                    f"💬 이번 주 뉴스 유입량이 평소보다 많습니다 "
+                    f"(전주 대비 +{news_pct}%)."
+                ),
+                "severity": "info",
+            })
+
+        # 규칙 2: High 비율 Δ ≥ +5pp
+        high_pp = deltas.get("high_pp", 0)
+        if high_pp >= 5:
+            comments.append({
+                "text": (
+                    f"💬 고중요도 콘텐츠 비중이 늘었습니다 "
+                    f"(전주 {p_imp.get('high_percent', 0)}% → "
+                    f"이번주 {c_imp.get('high_percent', 0)}%)."
+                ),
+                "severity": "info",
+            })
+
+        # 규칙 3: 신규 키워드 ≥ 2개
+        new_kws = deltas.get("new_keywords", [])
+        if len(new_kws) >= 2:
+            preview = ", ".join(new_kws[:3])
+            more = f" 외 {len(new_kws) - 3}개" if len(new_kws) > 3 else ""
+            comments.append({
+                "text": f"💬 신규 키워드 {len(new_kws)}개 등장: {preview}{more}.",
+                "severity": "info",
+            })
+
+        # 규칙 4: News Δ ≤ -30% & days_with_data < 6 → 수집 실패 의심
+        days_with_data = c_sum.get("days_with_data", 7)
+        if news_pct is not None and news_pct <= -30 and days_with_data < 6:
+            comments.append({
+                "text": (
+                    f"⚠️ 수집 실패 가능성 — 뉴스 유입이 전주 대비 {news_pct}% 감소, "
+                    f"수집 성공일 {days_with_data}일. 수집 시스템 점검 필요."
+                ),
+                "severity": "warning",
+            })
+
+        return comments
 
     @staticmethod
     def _parse_datetime(value: str, default: datetime = None) -> datetime:

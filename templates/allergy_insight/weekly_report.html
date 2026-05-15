@@ -18,11 +18,34 @@
             </td>
         </tr>
 
+        <!-- Phase 3: 자동 해석 코멘트 (deltas + 규칙) — 코멘트 있을 때만 노출 -->
+        {% if auto_comments %}
+        <tr>
+            <td style="padding: 20px 30px 0 30px;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    {% for c in auto_comments %}
+                    <tr>
+                        <td style="background-color: {% if c.severity == 'warning' %}#fff3e0{% else %}#e3f2fd{% endif %}; border-left: 4px solid {% if c.severity == 'warning' %}#ef6c00{% else %}#1976d2{% endif %}; padding: 10px 14px; border-radius: 4px; margin-bottom: 6px;">
+                            <p style="margin: 0; color: {% if c.severity == 'warning' %}#e65100{% else %}#0d47a1{% endif %}; font-size: 13px; line-height: 1.5;">
+                                {{ c.text }}
+                            </p>
+                        </td>
+                    </tr>
+                    {% if not loop.last %}<tr><td style="height: 6px; font-size: 1px;">&nbsp;</td></tr>{% endif %}
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
         <!-- Section 1: Weekly Summary -->
         <tr>
             <td style="padding: 30px 30px 10px 30px;">
                 <h2 style="margin: 0 0 18px 0; padding-bottom: 10px; border-bottom: 3px solid #2e7d32; color: #2e7d32; font-size: 19px;">
                     1. 주간 개요
+                    {% if deltas %}
+                    <span style="color: #888888; font-size: 11px; font-weight: normal; margin-left: 8px;">전주 대비 ({{ deltas.prev_period_label }})</span>
+                    {% endif %}
                 </h2>
                 <table width="100%" cellpadding="0" cellspacing="0">
                     <tr>
@@ -41,6 +64,11 @@
                                     <p style="margin: 0; color: #888888; font-size: 12px;">뉴스</p>
                                     <p style="margin: 6px 0 0 0; color: #2e7d32; font-size: 28px; font-weight: 700;">{{ summary.total_news }}</p>
                                     <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">일평균 {{ summary.daily_avg_news }}건</p>
+                                    {% if deltas and deltas.news_pct is not none %}
+                                    <p style="margin: 4px 0 0 0; color: {% if deltas.news_abs > 0 %}#2e7d32{% elif deltas.news_abs < 0 %}#c62828{% else %}#888888{% endif %}; font-size: 10px; font-weight: 600;">
+                                        {{ deltas.news_arrow }} {% if deltas.news_pct >= 0 %}+{% endif %}{{ deltas.news_pct }}%
+                                    </p>
+                                    {% endif %}
                                 </td></tr>
                             </table>
                         </td>
@@ -50,6 +78,11 @@
                                     <p style="margin: 0; color: #888888; font-size: 12px;">논문</p>
                                     <p style="margin: 6px 0 0 0; color: #1565c0; font-size: 28px; font-weight: 700;">{{ summary.total_papers }}</p>
                                     <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">일평균 {{ summary.daily_avg_papers }}건</p>
+                                    {% if deltas and deltas.papers_pct is not none %}
+                                    <p style="margin: 4px 0 0 0; color: {% if deltas.papers_abs > 0 %}#1565c0{% elif deltas.papers_abs < 0 %}#c62828{% else %}#888888{% endif %}; font-size: 10px; font-weight: 600;">
+                                        {{ deltas.papers_arrow }} {% if deltas.papers_pct >= 0 %}+{% endif %}{{ deltas.papers_pct }}%
+                                    </p>
+                                    {% endif %}
                                 </td></tr>
                             </table>
                         </td>
@@ -59,6 +92,11 @@
                                     <p style="margin: 0; color: #888888; font-size: 12px;">기업수</p>
                                     <p style="margin: 6px 0 0 0; color: #ef6c00; font-size: 28px; font-weight: 700;">{{ summary.total_companies }}</p>
                                     <p style="margin: 2px 0 0 0; color: #888888; font-size: 11px;">추적 중</p>
+                                    {% if deltas and deltas.companies_abs != 0 %}
+                                    <p style="margin: 4px 0 0 0; color: {% if deltas.companies_abs > 0 %}#ef6c00{% else %}#c62828{% endif %}; font-size: 10px; font-weight: 600;">
+                                        {{ deltas.companies_arrow }} {% if deltas.companies_abs >= 0 %}+{% endif %}{{ deltas.companies_abs }}
+                                    </p>
+                                    {% endif %}
                                 </td></tr>
                             </table>
                         </td>
@@ -69,6 +107,11 @@
                         <td style="text-align: center; padding: 8px; background-color: #fafafa; border-radius: 6px;">
                             <span style="color: #666666; font-size: 13px;">
                                 평균 중요도 점수: <strong style="color: #e53935;">{{ (summary.avg_importance * 100)|int }}%</strong>
+                                {% if deltas and deltas.avg_importance_pp != 0 %}
+                                <span style="margin-left: 8px; color: {% if deltas.avg_importance_pp > 0 %}#2e7d32{% else %}#c62828{% endif %}; font-size: 12px; font-weight: 600;">
+                                    {{ deltas.avg_importance_arrow }} {% if deltas.avg_importance_pp >= 0 %}+{% endif %}{{ deltas.avg_importance_pp }}pp
+                                </span>
+                                {% endif %}
                             </span>
                         </td>
                     </tr>
@@ -185,6 +228,11 @@
                         <td style="text-align: center; padding: 16px; background-color: #ffebee; border-radius: 8px;">
                             <p style="margin: 0; color: #888888; font-size: 12px;">평균 중요도 점수</p>
                             <p style="margin: 8px 0 0 0; color: #e53935; font-size: 36px; font-weight: 700;">{{ (importance_analysis.avg_score * 100)|int }}%</p>
+                            {% if deltas and deltas.avg_importance_pp != 0 %}
+                            <p style="margin: 6px 0 0 0; color: {% if deltas.avg_importance_pp > 0 %}#2e7d32{% else %}#c62828{% endif %}; font-size: 12px; font-weight: 600;">
+                                {{ deltas.avg_importance_arrow }} {% if deltas.avg_importance_pp >= 0 %}+{% endif %}{{ deltas.avg_importance_pp }}pp (전주 대비)
+                            </p>
+                            {% endif %}
                         </td>
                     </tr>
                 </table>
@@ -199,7 +247,14 @@
                                 </tr>
                             </table>
                         </td>
-                        <td width="90" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">{{ importance_analysis.high_count }}건 ({{ importance_analysis.high_percent }}%)</td>
+                        <td width="120" style="padding: 6px 0 6px 8px; color: #666666; font-size: 12px; text-align: right; white-space: nowrap;">
+                            {{ importance_analysis.high_count }}건 ({{ importance_analysis.high_percent }}%)
+                            {% if deltas and deltas.high_pp != 0 %}
+                            <span style="color: {% if deltas.high_pp > 0 %}#2e7d32{% else %}#c62828{% endif %}; font-size: 11px; font-weight: 600;">
+                                {{ deltas.high_arrow }}{% if deltas.high_pp >= 0 %}+{% endif %}{{ deltas.high_pp }}pp
+                            </span>
+                            {% endif %}
+                        </td>
                     </tr>
                     <tr>
                         <td width="100" style="padding: 6px 8px 6px 0; color: #333333; font-size: 13px; font-weight: 600; white-space: nowrap;">중 (40~70%)</td>

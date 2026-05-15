@@ -591,6 +591,27 @@ def _prepare_summary_send(session, tenant_id, tenant, newsletter_type, type_labe
             original_type = data_type[len(prefix):]
             summary_data[original_type] = data_dict
 
+    # Phase 3: weekly 에서 직전 주 7일치를 _prev_history 로 함께 전달
+    # → formatter 가 Week-over-Week Δ + 자동 코멘트 계산에 사용
+    if newsletter_type == "weekly":
+        period_days = (date_to - date_from).days + 1
+        prev_date_to = date_from - timedelta(days=1)
+        prev_date_from = prev_date_to - timedelta(days=period_days - 1)
+        prev_history = CollectedDataRepository.get_history_range(
+            session, tenant_id, prev_date_from, prev_date_to
+        )
+        if prev_history:
+            summary_data["_prev_history"] = prev_history
+            logger.info(
+                "[%s][weekly] 전주 비교 데이터 %d건 로드 (%s ~ %s)",
+                tenant_id, len(prev_history), prev_date_from, prev_date_to,
+            )
+        else:
+            logger.info(
+                "[%s][weekly] 전주 비교 데이터 없음 (%s ~ %s) → Δ 미산출",
+                tenant_id, prev_date_from, prev_date_to,
+            )
+
     if not history_data and not summary_data:
         logger.warning(f"[{tenant_id}]{type_label} 발송할 이력/요약 데이터가 없습니다.")
         return None, None, None
