@@ -211,10 +211,12 @@ class AllergyInsightFormatter:
 
         # 2. 키워드 분포 (뉴스 keyword 필드)
         keyword_counter = Counter()
+        news_with_keyword = 0
         for news in unique_news:
             kw = news.get("keyword") or news.get("search_keyword")
             if kw:
                 keyword_counter[kw] += 1
+                news_with_keyword += 1
 
         total_for_kw = max(sum(keyword_counter.values()), 1)
         top_keywords = []
@@ -224,6 +226,38 @@ class AllergyInsightFormatter:
                 "count": count,
                 "percent": round(count / total_for_kw * 100, 1),
             })
+
+        # top_keywords가 비었을 때 사유를 분류해 템플릿에 안내 박스로 노출
+        # (조용한 섹션 누락 방지 — 회의/관리자 알림에서 즉시 인지 가능)
+        top_keywords_status: Dict[str, Any] | None = None
+        if not top_keywords:
+            if total_unique_news == 0:
+                top_keywords_status = {
+                    "reason": "no_news",
+                    "message": "이번 주 수집된 뉴스가 없어 키워드 집계가 불가합니다.",
+                    "hint": "수집 스케줄러 또는 백엔드 API 응답을 확인해 주세요.",
+                }
+                logger.warning(
+                    "[allergy_insight][weekly] top_keywords 비활성: "
+                    "수집된 뉴스 0건 (days_with_data=%d)",
+                    days_with_data,
+                )
+            else:
+                top_keywords_status = {
+                    "reason": "missing_keyword_field",
+                    "message": (
+                        f"뉴스 {total_unique_news}건 중 keyword 필드가 모두 비어 있어 "
+                        "키워드 집계를 생성하지 못했습니다."
+                    ),
+                    "hint": (
+                        "AllergyInsight Backend 응답의 search_keyword 필드 결측일 가능성이 있습니다."
+                    ),
+                }
+                logger.warning(
+                    "[allergy_insight][weekly] top_keywords 비활성: "
+                    "unique_news=%d 인데 keyword 필드가 모두 결측",
+                    total_unique_news,
+                )
 
         # 3. 뉴스 vs 논문 비율
         total_content = max(total_unique_news + total_unique_papers, 1)
@@ -326,6 +360,7 @@ class AllergyInsightFormatter:
             },
             "category_distribution": category_distribution,
             "top_keywords": top_keywords,
+            "top_keywords_status": top_keywords_status,
             "content_type_distribution": content_type_distribution,
             "importance_analysis": importance_analysis,
             "top_journals": top_journals,
