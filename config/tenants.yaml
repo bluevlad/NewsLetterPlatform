@@ -20,6 +20,43 @@ tenants:
       primary_color_dark: "#1b5e20"
       accent_color: "#66bb6a"
       color_scheme: "Green"
+    # Phase 4: 진단키트 담당부서 주간회의용 1페이지 인사이트 브리프 설정
+    # 부서가 직접 편집 가능한 watch_list. 발송은 Phase 6에서 cron 등록 예정.
+    insight_brief:
+      enabled: false  # Phase 6 cron 통합 전까지 false
+      schedule:
+        weekly_day_of_week: "mon"
+        weekly_send_hour: 7
+        weekly_send_minute: 0
+      subscribers_group: "diagnostic_kit_team"
+      lookback_weeks: 12
+      watch_list:
+        keywords:
+          - "면역글로불린E"
+          - "IgE"
+          - "피부단자검사"
+          - "MAST"
+          - "ImmunoCAP"
+          - "식품알레르기 표시"
+          - "아나필락시스"
+          - "알레르겐"
+          - "체외진단"
+          - "동반진단"
+        companies:
+          - "녹십자MS"
+          - "씨젠"
+          - "휴마시스"
+          - "Thermo Fisher"
+          - "Phadia"
+        entities:
+          - "식약처"
+          - "MFDS"
+          - "FDA"
+          - "PMDA"
+          - "EMA"
+        categories_of_interest:
+          - "산업/규제"
+          - "임상/치료"
 
   standup:
     display_name: "StandUp 주간 인사이트"
