@@ -12,6 +12,7 @@ from collections import Counter
 from datetime import datetime
 from typing import Any, Dict, List
 
+from .analyzer import analyze_headlines
 from .config import ECOSYSTEM_META
 from .scorer import annotate_scores
 
@@ -106,12 +107,13 @@ def _extract_keywords(text: str) -> List[str]:
 class TechBriefingFormatter:
     """3 sources → daily 컨텍스트."""
 
+    # Today's deep-dive cards 한도 (사용자 결정: 5건)
     HEADLINE_LIMIT = 5
-    RELEASES_LIMIT = 8
-    BREAKING_LIMIT = 5
-    CVE_LIMIT = 6
-    DEPRECATION_LIMIT = 5
-    KEYWORD_TREND_LIMIT = 6
+    # 카테고리별 digest 한도 — 너무 길어지지 않게 항목당 cap.
+    DIGEST_PER_GROUP_LIMIT = 12
+    # 푸터 미니 리스트
+    FOOTER_DEPRECATION_LIMIT = 5
+    FOOTER_KEYWORD_LIMIT = 8
 
     def format(self, collected_data: Dict[str, Any]) -> Dict[str, Any]:
         payload = (collected_data or {}).get("tech_daily") or {}
@@ -122,64 +124,90 @@ class TechBriefingFormatter:
         cves:            List[Dict[str, Any]] = payload.get("cves") or []
         rss_articles:    List[Dict[str, Any]] = payload.get("rss_articles") or []
 
-        # 시그널 스코어 부여.
+        # 시그널 스코어 부여 (service_relevance 포함).
         annotate_scores(github_releases)
         annotate_scores(cves)
         annotate_scores(rss_articles)
 
-        all_items = [
-            *github_releases,
-            *cves,
-            *rss_articles,
-        ]
-        # 헤드라인: 1프로젝트 1, importance 기준 top 5.
+        all_items = [*github_releases, *cves, *rss_articles]
+
+        # Today's 5 — 1프로젝트 1, importance + relevance 기준.
         headlines = self._select_headlines(all_items, self.HEADLINE_LIMIT)
 
-        # 릴리즈 & 보안 4분류.
-        new_releases     = self._sort_by_score([r for r in github_releases
-                                                if not r.get("is_breaking")])
-        breaking_changes = self._sort_by_score([r for r in github_releases
-                                                if r.get("is_breaking")])
-        cve_sorted       = self._sort_by_score(cves)
-        deprecations     = self._sort_by_score([
-            r for r in github_releases if r.get("has_deprecation")
-        ])
+        # Deep analysis (LLM, Ollama 로컬) — top N 헤드라인만 in-place enrich.
+        # 비활성/실패 시 item['analysis'] = None → 템플릿이 summary fallback.
+        try:
+            analyzed = analyze_headlines(headlines)
+            if analyzed:
+                logger.info("TechBriefing deep analysis: %d/%d 카드 분석 성공",
+                            analyzed, len(headlines))
+        except Exception as e:
+            logger.exception("analyze_headlines 예외 — 모든 카드 fallback: %s", e)
+            for h in headlines:
+                h.setdefault("analysis", None)
 
-        # 키워드 트렌드 (rising) — 모든 아이템 제목·요약에서 추출 → 빈도 top.
-        rising_keywords = self._compute_rising_keywords(all_items)
+        # 헤드라인 dedup_key 셋 — digest 에서 동일 항목 제외용.
+        headline_keys = {h.get("dedup_key") for h in headlines if h.get("dedup_key")}
+
+        # 카테고리별 digest — 릴리즈 / 보안 CVE / 블로그 그룹.
+        # 헤드라인에 안 들어간 항목들만, importance+relevance 순.
+        def _remainder(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            return self._sort_by_score(
+                [x for x in items if x.get("dedup_key") not in headline_keys]
+            )[: self.DIGEST_PER_GROUP_LIMIT]
+
+        digest_groups: List[Dict[str, Any]] = []
+        rel_remainder = _remainder(github_releases)
+        cve_remainder = _remainder(cves)
+        rss_remainder = _remainder(rss_articles)
+        if rel_remainder:
+            digest_groups.append({
+                "label": "릴리즈", "color": "#15803d", "bg": "#dcfce7",
+                "entries": [_enrich(x) for x in rel_remainder],
+            })
+        if cve_remainder:
+            digest_groups.append({
+                "label": "보안 CVE", "color": "#b91c1c", "bg": "#fee2e2",
+                "entries": [_enrich(x) for x in cve_remainder],
+            })
+        if rss_remainder:
+            digest_groups.append({
+                "label": "공식 블로그", "color": "#0e7490", "bg": "#cffafe",
+                "entries": [_enrich(x) for x in rss_remainder],
+            })
+        digest_total = sum(len(g["entries"]) for g in digest_groups)
+
+        # 푸터 미니 리스트 — deprecations + 키워드 트렌드 (집중도에서 분리).
+        deprecation_items = self._sort_by_score(
+            [r for r in github_releases if r.get("has_deprecation")]
+        )[: self.FOOTER_DEPRECATION_LIMIT]
+        keywords_rising = self._compute_rising_keywords(all_items)[: self.FOOTER_KEYWORD_LIMIT]
 
         report_date = _parse_dt(payload.get("report_date"))
         stats = payload.get("stats") or {}
 
-        # 서비스별 관련 헤드라인 카운트 — 메일 헤더에 한 줄 노출용.
+        # 서비스별 관련 헤드라인 카운트.
         service_summary: Dict[str, int] = {}
         for h in headlines:
             for tag in _service_tags(h):
                 service_summary[tag["service"]] = service_summary.get(tag["service"], 0) + 1
 
-        # 비어 있어도 섹션이 자동 숨김되도록 falsy 빈 dict/list.
         return {
             "report_date": report_date,
             "headlines": [_enrich(h) for h in headlines],
-            "releases_security": {
-                "new_releases":     [_enrich(r) for r in new_releases[: self.RELEASES_LIMIT]],
-                "breaking_changes": [_enrich(r) for r in breaking_changes[: self.BREAKING_LIMIT]],
-                "cves":             [_enrich(r) for r in cve_sorted[: self.CVE_LIMIT]],
-                "deprecations":     [_enrich(r) for r in deprecations[: self.DEPRECATION_LIMIT]],
-                "total":            (
-                    min(len(new_releases), self.RELEASES_LIMIT)
-                    + min(len(breaking_changes), self.BREAKING_LIMIT)
-                    + min(len(cve_sorted), self.CVE_LIMIT)
-                    + min(len(deprecations), self.DEPRECATION_LIMIT)
-                ),
+            "digest_groups":     digest_groups,           # [{label, items[], color, bg}]
+            "digest_total":      digest_total,
+            "footer_extras": {
+                "deprecations":  [_enrich(r) for r in deprecation_items],
+                "keywords":      keywords_rising,
             },
-            "keywords_rising":   rising_keywords,
-            "service_summary":   service_summary,    # {"hopenvision": 3}
+            "service_summary":   service_summary,
             "stats": {
                 "release_count": stats.get("release_count", len(github_releases)),
                 "cve_count":     stats.get("cve_count",     len(cves)),
                 "rss_count":     stats.get("rss_count",     len(rss_articles)),
                 "headline_count": len(headlines),
+                "digest_count":  digest_total,
                 "total_items":   len(all_items),
             },
             "generated_at": report_date,
@@ -191,15 +219,13 @@ class TechBriefingFormatter:
         return {
             "report_date": datetime.now(),
             "headlines": [],
-            "releases_security": {
-                "new_releases": [], "breaking_changes": [],
-                "cves": [], "deprecations": [], "total": 0,
-            },
-            "keywords_rising": [],
+            "digest_groups": [],
+            "digest_total": 0,
+            "footer_extras": {"deprecations": [], "keywords": []},
             "service_summary": {},
             "stats": {
                 "release_count": 0, "cve_count": 0, "rss_count": 0,
-                "headline_count": 0, "total_items": 0,
+                "headline_count": 0, "digest_count": 0, "total_items": 0,
             },
             "generated_at": datetime.now(),
         }
@@ -265,10 +291,11 @@ class TechBriefingFormatter:
                     if other != t:
                         co_occurrence[t][other] += 1
 
-        top = weighted.most_common(self.KEYWORD_TREND_LIMIT * 2)
-        # tier S 가중치를 받은 키워드가 상위로 자연스럽게 올라옴.
+        # 푸터 미니 리스트용 — caller 에서 추가로 cap 가능.
+        max_n = max(self.FOOTER_KEYWORD_LIMIT * 2, 16)
+        top = weighted.most_common(max_n)
         rising = []
-        for kw, weight in top[: self.KEYWORD_TREND_LIMIT]:
+        for kw, weight in top[: self.FOOTER_KEYWORD_LIMIT]:
             co = [k for k, _ in co_occurrence.get(kw, Counter()).most_common(3)]
             rising.append({
                 "keyword": kw,
