@@ -71,6 +71,27 @@ class Settings(BaseSettings):
     tech_send_minute: int = Field(default=0, env="TECH_SEND_MINUTE")
     # 선택 — GitHub API rate limit 완화용 (60/h → 5000/h). 빈 값이면 unauthenticated.
     tech_github_token: str = Field(default="", env="TECH_GITHUB_TOKEN")
+
+    # TechBriefing — Ollama 기반 LLM deep analyzer
+    # localhost:11434 (개발/macOS) · host.docker.internal:11434 (Docker 컨테이너)
+    ollama_base_url: str = Field(
+        default="http://localhost:11434", env="OLLAMA_BASE_URL"
+    )
+    tech_briefing_llm_enabled: bool = Field(
+        default=True, env="TECH_BRIEFING_LLM_ENABLED"
+    )
+    tech_briefing_llm_model: str = Field(
+        default="qwen2.5-coder:14b", env="TECH_BRIEFING_LLM_MODEL"
+    )
+    tech_briefing_llm_timeout_sec: int = Field(
+        default=90, env="TECH_BRIEFING_LLM_TIMEOUT_SEC"
+    )
+    tech_briefing_llm_top_n: int = Field(
+        default=5, env="TECH_BRIEFING_LLM_TOP_N"
+    )
+    tech_briefing_llm_temperature: float = Field(
+        default=0.2, env="TECH_BRIEFING_LLM_TEMPERATURE"
+    )
     allergy_insight_admin_name: str = Field(
         default="",
         env="ALLERGY_INSIGHT_ADMIN_NAME"

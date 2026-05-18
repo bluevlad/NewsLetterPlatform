@@ -41,6 +41,7 @@ class SignalWeights:
 class ServiceProfile:
     service: str
     purpose: str = ""
+    stack_summary: str = ""              # LLM 프롬프트 주입용 한 줄 요약
     high_interest: tuple[str, ...] = ()
     low_interest: tuple[str, ...] = ()
     known_debt: tuple[KnownDebt, ...] = ()
@@ -94,6 +95,7 @@ def _parse(raw: dict) -> ServiceProfile:
     return ServiceProfile(
         service=service,
         purpose=(raw.get("purpose") or "").strip(),
+        stack_summary=(raw.get("stack_summary") or "").strip(),
         high_interest=high,
         low_interest=low,
         known_debt=tuple(debt_items),

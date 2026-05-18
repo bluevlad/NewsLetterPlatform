@@ -6,6 +6,14 @@ service: hopenvision
 purpose: 공무원 시험 자동 채점 + 성적·통계 시스템
 last_reviewed: 2026-05-18
 
+# LLM 분석 시 프롬프트에 주입되는 한 줄 요약 — 환각 가드 + 컨텍스트 압축.
+stack_summary: >-
+  Java 17 + Spring Boot 3.2.2 (내장 Tomcat 10.1) + Spring Security 6 + JPA/Hibernate +
+  PostgreSQL 16 + Redis + Flyway. Frontend: React 19.2 + Vite 7 + TypeScript 5.9 +
+  AntD 6 + TanStack Query 5.9 (npm workspaces — web-shared/web-user/web-admin).
+  DDD 모듈 (exam/user/auth/admin/enrollment/content/order/point/book/platform) + ArchUnit 경계 강제.
+  CI/CD: GitHub Actions self-hosted runner (prod docker compose 9050).
+
 stack:
   backend:
     language: { java: "17" }
@@ -70,6 +78,7 @@ relevance_signals:
     - "Pattern Matching"
     - "JPA"
     - "Hibernate"
+    - "Tomcat"            # Spring Boot 내장 서버 — CVE 영향 받음
     - "JWT"
     - "OAuth2"
     - "PostgreSQL"
@@ -88,12 +97,11 @@ relevance_signals:
     - "ArchUnit"
     - "DDD"
     - "MapStruct"
-    - "POI"
+    - "Apache POI"     # "POI" 단독은 영문에서 우연 매칭 — 정확명으로 한정
     - "OpenPDF"
-    - "CVE"
   low_interest:
     - "Android"
-    - "iOS"
+    # "iOS" 제거 — substring "ios" 가 axios/scenarios/various 등에 매칭, Axios 는 운영 스택
     - "Swift"
     - "React Native"
     - "GraphQL"
@@ -101,8 +109,7 @@ relevance_signals:
     - "Micro Frontend"
     - "Webpack"               # Vite 사용
     - "Webpack 5"
-    - "Material UI"           # AntD 사용
-    - "MUI"
+    - "Material UI"           # AntD 사용 — "MUI" 단독은 우연 매칭 가능해 제거
 
 # 시그널별 가중치 (옵션 — 미설정 시 기본값 사용)
 # high_interest 매칭 1건당 점수, low_interest 매칭 1건당 감점
