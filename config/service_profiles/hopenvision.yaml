@@ -1,0 +1,114 @@
+# TechBriefing Service Profile — hopenvision
+# 외부 기술 정보를 hopenvision 운영 코드 관점에서 평가하기 위한 컨텍스트.
+# 갱신: 의존성 파일이 바뀔 때 stack 섹션 / 분기 리뷰 시 context 섹션.
+
+service: hopenvision
+purpose: 공무원 시험 자동 채점 + 성적·통계 시스템
+last_reviewed: 2026-05-18
+
+stack:
+  backend:
+    language: { java: "17" }
+    framework:
+      - { spring-boot: "3.2.2" }
+      - { spring-data-jpa: "" }
+      - { spring-security: "6.x" }
+    db: postgresql-16        # local: H2
+    cache: redis
+    build: gradle
+    libs:
+      - { jjwt: "0.12.5" }                  # JWT
+      - { google-api-client: "2.2.0" }      # OAuth
+      - { springdoc-openapi: "2.3.0" }      # Swagger
+      - { poi: "5.2.5" }                    # Excel 파싱
+      - { openpdf: "2.0.3" }
+      - { flyway-core: "" }
+      - { mapstruct: "1.5.5" }
+      - { lombok: "" }
+    test: [junit-5, archunit-1.3.0]
+  frontend:
+    language: { typescript: "5.9" }
+    framework:
+      - { react: "19.2.0" }
+      - { react-router: "7.13.0" }
+    bundler: vite-7.2.4
+    ui: antd-6.2.3
+    server_state: tanstack-react-query-5.90
+    monorepo: npm-workspaces                # web-shared / web-user / web-admin
+
+context:
+  architecture: "DDD 모듈 (exam/user/auth/admin/enrollment/content/order/point/book/platform) + ArchUnit 경계 테스트"
+  current_focus:
+    - "academy 통합 (Flyway V50~V55)"
+    - "Landing 페이지 통합 (GatewayLanding)"
+    - "AI 합격예측 모델 (전략 단계)"
+  known_debt:
+    - { area: "identity 도메인",                 state: "Sprint 0 revert",      note: "재설계 보류" }
+    - { area: "MariaDB → PostgreSQL 마이그레이션", state: "진행 중" }
+  recently_adopted:
+    - { tech: "React 19.2",                  since: "2026-Q2" }
+    - { tech: "TanStack Query 5.90",         since: "2026-Q2" }
+    - { tech: "Redis (캐시 + JWT refresh)",   since: "최근" }
+  # TODO(검수): 도입 검토 중 기술 — 사람 입력 필요
+  # 후보: Spring Modulith / Virtual Threads / pgvector / OpenTelemetry 등
+  watching: []
+
+# ─── 매칭용 시그널 ────────────────────────────────────────────────────
+# title + summary 에 대소문자 무시 substring 매칭.
+# high_interest 매칭 → 점수 가산, low_interest 매칭 → 점수 감산.
+relevance_signals:
+  high_interest:
+    - "Spring Boot 3"
+    - "Spring Boot 4"
+    - "Spring Framework 6"
+    - "Spring Security 6"
+    - "Spring Cloud"
+    - "Java 17"
+    - "Java 21"
+    - "Java 25"
+    - "Virtual Threads"
+    - "Pattern Matching"
+    - "JPA"
+    - "Hibernate"
+    - "JWT"
+    - "OAuth2"
+    - "PostgreSQL"
+    - "pgvector"
+    - "Flyway"
+    - "Redis"
+    - "React 19"
+    - "React Server Components"
+    - "use hook"
+    - "Suspense"
+    - "TanStack Query"
+    - "React Query"
+    - "Vite 7"
+    - "TypeScript 5"
+    - "Ant Design"
+    - "ArchUnit"
+    - "DDD"
+    - "MapStruct"
+    - "POI"
+    - "OpenPDF"
+    - "CVE"
+  low_interest:
+    - "Android"
+    - "iOS"
+    - "Swift"
+    - "React Native"
+    - "GraphQL"
+    - "MongoDB"
+    - "Micro Frontend"
+    - "Webpack"               # Vite 사용
+    - "Webpack 5"
+    - "Material UI"           # AntD 사용
+    - "MUI"
+
+# 시그널별 가중치 (옵션 — 미설정 시 기본값 사용)
+# high_interest 매칭 1건당 점수, low_interest 매칭 1건당 감점
+signal_weights:
+  per_high_interest: 2.0
+  per_low_interest:  3.0
+  per_known_debt:    1.5
+  high_cap:          4.0      # high_interest 누적 상한
+  debt_cap:          3.0      # known_debt 누적 상한
