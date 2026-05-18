@@ -54,11 +54,23 @@
                 <h2 style="margin: 0 0 14px 0; padding-bottom: 8px; border-bottom: 3px solid #1d4ed8; color: #1e3a8a; font-size: 18px;">
                     🎯 오늘의 헤드라인
                 </h2>
+                {% if service_summary %}
+                <div style="margin-bottom: 14px;">
+                    {% for svc, count in service_summary.items() %}
+                    <span style="display:inline-block; background:#eef2ff; color:#3730a3; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700; margin-right:6px;">
+                        🎯 {{ svc }} 관련 {{ count }}건
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
                 {% for h in headlines %}
-                <div style="margin-bottom:14px; padding:14px 16px; background:#ffffff; border:1px solid #e5e7eb; border-left:4px solid #1d4ed8; border-radius:4px;">
+                <div style="margin-bottom:14px; padding:14px 16px; background:#ffffff; border:1px solid #e5e7eb; border-left:4px solid {% if h.service_tags %}#4338ca{% else %}#1d4ed8{% endif %}; border-radius:4px;">
                     <div style="margin-bottom:6px;">
                         <span style="display:inline-block; background:{{ h.ecosystem_bg }}; color:{{ h.ecosystem_color }}; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;">{{ h.ecosystem_label }}</span>
                         <span style="display:inline-block; background:#eff6ff; color:#1d4ed8; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; margin-left:4px;">tier {{ h.tier }}</span>
+                        {% for tag in h.service_tags %}
+                        <span style="display:inline-block; background:#eef2ff; color:#3730a3; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; margin-left:4px;">🎯 {{ tag.service }} +{{ tag.score }}</span>
+                        {% endfor %}
                         <span style="color:#6b7280; font-size:11px; margin-left:6px;">
                             {% if h.source == 'github_release' %}GitHub Release{% elif h.source == 'nvd_cve' %}CVE{% elif h.source == 'rss_blog' %}{{ h.blog_label }}{% else %}{{ h.source }}{% endif %}
                             · {{ h.published_display }}
@@ -71,6 +83,11 @@
                     {% if h.summary_safe %}
                     <div style="color:#4b5563; font-size:12px; line-height:1.55; margin-top:6px;">{{ h.summary_safe }}</div>
                     {% endif %}
+                    {% for tag in h.service_tags %}{% if tag.reason %}
+                    <div style="margin-top:6px; padding:6px 10px; background:#eef2ff; border-radius:4px; color:#3730a3; font-size:11px; line-height:1.5;">
+                        <strong>{{ tag.service }}</strong> · {{ tag.reason }}
+                    </div>
+                    {% endif %}{% endfor %}
                     {% if h.source == 'nvd_cve' and h.cvss %}
                     <div style="margin-top:6px;"><span style="display:inline-block; background:#fef2f2; color:#b91c1c; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700;">CVSS {{ h.cvss }}{% if h.severity %} · {{ h.severity|upper }}{% endif %}</span></div>
                     {% endif %}
@@ -99,6 +116,9 @@
                             <td style="padding:8px 10px; border-bottom:1px solid #f3f4f6;">
                                 <div style="color:#111827; font-size:13px; font-weight:600; line-height:1.45;">
                                     {% if r.url %}<a href="{{ r.url }}" style="color:#111827; text-decoration:none;">{{ r.project_short }} {{ r.tag }}</a>{% else %}{{ r.project_short }} {{ r.tag }}{% endif %}
+                                    {% for tag in r.service_tags %}
+                                    <span style="display:inline-block; background:#eef2ff; color:#3730a3; padding:1px 6px; border-radius:8px; font-size:10px; font-weight:700; margin-left:4px;">🎯 {{ tag.service }}</span>
+                                    {% endfor %}
                                 </div>
                                 <div style="color:#6b7280; font-size:11px; margin-top:3px;">
                                     <span style="color:{{ r.ecosystem_color }};">{{ r.ecosystem_label }}</span>
@@ -126,6 +146,9 @@
                             <td style="padding:8px 10px; border-bottom:1px solid #f3f4f6;">
                                 <div style="color:#111827; font-size:13px; font-weight:600; line-height:1.45;">
                                     {% if r.url %}<a href="{{ r.url }}" style="color:#111827; text-decoration:none;">{{ r.project_short }} {{ r.tag }}</a>{% else %}{{ r.project_short }} {{ r.tag }}{% endif %}
+                                    {% for tag in r.service_tags %}
+                                    <span style="display:inline-block; background:#eef2ff; color:#3730a3; padding:1px 6px; border-radius:8px; font-size:10px; font-weight:700; margin-left:4px;">🎯 {{ tag.service }}</span>
+                                    {% endfor %}
                                 </div>
                                 <div style="color:#6b7280; font-size:11px; margin-top:3px;">
                                     <span style="color:{{ r.ecosystem_color }};">{{ r.ecosystem_label }}</span>
@@ -153,6 +176,9 @@
                                 <div style="color:#111827; font-size:13px; font-weight:600; line-height:1.45;">
                                     {% if c.url %}<a href="{{ c.url }}" style="color:#111827; text-decoration:none;">{{ c.cve_id }}</a>{% else %}{{ c.cve_id }}{% endif %}
                                     {% if c.cvss %}<span style="display:inline-block; background:#fef2f2; color:#b91c1c; padding:1px 6px; border-radius:8px; font-size:10px; font-weight:700; margin-left:6px;">CVSS {{ c.cvss }}{% if c.severity %} · {{ c.severity|upper }}{% endif %}</span>{% endif %}
+                                    {% for tag in c.service_tags %}
+                                    <span style="display:inline-block; background:#eef2ff; color:#3730a3; padding:1px 6px; border-radius:8px; font-size:10px; font-weight:700; margin-left:4px;">🎯 {{ tag.service }}</span>
+                                    {% endfor %}
                                 </div>
                                 <div style="color:#6b7280; font-size:11px; margin-top:3px;">매칭 키워드: {{ c.matched_keyword }} · {{ c.published_display }}</div>
                                 {% if c.summary_safe %}
@@ -176,6 +202,9 @@
                             <td style="padding:8px 10px; border-bottom:1px solid #f3f4f6;">
                                 <div style="color:#111827; font-size:13px; font-weight:600; line-height:1.45;">
                                     {% if r.url %}<a href="{{ r.url }}" style="color:#111827; text-decoration:none;">{{ r.project_short }} {{ r.tag }}</a>{% else %}{{ r.project_short }} {{ r.tag }}{% endif %}
+                                    {% for tag in r.service_tags %}
+                                    <span style="display:inline-block; background:#eef2ff; color:#3730a3; padding:1px 6px; border-radius:8px; font-size:10px; font-weight:700; margin-left:4px;">🎯 {{ tag.service }}</span>
+                                    {% endfor %}
                                 </div>
                                 <div style="color:#6b7280; font-size:11px; margin-top:3px;">{{ r.ecosystem_label }} · {{ r.published_display }}</div>
                             </td>

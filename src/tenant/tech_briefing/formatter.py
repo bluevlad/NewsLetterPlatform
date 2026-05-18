@@ -48,6 +48,28 @@ def _ecosystem_meta(eco: str) -> Dict[str, str]:
     )
 
 
+def _service_tags(item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """service_relevance dict → 메일 카드용 태그 리스트.
+
+    음수 relevance(=low_interest 매칭만 된 경우)는 표시 안 함.
+    score 가 0 이면 매칭이 전혀 없는 것 — 태그 생성 안 함.
+    """
+    rel = item.get("service_relevance") or {}
+    tags: List[Dict[str, Any]] = []
+    for service, info in rel.items():
+        score = float(info.get("score", 0.0))
+        if score <= 0:
+            continue
+        tags.append({
+            "service": service,
+            "score":   round(score, 1),
+            "reason":  info.get("reason") or "",
+        })
+    # 점수 높은 순
+    tags.sort(key=lambda t: t["score"], reverse=True)
+    return tags
+
+
 def _enrich(item: Dict[str, Any]) -> Dict[str, Any]:
     eco_meta = _ecosystem_meta(item.get("ecosystem", ""))
     published = _parse_dt(item.get("published_at")) if item.get("published_at") else None
@@ -60,6 +82,7 @@ def _enrich(item: Dict[str, Any]) -> Dict[str, Any]:
         "published_display": published.strftime("%m-%d") if published else "—",
         "title_safe":      item.get("title") or "(제목 없음)",
         "summary_safe":    (item.get("summary") or "").strip(),
+        "service_tags":    _service_tags(item),
     }
 
 
@@ -128,6 +151,12 @@ class TechBriefingFormatter:
         report_date = _parse_dt(payload.get("report_date"))
         stats = payload.get("stats") or {}
 
+        # 서비스별 관련 헤드라인 카운트 — 메일 헤더에 한 줄 노출용.
+        service_summary: Dict[str, int] = {}
+        for h in headlines:
+            for tag in _service_tags(h):
+                service_summary[tag["service"]] = service_summary.get(tag["service"], 0) + 1
+
         # 비어 있어도 섹션이 자동 숨김되도록 falsy 빈 dict/list.
         return {
             "report_date": report_date,
@@ -145,6 +174,7 @@ class TechBriefingFormatter:
                 ),
             },
             "keywords_rising":   rising_keywords,
+            "service_summary":   service_summary,    # {"hopenvision": 3}
             "stats": {
                 "release_count": stats.get("release_count", len(github_releases)),
                 "cve_count":     stats.get("cve_count",     len(cves)),
@@ -166,6 +196,7 @@ class TechBriefingFormatter:
                 "cves": [], "deprecations": [], "total": 0,
             },
             "keywords_rising": [],
+            "service_summary": {},
             "stats": {
                 "release_count": 0, "cve_count": 0, "rss_count": 0,
                 "headline_count": 0, "total_items": 0,
@@ -174,10 +205,15 @@ class TechBriefingFormatter:
         }
 
     def _sort_by_score(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """importance + relevance 합산 기준 정렬.
+
+        relevance_max 가 0(매칭 없음)이면 importance 만으로 정렬 — 기존 동작과 동일.
+        Service Profile 이 있으면 운영 서비스 관련 항목이 위로 올라옴.
+        """
         return sorted(
             items,
             key=lambda x: (
-                x.get("importance_score", 0.0),
+                x.get("importance_score", 0.0) + x.get("relevance_max", 0.0),
                 # tie-breaker: 더 최신 먼저
                 _parse_dt(x.get("published_at")).timestamp() if x.get("published_at") else 0,
             ),
