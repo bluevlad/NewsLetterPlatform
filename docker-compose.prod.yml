@@ -15,6 +15,8 @@ services:
     environment:
       - TZ=Asia/Seoul
       - PYTHONUNBUFFERED=1
+      # 컨테이너 → 호스트 Ollama (TechBriefing analyzer/translator). localhost 금지.
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
     networks:
       - unmong-network
     extra_hosts:
@@ -49,6 +51,8 @@ services:
     environment:
       - TZ=Asia/Seoul
       - PYTHONUNBUFFERED=1
+      # 컨테이너 → 호스트 Ollama (TechBriefing analyzer/translator). localhost 금지.
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
     command: ["python", "-m", "src.main", "--web"]
     networks:
       - unmong-network
