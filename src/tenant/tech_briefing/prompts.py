@@ -100,3 +100,55 @@ def render_user_prompt(
         published=str(item.get("published_at") or ""),
         summary=(item.get("summary") or "(없음)")[:1500],
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 헤드라인 번역 프롬프트 — Today's N 카드의 영문 제목/요약을 한글로.
+# analyzer 와 별개의 배치 1콜. Service Profile 매칭 여부와 무관하게 전 항목 커버.
+# ─────────────────────────────────────────────────────────────────────────
+
+TRANSLATE_SYSTEM = """\
+당신은 소프트웨어 기술 문서 전문 한국어 번역가입니다.
+역할: 영문 기술 헤드라인(릴리즈/CVE/공식블로그의 제목·요약)을 자연스러운 한국어로 번역합니다.
+
+엄격한 규칙:
+1. **출력은 JSON 배열 단 1개. JSON 외 어떤 prose/마크다운/코드펜스 금지.**
+2. 제품명·라이브러리명·프레임워크명·API명·코드 식별자·버전 번호·CVE 번호는
+   번역하지 말고 원문 그대로 유지.
+   - 예: "Spring Boot 3.4", "React", "useEffect", "TypeScript", "CVE-2025-1234"
+3. 입력에 없는 내용을 추가하거나 생략하지 말 것. 의미를 바꾸지 말 것.
+4. 자연스러운 한국어 기술 문체 — 어색한 직역투 지양.
+5. summary 가 비어 있거나 "(없음)" 이면 해당 항목 summary_ko 는 빈 문자열("").
+
+입력은 번호([i])가 매겨진 항목 리스트입니다.
+출력 JSON 배열은 입력과 동일한 i 값을 사용하며, 각 원소 스키마는 다음과 같습니다:
+[
+  {"i": 1, "title_ko": "한국어 제목", "summary_ko": "한국어 요약 또는 빈 문자열"},
+  {"i": 2, "title_ko": "...", "summary_ko": "..."}
+]
+"""
+
+
+TRANSLATE_USER_TPL = """\
+아래 {count}개 기술 헤드라인을 한국어로 번역하여 JSON 배열 1개로 답하세요.
+
+{items_block}
+"""
+
+
+def render_translate_prompt(items: list[dict]) -> str:
+    """translator 가 호출하는 배치 번역 user prompt 렌더.
+
+    items 순서대로 1-based 번호를 부여한다. summary 는 과도하게 길지 않게 cap.
+    """
+    lines: list[str] = []
+    for idx, item in enumerate(items, 1):
+        title = (item.get("title") or "").strip() or "(제목 없음)"
+        summary = (item.get("summary") or "").strip()
+        summary = summary[:600] if summary else "(없음)"
+        lines.append(f"[{idx}]\ntitle: {title}\nsummary: {summary}")
+
+    return TRANSLATE_USER_TPL.format(
+        count=len(items),
+        items_block="\n\n".join(lines),
+    )
