@@ -115,6 +115,8 @@ class TechBriefingFormatter:
     HEADLINE_LIMIT = 5
     # 카테고리별 digest 한도 — 너무 길어지지 않게 항목당 cap.
     DIGEST_PER_GROUP_LIMIT = 12
+    # 보안 "기타"(운영 서비스 미적용) CVE 한도 — 적용 프로젝트보다 낮게.
+    DIGEST_CVE_OTHER_LIMIT = 8
     # 푸터 미니 리스트
     FOOTER_DEPRECATION_LIMIT = 5
     FOOTER_KEYWORD_LIMIT = 8
@@ -161,32 +163,46 @@ class TechBriefingFormatter:
         # 헤드라인 dedup_key 셋 — digest 에서 동일 항목 제외용.
         headline_keys = {h.get("dedup_key") for h in headlines if h.get("dedup_key")}
 
-        # 카테고리별 digest — 릴리즈 / 보안 CVE / 블로그 그룹.
-        # 헤드라인에 안 들어간 항목들만, importance+relevance 순.
-        def _remainder(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-            return self._sort_by_score(
-                [x for x in items if x.get("dedup_key") not in headline_keys]
-            )[: self.DIGEST_PER_GROUP_LIMIT]
+        # 카테고리별 digest — 헤드라인에 안 들어간 항목들만.
+        def _not_in_headlines(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            return [x for x in items if x.get("dedup_key") not in headline_keys]
 
         digest_groups: List[Dict[str, Any]] = []
-        rel_remainder = _remainder(github_releases)
-        cve_remainder = _remainder(cves)
-        rss_remainder = _remainder(rss_articles)
-        if rel_remainder:
+
+        # 릴리즈 — 프로젝트 단위로 버전 통합 (#1).
+        rel_consolidated = self._consolidate_releases(
+            _not_in_headlines(github_releases)
+        )[: self.DIGEST_PER_GROUP_LIMIT]
+        if rel_consolidated:
             digest_groups.append({
                 "label": "릴리즈", "color": "#15803d", "bg": "#dcfce7",
-                "entries": [_enrich(x) for x in rel_remainder],
+                "entries": rel_consolidated,
             })
-        if cve_remainder:
+
+        # 보안 CVE — 운영 서비스 적용 / 기타 2분할 (#2).
+        cve_sorted = self._sort_by_score(_not_in_headlines(cves))
+        cve_applied, cve_other = self._split_cves_by_relevance(cve_sorted)
+        if cve_applied:
             digest_groups.append({
-                "label": "보안 CVE", "color": "#b91c1c", "bg": "#fee2e2",
-                "entries": [_enrich(x) for x in cve_remainder],
+                "label": "🎯 보안 · 적용 프로젝트", "color": "#b91c1c", "bg": "#fee2e2",
+                "entries": [_enrich(x) for x in cve_applied[: self.DIGEST_PER_GROUP_LIMIT]],
             })
+        if cve_other:
+            digest_groups.append({
+                "label": "보안 · 기타", "color": "#9f1239", "bg": "#ffe4e6",
+                "entries": [_enrich(x) for x in cve_other[: self.DIGEST_CVE_OTHER_LIMIT]],
+            })
+
+        # 공식 블로그.
+        rss_remainder = self._sort_by_score(
+            _not_in_headlines(rss_articles)
+        )[: self.DIGEST_PER_GROUP_LIMIT]
         if rss_remainder:
             digest_groups.append({
                 "label": "공식 블로그", "color": "#0e7490", "bg": "#cffafe",
                 "entries": [_enrich(x) for x in rss_remainder],
             })
+
         digest_total = sum(len(g["entries"]) for g in digest_groups)
 
         # 푸터 미니 리스트 — deprecations + 키워드 트렌드 (집중도에서 분리).
@@ -281,6 +297,60 @@ class TechBriefingFormatter:
             if len(kept) >= limit:
                 break
         return kept
+
+    def _consolidate_releases(
+        self, items: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """릴리즈 digest 항목을 project 단위로 통합 (#1).
+
+        같은 프로젝트(예: hibernate-orm)의 여러 버전을 한 줄로 합친다.
+        - 대표 = 프로젝트 내 최신 발행(published_at desc) 1건 → _enrich
+        - 나머지 버전 수 = extra_count 로 축약 ("외 N개 버전")
+        - breaking/deprecation 은 그룹 OR — 한 버전이라도 있으면 배지 유지
+        - 그룹 간 정렬은 멤버 최고 점수(importance + relevance) 기준
+        """
+        groups: Dict[str, List[Dict[str, Any]]] = {}
+        for it in items:
+            key = it.get("project") or it.get("project_short") or it.get("title", "")
+            groups.setdefault(key, []).append(it)
+
+        consolidated: List[Dict[str, Any]] = []
+        for members in groups.values():
+            # 최신 발행 우선 → 첫 항목이 대표(최신 버전).
+            members.sort(
+                key=lambda x: _parse_dt(x.get("published_at")).timestamp()
+                if x.get("published_at") else 0.0,
+                reverse=True,
+            )
+            entry = _enrich(members[0])
+            entry["consolidated"] = True
+            entry["version_count"] = len(members)
+            entry["extra_count"] = len(members) - 1
+            entry["group_breaking"] = any(m.get("is_breaking") for m in members)
+            entry["group_deprecation"] = any(
+                m.get("has_deprecation") for m in members
+            )
+            entry["group_score"] = max(
+                m.get("importance_score", 0.0) + m.get("relevance_max", 0.0)
+                for m in members
+            )
+            consolidated.append(entry)
+
+        consolidated.sort(key=lambda e: e["group_score"], reverse=True)
+        return consolidated
+
+    @staticmethod
+    def _split_cves_by_relevance(
+        cves: List[Dict[str, Any]],
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """CVE 리스트를 (운영 서비스 적용, 기타)로 분리 (#2).
+
+        service_relevance 매칭(=service_tags 존재) 여부로 가른다.
+        입력 순서를 보존하므로 호출 전 정렬된 순서가 유지된다.
+        """
+        applied = [c for c in cves if _service_tags(c)]
+        other = [c for c in cves if not _service_tags(c)]
+        return applied, other
 
     def _compute_rising_keywords(
         self, items: List[Dict[str, Any]]
