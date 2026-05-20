@@ -59,11 +59,12 @@
                             {% if h.source == 'github_release' %}Release{% elif h.source == 'nvd_cve' %}CVE{% elif h.source == 'rss_blog' %}{{ h.blog_label }}{% else %}{{ h.source }}{% endif %} · {{ h.published_display }}
                         </span>
                     </div>
-                    <div style="color:#111827; font-size:16px; font-weight:700; line-height:1.4; margin-bottom:{% if h.title_ko %}3px{% else %}8px{% endif %};">
+                    {% set show_orig = h.title_ko and h.title_ko != h.title_safe %}
+                    <div style="color:#111827; font-size:16px; font-weight:700; line-height:1.4; margin-bottom:{% if show_orig %}3px{% else %}8px{% endif %};">
                         {% if h.url %}<a href="{{ h.url }}" style="color:#111827; text-decoration:none;">{{ h.title_ko or h.title_safe }}</a>{% else %}{{ h.title_ko or h.title_safe }}{% endif %}
                     </div>
-                    {# 한글 번역이 있으면 영문 원제를 작게 병기 (링크는 영문 페이지로 연결되므로 매칭에 도움) #}
-                    {% if h.title_ko %}
+                    {# 번역 결과가 원제와 다를 때만 영문 원제를 작게 병기 (CVE-ID 등 동일하면 생략) #}
+                    {% if show_orig %}
                     <div style="color:#9ca3af; font-size:11px; line-height:1.4; margin-bottom:8px;">{{ h.title_safe }}</div>
                     {% endif %}
 
