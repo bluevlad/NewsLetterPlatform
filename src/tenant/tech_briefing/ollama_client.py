@@ -35,6 +35,8 @@ class GenResult:
 
 # 가장 바깥 JSON 객체 추출 — 모델이 prose 를 앞뒤에 붙여도 핵심 JSON 만 파싱.
 _JSON_OBJ_RE = re.compile(r"\{.*\}", re.DOTALL)
+# 가장 바깥 JSON 배열 추출 — 배치 응답(번역 등) 파싱용.
+_JSON_ARR_RE = re.compile(r"\[.*\]", re.DOTALL)
 
 
 def chat(
@@ -100,4 +102,28 @@ def parse_json_response(text: str) -> Optional[Dict[str, Any]]:
         except Exception:
             pass
     logger.debug("ollama 응답 JSON 파싱 실패 (excerpt): %s", text[:200])
+    return None
+
+
+def parse_json_array_response(text: str) -> Optional[list]:
+    """LLM 응답에서 JSON 배열 추출. 실패 시 None."""
+    if not text:
+        return None
+    # 1차: 그대로 시도
+    try:
+        value = json.loads(text)
+        if isinstance(value, list):
+            return value
+    except Exception:
+        pass
+    # 2차: 가장 큰 [...] 블록만 추출 (모델이 prose 를 붙인 경우)
+    m = _JSON_ARR_RE.search(text)
+    if m:
+        try:
+            value = json.loads(m.group(0))
+            if isinstance(value, list):
+                return value
+        except Exception:
+            pass
+    logger.debug("ollama 응답 JSON 배열 파싱 실패 (excerpt): %s", text[:200])
     return None
