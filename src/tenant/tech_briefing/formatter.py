@@ -15,6 +15,7 @@ from typing import Any, Dict, List
 from .analyzer import analyze_headlines
 from .config import ECOSYSTEM_META
 from .scorer import annotate_scores
+from .translator import translate_headlines
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,9 @@ def _enrich(item: Dict[str, Any]) -> Dict[str, Any]:
         "published_display": published.strftime("%m-%d") if published else "—",
         "title_safe":      item.get("title") or "(제목 없음)",
         "summary_safe":    (item.get("summary") or "").strip(),
+        # 번역기(translator)가 채운 한글 필드 — 없으면 빈 문자열(템플릿이 영문 fallback).
+        "title_ko":        (item.get("title_ko") or "").strip(),
+        "summary_ko":      (item.get("summary_ko") or "").strip(),
         "service_tags":    _service_tags(item),
     }
 
@@ -133,6 +137,14 @@ class TechBriefingFormatter:
 
         # Today's 5 — 1프로젝트 1, importance + relevance 기준.
         headlines = self._select_headlines(all_items, self.HEADLINE_LIMIT)
+
+        # 헤드라인 제목/요약 한글 번역 (LLM, Ollama 로컬) — 배치 1콜로 in-place enrich.
+        # analyzer 와 독립 — Service Profile 매칭 여부 무관하게 전 항목 커버.
+        # 비활성/실패 시 item['title_ko'] 미설정 → 템플릿이 영문 fallback.
+        try:
+            translate_headlines(headlines)
+        except Exception as e:
+            logger.exception("translate_headlines 예외 — 영문 fallback: %s", e)
 
         # Deep analysis (LLM, Ollama 로컬) — top N 헤드라인만 in-place enrich.
         # 비활성/실패 시 item['analysis'] = None → 템플릿이 summary fallback.

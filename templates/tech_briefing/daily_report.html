@@ -59,9 +59,13 @@
                             {% if h.source == 'github_release' %}Release{% elif h.source == 'nvd_cve' %}CVE{% elif h.source == 'rss_blog' %}{{ h.blog_label }}{% else %}{{ h.source }}{% endif %} · {{ h.published_display }}
                         </span>
                     </div>
-                    <div style="color:#111827; font-size:16px; font-weight:700; line-height:1.4; margin-bottom:8px;">
-                        {% if h.url %}<a href="{{ h.url }}" style="color:#111827; text-decoration:none;">{{ h.title_safe }}</a>{% else %}{{ h.title_safe }}{% endif %}
+                    <div style="color:#111827; font-size:16px; font-weight:700; line-height:1.4; margin-bottom:{% if h.title_ko %}3px{% else %}8px{% endif %};">
+                        {% if h.url %}<a href="{{ h.url }}" style="color:#111827; text-decoration:none;">{{ h.title_ko or h.title_safe }}</a>{% else %}{{ h.title_ko or h.title_safe }}{% endif %}
                     </div>
+                    {# 한글 번역이 있으면 영문 원제를 작게 병기 (링크는 영문 페이지로 연결되므로 매칭에 도움) #}
+                    {% if h.title_ko %}
+                    <div style="color:#9ca3af; font-size:11px; line-height:1.4; margin-bottom:8px;">{{ h.title_safe }}</div>
+                    {% endif %}
 
                     {# Phase 2 deep analysis (LLM) — 있으면 4섹션 노출, 없으면 summary fallback #}
                     {% if h.analysis %}
@@ -97,9 +101,9 @@
                         </div>
                         {% endif %}
                     {% else %}
-                        {# LLM analyzer 미동작 or 실패시 fallback — summary 만 #}
-                        {% if h.summary_safe %}
-                        <div style="color:#4b5563; font-size:13px; line-height:1.6;">{{ h.summary_safe }}</div>
+                        {# LLM analyzer 미동작 or 실패시 fallback — summary (번역 있으면 한글) #}
+                        {% if h.summary_ko or h.summary_safe %}
+                        <div style="color:#4b5563; font-size:13px; line-height:1.6;">{{ h.summary_ko or h.summary_safe }}</div>
                         {% endif %}
                         {% for tag in h.service_tags %}{% if tag.reason %}
                         <div style="margin-top:8px; padding:6px 10px; background:#eef2ff; border-radius:4px; color:#3730a3; font-size:11px;">
