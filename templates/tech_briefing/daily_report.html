@@ -139,7 +139,7 @@
                                     {% if it.source == 'nvd_cve' %}
                                         <strong>{{ it.cve_id }}</strong>{% if it.cvss %} <span style="color:#b91c1c;">CVSS {{ it.cvss }}</span>{% endif %} · {{ it.matched_keyword }}
                                     {% elif it.source == 'github_release' %}
-                                        <strong>{{ it.project_short }}</strong> {{ it.tag }}{% if it.is_breaking %} <span style="color:#854d0e;">[breaking]</span>{% endif %}
+                                        <strong>{{ it.project_short }}</strong> {{ it.tag }}{% if it.extra_count and it.extra_count > 0 %} <span style="color:#6b7280;">외 {{ it.extra_count }}개 버전</span>{% endif %}{% if it.group_breaking %} <span style="color:#854d0e;">[breaking]</span>{% endif %}{% if it.group_deprecation %} <span style="color:#6d28d9;">[deprecated]</span>{% endif %}
                                     {% else %}
                                         {{ it.title_safe[:90] }}{% if it.title_safe|length > 90 %}…{% endif %}
                                     {% endif %}
