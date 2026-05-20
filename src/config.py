@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     tech_briefing_llm_temperature: float = Field(
         default=0.2, env="TECH_BRIEFING_LLM_TEMPERATURE"
     )
+    # Today's N 헤드라인 제목/요약 한글 번역 (analyzer 와 독립 배치 1콜)
+    tech_briefing_translate_enabled: bool = Field(
+        default=True, env="TECH_BRIEFING_TRANSLATE_ENABLED"
+    )
     allergy_insight_admin_name: str = Field(
         default="",
         env="ALLERGY_INSIGHT_ADMIN_NAME"
