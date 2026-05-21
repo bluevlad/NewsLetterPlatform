@@ -1067,14 +1067,16 @@ class EmailVerificationRepository:
     @staticmethod
     def create(session: Session, tenant_id: str, email: str, name: str,
                code: str, verification_type: VerificationType,
-               expires_at: datetime) -> EmailVerification:
+               expires_at: datetime,
+               signup_meta: Optional[str] = None) -> EmailVerification:
         verification = EmailVerification(
             tenant_id=tenant_id,
             email=email,
             name=name,
             code=code,
             verification_type=verification_type,
-            expires_at=expires_at
+            expires_at=expires_at,
+            signup_meta=signup_meta,
         )
         session.add(verification)
         session.flush()

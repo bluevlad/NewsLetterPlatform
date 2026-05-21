@@ -14,18 +14,49 @@ N2 에서 request_topic() / get_job() 가 추가된다.
 """
 
 import logging
+import time
 from typing import Optional
 
 import httpx
 
-from ...common.utils import retry_async
 from ...config import settings
 
 logger = logging.getLogger(__name__)
 
 API_TIMEOUT = 60.0
+# 페르소나 카탈로그는 구독 페이지 로드 경로 — 백엔드 지연이 페이지를 막지 않도록
+# 짧은 타임아웃 + 재시도 없음 + TTL 캐시.
+_CATALOG_TIMEOUT = 10.0
+_PERSONA_CACHE_TTL = 600.0  # 10분
 # trust_env=False: OrbStack 런타임이 컨테이너에 주입하는 NO_PROXY IPv6 CIDR 가
 # httpx URL 파서를 깨뜨리는 문제 회피 (collector.py 와 동일 패턴).
+
+# persona_code NULL 구독자의 런타임 폴백 페르소나.
+DEFAULT_PERSONA = "patient"
+
+# v1 정적 관심 알러젠 카탈로그 (N1_N2_DESIGN §11 Q1).
+# code 는 AllergyInsight AllergenMaster.code 와 일치해야 N3 리랭킹이 동작한다.
+INTEREST_ALLERGENS = [
+    {"code": "peanut", "label": "땅콩"},
+    {"code": "milk", "label": "우유"},
+    {"code": "egg", "label": "계란"},
+    {"code": "tree_nut", "label": "견과류"},
+    {"code": "shellfish", "label": "갑각류·어패류"},
+    {"code": "wheat", "label": "밀"},
+    {"code": "soy", "label": "대두"},
+    {"code": "fruit", "label": "과일"},
+]
+
+# 모듈 단위 페르소나 카탈로그 캐시 (성공 응답만 캐싱).
+_persona_cache: dict = {"data": None, "ts": 0.0}
+
+
+def persona_default_depth(personas: list[dict], code: str) -> str:
+    """페르소나 카탈로그에서 code 의 default_depth 조회. 미발견 시 'practical'."""
+    for p in personas:
+        if p.get("code") == code:
+            return p.get("default_depth") or "practical"
+    return "practical"
 
 
 class PersonaNewsletterClient:
@@ -52,7 +83,7 @@ class PersonaNewsletterClient:
     def _headers(self) -> dict:
         return {"X-Newsletter-Key": self.api_key}
 
-    async def get_personas(self) -> list[dict]:
+    async def get_personas(self, use_cache: bool = True) -> list[dict]:
         """GET /api/public/newsletter/personas — 페르소나 카탈로그.
 
         Returns:
@@ -64,19 +95,25 @@ class PersonaNewsletterClient:
             logger.debug("persona_client 비활성 (api_key 미설정) — get_personas 스킵")
             return []
 
-        url = f"{self.api_base_url}/api/public/newsletter/personas"
+        now = time.monotonic()
+        if (
+            use_cache
+            and _persona_cache["data"] is not None
+            and now - _persona_cache["ts"] < _PERSONA_CACHE_TTL
+        ):
+            return _persona_cache["data"]
 
-        async def _request():
+        url = f"{self.api_base_url}/api/public/newsletter/personas"
+        try:
             async with httpx.AsyncClient(
-                timeout=API_TIMEOUT, trust_env=False
+                timeout=_CATALOG_TIMEOUT, trust_env=False
             ) as client:
                 response = await client.get(url, headers=self._headers())
                 response.raise_for_status()
-                return response.json()
-
-        try:
-            data = await retry_async(_request)
+                data = response.json()
             personas = (data or {}).get("data", {}).get("personas", [])
+            _persona_cache["data"] = personas
+            _persona_cache["ts"] = now
             logger.info(f"페르소나 카탈로그 {len(personas)}종 수신")
             return personas
         except Exception as e:
