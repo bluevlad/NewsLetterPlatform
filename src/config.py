@@ -59,6 +59,13 @@ class Settings(BaseSettings):
         default="http://localhost:9040",
         env="ALLERGY_INSIGHT_API_URL"
     )
+    # 페르소나 적응형 뉴스레터 — AllergyInsight Newsletter API 인증 키.
+    # 빈 값이면 persona_client 가 호출하지 않고 기존 발송 경로로 graceful degrade.
+    # AllergyInsight 측 NEWSLETTER_API_KEY 와 동일 값으로 설정해야 인증이 통과한다.
+    # base URL 은 allergy_insight_api_url 재사용 (동일 백엔드 포트 9040).
+    allergy_insight_newsletter_api_key: str = Field(
+        default="", env="ALLERGY_INSIGHT_NEWSLETTER_KEY"
+    )
     standup_api_url: str = Field(
         default="http://host.docker.internal:9060",
         env="STANDUP_API_URL"

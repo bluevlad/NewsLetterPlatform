@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}구독 설정 - {{ tenant.display_name }}{% endblock %}
+{% block header_subtitle %}{{ tenant.brand_config.tagline }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>구독 설정</h2>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+
+    {% if saved %}
+    <div class="alert alert-success">구독 설정이 저장되었습니다.</div>
+    {% endif %}
+
+    {% if token %}
+    {% if email %}
+    <p class="text-muted text-small">{{ email }} 님의 구독 설정입니다.</p>
+    {% endif %}
+
+    {% if personas %}
+    <form method="POST" action="{{ base_path }}/{{ tenant.tenant_id }}/preferences/{{ token }}">
+        {% include "_persona_picker.html" %}
+        <button type="submit" class="btn btn-primary mt-2">설정 저장</button>
+    </form>
+    {% else %}
+    <div class="alert alert-info">
+        페르소나 맞춤 설정을 현재 사용할 수 없습니다. 잠시 후 다시 시도해주세요.
+    </div>
+    {% endif %}
+
+    <p class="text-center text-muted text-small mt-2">
+        <a href="{{ base_path }}/{{ tenant.tenant_id }}/unsubscribe">구독 해지하기</a>
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

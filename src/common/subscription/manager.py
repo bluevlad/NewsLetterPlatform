@@ -3,6 +3,7 @@
 이메일 인증 기반 구독/해지 플로우
 """
 
+import json
 import random
 import string
 import hashlib
@@ -37,9 +38,14 @@ class SubscriptionManager:
     """구독 관리 매니저"""
 
     def request_subscribe(
-        self, session: Session, tenant_id: str, email: str, name: str
+        self, session: Session, tenant_id: str, email: str, name: str,
+        signup_meta: Optional[dict] = None,
     ) -> Tuple[bool, str, Optional[int]]:
         """구독 신청 - 인증코드 발송 요청
+
+        Args:
+            signup_meta: 구독 폼에서 고른 페르소나 선택
+                {persona_code, depth_level, interests}. 인증 단계 너머로 운반된다.
 
         Returns:
             (success, message, verification_id)
@@ -97,7 +103,9 @@ class SubscriptionManager:
 
         verification = EmailVerificationRepository.create(
             session, tenant_id, email, name, code,
-            VerificationType.SUBSCRIBE, expires_at
+            VerificationType.SUBSCRIBE, expires_at,
+            signup_meta=(json.dumps(signup_meta, ensure_ascii=False)
+                         if signup_meta else None),
         )
         session.flush()
 
@@ -137,16 +145,42 @@ class SubscriptionManager:
 
         unsubscribe_token = generate_unsubscribe_token(email)
 
+        # 구독 폼에서 고른 페르소나 선택 복원 (signup_meta JSON).
+        # 로깅·파싱 실패가 구독 완료를 막지 않도록 예외 격리.
+        persona_code = None
+        purpose = None
+        depth_level = "practical"
+        interests = None
+        if verification.signup_meta:
+            try:
+                meta = json.loads(verification.signup_meta) or {}
+                persona_code = meta.get("persona_code") or None
+                purpose = meta.get("purpose") or None
+                depth_level = meta.get("depth_level") or "practical"
+                interests = meta.get("interests") or None
+            except Exception as e:
+                logger.warning(f"signup_meta 파싱 실패 — 페르소나 미적용: {e}")
+
         existing = SubscriberRepository.get_by_email(session, tenant_id, email)
         if existing:
             existing.is_active = True
             existing.name = verification.name or existing.name
             existing.unsubscribe_token = unsubscribe_token
+            # 페르소나를 이번에 골랐을 때만 갱신 — 기존 설정을 무단 덮어쓰지 않음.
+            if persona_code:
+                existing.persona_code = persona_code
+                existing.depth_level = depth_level
+            if purpose:
+                existing.purpose = purpose
+            if interests is not None:
+                existing.interests = json.dumps(interests, ensure_ascii=False)
             existing.updated_at = datetime.utcnow()
             subscriber = existing
         else:
             subscriber = SubscriberRepository.create(
-                session, tenant_id, email, verification.name, unsubscribe_token
+                session, tenant_id, email, verification.name, unsubscribe_token,
+                persona_code=persona_code, purpose=purpose,
+                depth_level=depth_level, interests=interests,
             )
 
         session.flush()

@@ -48,6 +48,14 @@ class Subscriber(Base):
     unsubscribe_token = Column(String(64), unique=True)
     is_active = Column(Boolean, default=True)
     send_slot = Column(String(20), nullable=True)  # 'early' | 'mid' | 'late' | NULL(=DEFAULT_SLOT)
+    # --- 페르소나 적응형 뉴스레터 (N1) ---
+    # persona_code NULL → 런타임 'patient' 폴백. AllergyInsight 페르소나 카탈로그가 정본이며
+    # FK 가 아닌 문자열 스냅샷으로 보관 (페르소나 정의 변경에도 과거 의미 보존).
+    persona_code = Column(String(30), nullable=True)
+    purpose = Column(String(50), nullable=True)             # 수신 목적 (페르소나 보조)
+    depth_level = Column(String(20), default="practical")   # 'expert' | 'practical' | 'general'
+    interests = Column(Text, nullable=True)                 # JSON 배열 — 관심 알러젠 코드
+    # ---
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -55,10 +63,41 @@ class Subscriber(Base):
         UniqueConstraint("tenant_id", "email", name="uq_subscriber_tenant_email"),
         Index("idx_subscriber_tenant_active", "tenant_id", "is_active"),
         Index("idx_subscriber_tenant_slot", "tenant_id", "send_slot", "is_active"),
+        Index("idx_subscriber_tenant_persona", "tenant_id", "persona_code", "is_active"),
     )
 
     def __repr__(self):
         return f"<Subscriber(tenant={self.tenant_id}, email='{self.email}')>"
+
+
+class SubscriberTopicRequest(Base):
+    """콘텐츠 선택·변형 요청 이력 (UI 미러).
+
+    정본 로그는 AllergyInsight `newsletter_topic_requests` 이며, NLP 는 수신자
+    화면 표시·재요청용 최소 미러만 보관한다. (PERSONA_ADAPTIVE_NEWSLETTER_SPEC §2.2)
+    """
+    __tablename__ = "subscriber_topic_requests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(50), nullable=False, index=True)
+    subscriber_id = Column(Integer, nullable=False)
+    request_id = Column(String(64), unique=True, nullable=False)  # NLP 발급 UUID v4 — 멱등 키
+    request_type = Column(String(20), nullable=False)             # 'select' | 'transform'
+    topic = Column(String(500))
+    # 'covered' | 'expandable' | 'unsupported' | 'pending'
+    coverage = Column(String(20), default="pending", nullable=False)
+    job_id = Column(String(64), nullable=True)                    # expandable 비동기 job
+    result_json = Column(Text, nullable=True)                     # covered/콜백 결과 스냅샷
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_topic_req_subscriber", "tenant_id", "subscriber_id", "created_at"),
+        Index("idx_topic_req_job", "job_id"),
+    )
+
+    def __repr__(self):
+        return f"<SubscriberTopicRequest(req={self.request_id}, coverage={self.coverage})>"
 
 
 class SendHistory(Base):
@@ -200,6 +239,9 @@ class EmailVerification(Base):
     attempts = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
+    # 구독 폼에서 고른 페르소나 선택을 인증 단계 너머로 운반 (N1).
+    # JSON: {persona_code, purpose, depth_level, interests}
+    signup_meta = Column(Text, nullable=True)
 
     __table_args__ = (
         Index("idx_verification_tenant_email", "tenant_id", "email"),
