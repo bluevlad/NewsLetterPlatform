@@ -25,7 +25,7 @@ from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
 from ..common.database.repository import (
     get_session, SendHistoryRepository, NewsletterArchiveRepository,
-    SubscriberRepository,
+    SubscriberRepository, SubscriberTopicRequestRepository,
 )
 from ..common.security import (
     is_honeypot_filled,
@@ -726,6 +726,11 @@ async def preferences_form(request: Request, tenant_id: str, token: str):
         except Exception:
             selected_interests = []
 
+        # N2 — 콘텐츠 선택·변형 요청 이력 (최근 10건)
+        topic_history = SubscriberTopicRequestRepository.list_by_subscriber(
+            db, tenant_id, subscriber.id, limit=10
+        )
+
         return templates.TemplateResponse(resolve_template(tenant_id, "preferences.html"), {
             "request": request,
             "tenant": tenant,
@@ -735,6 +740,7 @@ async def preferences_form(request: Request, tenant_id: str, token: str):
             "interest_allergens": INTEREST_ALLERGENS if personas else [],
             "persona_code": subscriber.persona_code or "",
             "selected_interests": selected_interests,
+            "topic_history": topic_history,
         })
     finally:
         db.close()

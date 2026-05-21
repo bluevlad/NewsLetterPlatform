@@ -1,0 +1,62 @@
+{# 콘텐츠 선택·변형 응답 3분기 partial (설계 §9.2).
+   필요 컨텍스트: result {coverage, ...}, tenant, token. #}
+<style>
+    .persona-section { margin-top: 1.25rem; }
+    .persona-section-title {
+        font-size: 1rem; font-weight: 600; margin: 0 0 .5rem;
+        color: var(--text-color);
+    }
+    .persona-items { list-style: none; margin: 0; padding: 0; }
+    .persona-item {
+        padding: .7rem .85rem; margin-bottom: .5rem;
+        background: rgba(15, 23, 42, 0.5);
+        border: 1px solid var(--border-color); border-radius: 10px;
+    }
+    .persona-item-summary {
+        margin: .35rem 0 0; font-size: .85rem; color: var(--text-muted);
+    }
+    .persona-item-meta { margin-top: .4rem; display: flex; flex-wrap: wrap; gap: .35rem; }
+    .persona-tag {
+        font-size: .72rem; padding: .12rem .5rem; border-radius: 999px;
+        background: rgba(245, 158, 11, 0.15); color: var(--warning-color);
+    }
+    .persona-editorial {
+        display: block; padding: .85rem 1rem; margin-top: 1rem;
+        border-left: 3px solid var(--accent-color);
+        background: rgba(56, 189, 248, 0.08);
+        font-size: .9rem; color: var(--text-color); border-radius: 0 8px 8px 0;
+    }
+</style>
+{% if result.coverage == "covered" %}
+    {% if result.editorial and result.editorial.text %}
+    <aside class="persona-editorial">{{ result.editorial.text }}</aside>
+    {% endif %}
+    {% if result.sections %}
+        {% for section in result.sections %}
+            {% include "_persona_section.html" %}
+        {% endfor %}
+    {% else %}
+    <div class="alert alert-info">표시할 맞춤 콘텐츠가 아직 없습니다.</div>
+    {% endif %}
+{% elif result.coverage == "expandable" %}
+    <div class="alert alert-info">
+        📥 요청하신 주제를 수집하고 있습니다 (예상 {{ result.eta_text }}).
+        준비되면 다음 호 뉴스레터에 반영됩니다.
+    </div>
+    {% if result.job_id and token %}
+    <a class="btn btn-secondary"
+       href="{{ base_path }}/{{ tenant.tenant_id }}/persona/job/{{ result.job_id }}?token={{ token }}">
+        진행 상태 새로고침
+    </a>
+    {% endif %}
+{% else %}
+    <div class="alert alert-info">{{ result.message }}</div>
+    {% if result.alternatives %}
+    <p class="text-muted text-small mt-2">이런 주제는 어떠세요?</p>
+    <ul class="persona-items">
+        {% for alt in result.alternatives %}
+        <li class="persona-item"><strong>{{ alt.label or alt.topic }}</strong></li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+{% endif %}
