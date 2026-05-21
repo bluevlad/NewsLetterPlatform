@@ -115,6 +115,13 @@ NewsLetterPlatform/
 - `.env` 로딩: pydantic-settings
 - 테넌트 설정: `config/tenants.yaml`
 
+### 주요 환경변수
+
+| 변수 | 용도 | 비고 |
+|------|------|------|
+| `ALLERGY_INSIGHT_API_URL` | AllergyInsight Backend base URL | 기본 `http://localhost:9040` |
+| `ALLERGY_INSIGHT_NEWSLETTER_KEY` | 페르소나 적응형 뉴스레터 API 인증 키 (`X-Newsletter-Key`) | AllergyInsight 측 `NEWSLETTER_API_KEY`와 동일 값. 빈 값이면 페르소나 기능 자동 비활성화 |
+
 ## Help Page 관리
 
 > 작성 표준: [HELP_PAGE_GUIDE.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/documentation/HELP_PAGE_GUIDE.md)
