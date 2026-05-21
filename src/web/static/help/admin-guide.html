@@ -366,6 +366,23 @@
         <p>"수집 중" 주제의 완료 결과는 AllergyInsight가
            <code>/api/newsletter/expansion-callback</code>으로 자동 통보합니다.</p>
 
+        <h3>발송 메일에서 바로 요청 (E1·E2)</h3>
+        <p>구독자가 받는 <strong>뉴스레터 메일 안에서</strong> 콘텐츠 요청을 시작할 수 있습니다.</p>
+        <ul>
+            <li><strong>푸터 CTA</strong> — 메일 하단의 "맞춤 콘텐츠 요청하기" 버튼</li>
+            <li><strong>섹션별 딥링크</strong> — 핵심 헤드라인·산업/기업 동향·최신 논문 섹션마다
+                "이 분야 맞춤 콘텐츠 더 받기" 링크</li>
+        </ul>
+        <p>이메일은 입력 폼을 직접 담을 수 없으므로, 링크를 누르면
+           <strong>요청 랜딩 페이지</strong>(<code>/{tenant}/persona/request</code>)가 열리고
+           거기서 요청을 확정합니다. 링크 클릭만으로는 백엔드 요청이 일어나지 않아,
+           메일 보안 스캐너의 자동 링크 열람에도 안전합니다.</p>
+        <div class="info-box highlight">
+            <strong>참고</strong>
+            <p>메일 안 요청 링크는 <code>ALLERGY_INSIGHT_NEWSLETTER_KEY</code>가 설정된 경우에만
+               노출됩니다. 키가 없으면 기존 뉴스레터와 동일하게 표시됩니다.</p>
+        </div>
+
         <h3>설정</h3>
         <p>이 기능은 AllergyInsight Backend의 페르소나 API를 사용합니다. 서버 <code>.env</code>에
            <code>ALLERGY_INSIGHT_NEWSLETTER_KEY</code> 값이 설정되어 있어야 하며,

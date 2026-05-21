@@ -8,8 +8,14 @@ from datetime import datetime
 from typing import Any, Dict
 
 from .config import DRUG_SECTION_BG, DRUG_SECTION_COLOR
+from ...config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _persona_enabled() -> bool:
+    """페르소나 키 설정 여부 — 이메일 콘텐츠 요청 CTA 노출 가드 (E1·E2)."""
+    return bool(settings.allergy_insight_newsletter_api_key)
 
 
 def _empty_drug_updates() -> Dict[str, Any]:
@@ -81,6 +87,8 @@ class AllergyInsightFormatter:
                 "trend_company_count": 0,
             }),
             "generated_at": generated_at,
+            # 이메일 콘텐츠 요청 CTA(E1·E2) — 키 설정 시에만 노출.
+            "persona_enabled": _persona_enabled(),
         }
 
     def format_weekly(self, history_data: list, collected_data: dict = None) -> dict:
@@ -548,6 +556,69 @@ class AllergyInsightFormatter:
                 "trend_company_count": 0,
             },
             "generated_at": now,
+            "persona_enabled": _persona_enabled(),
+        }
+
+    # ------------------------------------------------------------------
+    # 페르소나 적응형 뉴스레터 (N2) — topic-request 응답 → 웹 템플릿 컨텍스트
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _humanize_eta(minutes: Any) -> str:
+        """eta_minutes → 사용자 친화 문구. 비정상 입력은 30분으로 폴백."""
+        try:
+            m = int(minutes)
+        except (ValueError, TypeError):
+            m = 30
+        if m <= 0:
+            return "곧"
+        if m < 60:
+            return f"약 {m}분"
+        hours, rem = divmod(m, 60)
+        return f"약 {hours}시간" if rem == 0 else f"약 {hours}시간 {rem}분"
+
+    def format_topic_response(self, resp: Dict[str, Any]) -> Dict[str, Any]:
+        """topic-request 응답을 coverage 3분기로 정규화 (정본 계약 §3.2.2).
+
+        covered     → sections[] (+ editorial nullable) 렌더
+        expandable  → "수집 중" 안내 + job_id 보관 (콜백/폴링 보강)
+        unsupported → message + alternatives 제안 (빈 화면 금지)
+
+        미지의 coverage 값은 unsupported 로 방어 처리한다.
+        """
+        resp = resp or {}
+        coverage = resp.get("coverage")
+        meta = resp.get("meta") or {}
+        # 미등록 persona 는 백엔드가 patient 폴백 — 로깅만 하고 정상 처리.
+        if meta.get("persona_fallback"):
+            logger.info("topic-request: 미등록 persona — 백엔드 patient 폴백 적용")
+
+        if coverage == "covered":
+            data = resp.get("data") or {}
+            return {
+                "coverage": "covered",
+                "sections": data.get("sections") or [],
+                "editorial": data.get("editorial"),  # nullable — 템플릿 None 가드
+                "confidence": resp.get("confidence"),
+            }
+
+        if coverage == "expandable":
+            exp = resp.get("expansion") or {}
+            return {
+                "coverage": "expandable",
+                "job_id": exp.get("job_id"),
+                "source": exp.get("source"),
+                "eta_text": self._humanize_eta(exp.get("eta_minutes", 30)),
+            }
+
+        # unsupported (또는 미지값 방어) — alternatives 가 비어도 안내 문구는 노출.
+        fb = resp.get("fallback") or {}
+        return {
+            "coverage": "unsupported",
+            "reason": fb.get("reason"),
+            "message": fb.get("message")
+            or "요청하신 주제는 현재 제공 범위를 벗어납니다.",
+            "alternatives": fb.get("alternatives") or [],
         }
 
     # ------------------------------------------------------------------

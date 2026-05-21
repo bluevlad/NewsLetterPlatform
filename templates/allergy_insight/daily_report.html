@@ -126,6 +126,11 @@
                     </tr>
                 </table>
                 {% endfor %}
+                {% if persona_enabled %}
+                <p style="margin: 4px 0 0 0; text-align: right;">
+                    <a href="__PERSONA_REQUEST_URL__&amp;section=headlines" style="color: #2e7d32; font-size: 12px; font-weight: 600; text-decoration: none;">＋ 이 분야 맞춤 콘텐츠 더 받기</a>
+                </p>
+                {% endif %}
             </td>
         </tr>
         {% endif %}
@@ -232,6 +237,11 @@
                     </tr>
                 </table>
                 {% endfor %}
+                {% if persona_enabled %}
+                <p style="margin: 4px 0 0 0; text-align: right;">
+                    <a href="__PERSONA_REQUEST_URL__&amp;section=industry" style="color: #37474f; font-size: 12px; font-weight: 600; text-decoration: none;">＋ 이 분야 맞춤 콘텐츠 더 받기</a>
+                </p>
+                {% endif %}
             </td>
         </tr>
         {% endif %}
@@ -412,6 +422,11 @@
                     외 {{ papers|length - 5 }}건의 논문이 있습니다...
                 </p>
                 {% endif %}
+                {% if persona_enabled %}
+                <p style="margin: 4px 0 0 0; text-align: right;">
+                    <a href="__PERSONA_REQUEST_URL__&amp;section=key_papers" style="color: #1565c0; font-size: 12px; font-weight: 600; text-decoration: none;">＋ 이 분야 맞춤 콘텐츠 더 받기</a>
+                </p>
+                {% endif %}
             </td>
         </tr>
         {% endif %}
@@ -535,6 +550,27 @@
                 <p style="color: #888888; font-size: 16px;">
                     오늘은 수집된 소식이 없습니다.
                 </p>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- 맞춤 콘텐츠 요청 CTA (E1, persona_enabled 시) -->
+        {% if persona_enabled %}
+        <tr>
+            <td style="padding: 0 30px 25px 30px;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td style="background-color: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 18px 20px; text-align: center;">
+                            <p style="margin: 0 0 4px 0; color: #5d4037; font-size: 14px; font-weight: 700;">
+                                원하는 주제가 있으세요?
+                            </p>
+                            <p style="margin: 0 0 12px 0; color: #795548; font-size: 12px; line-height: 1.5;">
+                                내 역할에 맞는 맞춤 콘텐츠를 받아보거나 새 주제를 요청할 수 있습니다.
+                            </p>
+                            <a href="__PERSONA_REQUEST_URL__" style="display: inline-block; background-color: #f59e0b; color: #ffffff; font-size: 13px; font-weight: 600; text-decoration: none; padding: 10px 22px; border-radius: 6px;">맞춤 콘텐츠 요청하기 →</a>
+                        </td>
+                    </tr>
+                </table>
             </td>
         </tr>
         {% endif %}
