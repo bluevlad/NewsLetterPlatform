@@ -35,7 +35,7 @@ from .models import (
     Base, Subscriber, SendHistory, CollectedData,
     CollectedDataHistory, EmailVerification, VerificationType,
     NewsletterType, NewsletterArchive, SentArticle, BounceLog,
-    CollectionMetric,
+    CollectionMetric, SubscriberTopicRequest,
 )
 
 
@@ -65,6 +65,8 @@ def init_db(database_url: str = "sqlite:///./data/newsletterplatform.db") -> Non
     _migrate_subscriber_send_slot(_engine)
     _migrate_sent_articles_company_name(_engine)
     _migrate_collection_metrics(_engine)
+    _migrate_subscriber_persona_columns(_engine)
+    _migrate_email_verification_signup_meta(_engine)
 
 
 def _migrate_subscriber_send_slot(engine) -> None:
@@ -85,6 +87,67 @@ def _migrate_subscriber_send_slot(engine) -> None:
                 logger.info("subscribers 테이블에 send_slot 컬럼 추가 + 기존 행 'late' 일괄 배정 완료")
     except Exception as e:
         logger.debug(f"subscribers send_slot 마이그레이션 스킵: {e}")
+
+
+def _migrate_subscriber_persona_columns(engine) -> None:
+    """subscribers 테이블에 페르소나 적응형 4컬럼 추가 (N1).
+
+    기존 행: persona_code/purpose/interests = NULL (런타임 'patient' 폴백),
+    depth_level = 'practical' 기본값 적용. nullable/DEFAULT 추가만 — 무중단.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(subscribers)"))
+            columns = {row[1] for row in result}
+            added = []
+            if "persona_code" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE subscribers ADD COLUMN persona_code VARCHAR(30)"
+                ))
+                added.append("persona_code")
+            if "purpose" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE subscribers ADD COLUMN purpose VARCHAR(50)"
+                ))
+                added.append("purpose")
+            if "depth_level" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE subscribers ADD COLUMN depth_level VARCHAR(20) DEFAULT 'practical'"
+                ))
+                added.append("depth_level")
+            if "interests" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE subscribers ADD COLUMN interests TEXT"
+                ))
+                added.append("interests")
+            if added:
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_subscriber_tenant_persona "
+                    "ON subscribers (tenant_id, persona_code, is_active)"
+                ))
+                conn.commit()
+                logger.info(f"subscribers 페르소나 컬럼 추가 완료: {added}")
+    except Exception as e:
+        logger.debug(f"subscribers 페르소나 마이그레이션 스킵: {e}")
+
+
+def _migrate_email_verification_signup_meta(engine) -> None:
+    """email_verifications 테이블에 signup_meta(JSON) 컬럼 추가 (N1).
+
+    구독 폼에서 고른 페르소나 선택을 인증 단계 너머로 운반하기 위함.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(email_verifications)"))
+            columns = {row[1] for row in result}
+            if "signup_meta" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE email_verifications ADD COLUMN signup_meta TEXT"
+                ))
+                conn.commit()
+                logger.info("email_verifications 테이블에 signup_meta 컬럼 추가 완료")
+    except Exception as e:
+        logger.debug(f"email_verifications signup_meta 마이그레이션 스킵: {e}")
 
 
 def _migrate_sent_articles_company_name(engine) -> None:
@@ -205,12 +268,22 @@ class SubscriberRepository:
 
     @staticmethod
     def create(session: Session, tenant_id: str, email: str, name: str,
-               unsubscribe_token: str) -> Subscriber:
+               unsubscribe_token: str,
+               persona_code: Optional[str] = None,
+               purpose: Optional[str] = None,
+               depth_level: str = "practical",
+               interests: Optional[list] = None) -> Subscriber:
+        """구독자 생성. 페르소나 인자는 선택 — 미지정 시 기존과 동일 동작."""
         subscriber = Subscriber(
             tenant_id=tenant_id,
             email=email,
             name=name,
-            unsubscribe_token=unsubscribe_token
+            unsubscribe_token=unsubscribe_token,
+            persona_code=persona_code or None,
+            purpose=purpose or None,
+            depth_level=depth_level or "practical",
+            interests=(json.dumps(interests, ensure_ascii=False)
+                       if interests else None),
         )
         session.add(subscriber)
         session.flush()
@@ -371,6 +444,148 @@ class SubscriberRepository:
         total = query.count()
         items = query.order_by(Subscriber.created_at.desc()).offset(offset).limit(limit).all()
         return items, total
+
+    # --- 페르소나 적응형 뉴스레터 (N1) ---
+
+    @staticmethod
+    def update_persona(session: Session, subscriber_id: int, *,
+                       persona_code: Optional[str] = None,
+                       purpose: Optional[str] = None,
+                       depth_level: Optional[str] = None,
+                       interests: Optional[list] = None) -> bool:
+        """구독 관리 페이지에서 페르소나 설정 변경.
+
+        None 인자는 '변경 안 함'. 빈 문자열/빈 리스트는 'NULL 로 비움'.
+        """
+        subscriber = session.query(Subscriber).filter(
+            Subscriber.id == subscriber_id
+        ).first()
+        if not subscriber:
+            return False
+        if persona_code is not None:
+            subscriber.persona_code = persona_code or None
+        if purpose is not None:
+            subscriber.purpose = purpose or None
+        if depth_level is not None:
+            subscriber.depth_level = depth_level or "practical"
+        if interests is not None:
+            subscriber.interests = (
+                json.dumps(interests, ensure_ascii=False) if interests else None
+            )
+        session.flush()
+        return True
+
+    @staticmethod
+    def get_active_personas(session: Session, tenant_id: str) -> list[str]:
+        """활성 구독자에 존재하는 distinct persona_code. NULL 은 'patient' 로 합산.
+
+        N3 페르소나 세그먼트 순회용 선반영.
+        """
+        rows = (
+            session.query(Subscriber.persona_code)
+            .filter(and_(
+                Subscriber.tenant_id == tenant_id,
+                Subscriber.is_active == True,
+            ))
+            .distinct()
+            .all()
+        )
+        codes = {(code or "patient") for (code,) in rows}
+        return sorted(codes)
+
+    @staticmethod
+    def get_active_by_persona(session: Session, tenant_id: str,
+                              persona_code: str) -> list[Subscriber]:
+        """persona_code 세그먼트의 활성 구독자.
+
+        persona_code 가 'patient' 면 persona_code IS NULL 인 행도 합류 (N3 선반영).
+        """
+        if persona_code == "patient":
+            persona_filter = or_(
+                Subscriber.persona_code == "patient",
+                Subscriber.persona_code.is_(None),
+            )
+        else:
+            persona_filter = Subscriber.persona_code == persona_code
+        return session.query(Subscriber).filter(
+            and_(
+                Subscriber.tenant_id == tenant_id,
+                Subscriber.is_active == True,
+                persona_filter,
+            )
+        ).all()
+
+
+class SubscriberTopicRequestRepository:
+    """콘텐츠 선택·변형 요청 미러 저장소 (UI 표시·재요청용).
+
+    정본 로그는 AllergyInsight `newsletter_topic_requests`.
+    """
+
+    @staticmethod
+    def create(session: Session, *, tenant_id: str, subscriber_id: int,
+               request_id: str, request_type: str,
+               topic: Optional[str] = None) -> SubscriberTopicRequest:
+        row = SubscriberTopicRequest(
+            tenant_id=tenant_id,
+            subscriber_id=subscriber_id,
+            request_id=request_id,
+            request_type=request_type,
+            topic=topic,
+            coverage="pending",
+        )
+        session.add(row)
+        session.flush()
+        return row
+
+    @staticmethod
+    def get_by_request_id(session: Session,
+                          request_id: str) -> Optional[SubscriberTopicRequest]:
+        """멱등성 — 동일 request_id 재요청 시 기존 행 반환."""
+        return session.query(SubscriberTopicRequest).filter(
+            SubscriberTopicRequest.request_id == request_id
+        ).first()
+
+    @staticmethod
+    def get_by_job_id(session: Session,
+                      job_id: str) -> Optional[SubscriberTopicRequest]:
+        """콜백 수신 시 job_id 로 미러 행 조회."""
+        return session.query(SubscriberTopicRequest).filter(
+            SubscriberTopicRequest.job_id == job_id
+        ).first()
+
+    @staticmethod
+    def update_result(session: Session, request_id: str, *, coverage: str,
+                      job_id: Optional[str] = None,
+                      result_json: Optional[str] = None) -> bool:
+        """진단 응답·콜백 결과 반영. 콜백 중복 수신 dedup 은 호출부 책임."""
+        row = session.query(SubscriberTopicRequest).filter(
+            SubscriberTopicRequest.request_id == request_id
+        ).first()
+        if not row:
+            return False
+        row.coverage = coverage
+        if job_id is not None:
+            row.job_id = job_id
+        if result_json is not None:
+            row.result_json = result_json
+        session.flush()
+        return True
+
+    @staticmethod
+    def list_by_subscriber(session: Session, tenant_id: str, subscriber_id: int,
+                           limit: int = 20) -> list[SubscriberTopicRequest]:
+        """구독 관리 페이지 요청 이력 표시용."""
+        return (
+            session.query(SubscriberTopicRequest)
+            .filter(and_(
+                SubscriberTopicRequest.tenant_id == tenant_id,
+                SubscriberTopicRequest.subscriber_id == subscriber_id,
+            ))
+            .order_by(SubscriberTopicRequest.created_at.desc())
+            .limit(limit)
+            .all()
+        )
 
 
 class SendHistoryRepository:
@@ -852,14 +1067,16 @@ class EmailVerificationRepository:
     @staticmethod
     def create(session: Session, tenant_id: str, email: str, name: str,
                code: str, verification_type: VerificationType,
-               expires_at: datetime) -> EmailVerification:
+               expires_at: datetime,
+               signup_meta: Optional[str] = None) -> EmailVerification:
         verification = EmailVerification(
             tenant_id=tenant_id,
             email=email,
             name=name,
             code=code,
             verification_type=verification_type,
-            expires_at=expires_at
+            expires_at=expires_at,
+            signup_meta=signup_meta,
         )
         session.add(verification)
         session.flush()

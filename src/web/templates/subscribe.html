@@ -43,6 +43,9 @@
                    value="{{ name or '' }}">
         </div>
 
+        {# 페르소나 선택 — personas 가 비어 있으면(기능 비활성) 렌더되지 않음 #}
+        {% include "_persona_picker.html" %}
+
         {# honeypot — 사람은 보지 못하고 비워둠. 봇은 모든 필드를 채워 차단됨 #}
         <div aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;height:0;width:0;overflow:hidden;">
             <label for="website">Website (do not fill)</label>

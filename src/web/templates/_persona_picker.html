@@ -1,0 +1,54 @@
+{# 페르소나·관심 알러젠 선택 위젯 — subscribe.html / preferences.html 공용.
+   필요 컨텍스트: personas, interest_allergens, persona_code, selected_interests
+   personas 가 비어 있으면(기능 비활성) 아무것도 렌더하지 않는다. #}
+{% if personas %}
+<style>
+    .persona-picker { margin-top: 1.25rem; }
+    .persona-options { display: flex; flex-direction: column; gap: .5rem; }
+    .persona-option, .interest-option {
+        display: flex; align-items: flex-start; gap: .5rem;
+        padding: .6rem .75rem; border: 1px solid #e5e7eb;
+        border-radius: 8px; cursor: pointer;
+    }
+    .persona-option input, .interest-option input { margin-top: .2rem; }
+    .persona-option:hover, .interest-option:hover { border-color: #f59e0b; }
+    .persona-option small, .interest-option small { color: #6b7280; }
+    .interest-options { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .interest-option { padding: .4rem .7rem; }
+</style>
+<div class="form-group persona-picker">
+    <label>뉴스레터를 어떤 역할로 받으시나요? <span class="text-muted">(선택)</span></label>
+    <p class="text-muted text-small">역할에 맞춰 콘텐츠 구성이 달라집니다.</p>
+    <div class="persona-options">
+        <label class="persona-option">
+            <input type="radio" name="persona_code" value=""
+                   {% if not persona_code %}checked{% endif %}>
+            <span><strong>일반 구독자</strong><br>
+                <small>역할 구분 없이 표준 뉴스레터를 받습니다.</small></span>
+        </label>
+        {% for p in personas %}
+        <label class="persona-option">
+            <input type="radio" name="persona_code" value="{{ p.code }}"
+                   {% if persona_code == p.code %}checked{% endif %}>
+            <span><strong>{{ p.label }}</strong>
+                {% if p.description %}<br><small>{{ p.description }}</small>{% endif %}</span>
+        </label>
+        {% endfor %}
+    </div>
+</div>
+{% if interest_allergens %}
+<div class="form-group persona-picker">
+    <label>관심 알러젠 <span class="text-muted">(선택 · 복수 가능)</span></label>
+    <p class="text-muted text-small">선택한 알러젠 관련 콘텐츠가 우선 노출됩니다.</p>
+    <div class="interest-options">
+        {% for a in interest_allergens %}
+        <label class="interest-option">
+            <input type="checkbox" name="interests" value="{{ a.code }}"
+                   {% if a.code in (selected_interests or []) %}checked{% endif %}>
+            <span>{{ a.label }}</span>
+        </label>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endif %}

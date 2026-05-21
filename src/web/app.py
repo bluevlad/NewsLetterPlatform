@@ -3,6 +3,7 @@ NewsLetterPlatform 웹 애플리케이션
 멀티테넌트 이메일 인증 기반 구독 시스템
 """
 
+import json
 import logging
 import threading
 from pathlib import Path as _Path
@@ -22,13 +23,19 @@ from ..common.database.repository import get_session_factory
 from ..common.subscription.manager import SubscriptionManager
 from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
-from ..common.database.repository import get_session, SendHistoryRepository, NewsletterArchiveRepository
+from ..common.database.repository import (
+    get_session, SendHistoryRepository, NewsletterArchiveRepository,
+    SubscriberRepository,
+)
 from ..common.security import (
     is_honeypot_filled,
     verify_turnstile,
     get_client_ip,
 )
 from ..tenant.registry import get_registry
+from ..tenant.allergy_insight.persona_client import (
+    PersonaNewsletterClient, INTEREST_ALLERGENS, persona_default_depth,
+)
 from .shared import templates, templates_dir, get_db, get_tenant_or_404
 from .admin import admin_router
 
@@ -107,6 +114,9 @@ app.add_middleware(SessionMiddleware, secret_key=_secrets.token_urlsafe(32))
 
 # 구독 매니저
 subscription_manager = SubscriptionManager()
+
+# 페르소나 적응형 뉴스레터 클라이언트 (api_key 미설정 시 enabled=False — 폼에서 자동 숨김)
+persona_client = PersonaNewsletterClient()
 
 # 정적 파일 서빙
 _static_dir = _Path(__file__).parent / "static"
@@ -204,9 +214,14 @@ async def home(request: Request):
 async def subscribe_form(request: Request, tenant_id: str):
     """구독 신청 폼"""
     tenant = get_tenant_or_404(tenant_id)
+    personas = await persona_client.get_personas()
     return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
         "request": request,
         "tenant": tenant,
+        "personas": personas,
+        "interest_allergens": INTEREST_ALLERGENS if personas else [],
+        "persona_code": "",
+        "selected_interests": [],
     })
 
 
@@ -219,20 +234,30 @@ async def subscribe_submit(
     name: str = Form(default=""),
     website: str = Form(default=""),  # honeypot — 사람은 비워둠
     cf_turnstile_response: str = Form(default="", alias="cf-turnstile-response"),
+    persona_code: str = Form(default=""),
+    interests: list[str] = Form(default=[]),
 ):
     """구독 신청 처리 - 인증코드 발송"""
     tenant = get_tenant_or_404(tenant_id)
+    personas = await persona_client.get_personas()
+
+    def _render_form(error_msg: str):
+        return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
+            "request": request,
+            "tenant": tenant,
+            "error": error_msg,
+            "email": email,
+            "name": name,
+            "personas": personas,
+            "interest_allergens": INTEREST_ALLERGENS if personas else [],
+            "persona_code": persona_code,
+            "selected_interests": interests,
+        })
 
     # Honeypot — 봇이 모든 필드를 채우면 silent drop (200 + 일반 에러로 위장, 학습 회피)
     if is_honeypot_filled(website):
         logger.warning("honeypot trigger: ip=%s, email=%s", get_client_ip(request), email)
-        return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
-            "request": request,
-            "tenant": tenant,
-            "error": "오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
-            "email": email,
-            "name": name,
-        })
+        return _render_form("오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
 
     # Cloudflare Turnstile (env 미설정 시 자동 비활성화)
     if settings.turnstile_secret_key:
@@ -244,29 +269,31 @@ async def subscribe_submit(
         if not ok:
             logger.warning("Turnstile 검증 실패: ip=%s, email=%s",
                           get_client_ip(request), email)
-            return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
-                "request": request,
-                "tenant": tenant,
-                "error": "보안 검증에 실패했습니다. 페이지를 새로고침 후 다시 시도해주세요.",
-                "email": email,
-                "name": name,
-            })
+            return _render_form("보안 검증에 실패했습니다. 페이지를 새로고침 후 다시 시도해주세요.")
+
+    # 페르소나 선택 검증 — 카탈로그에 있는 code 만 수용, interests 는 화이트리스트 필터.
+    # 미선택(빈 값) 시 signup_meta=None → patient 폴백으로 동작.
+    signup_meta = None
+    if personas and persona_code:
+        valid_persona_codes = {p.get("code") for p in personas}
+        if persona_code in valid_persona_codes:
+            valid_interest_codes = {a["code"] for a in INTEREST_ALLERGENS}
+            clean_interests = [i for i in interests if i in valid_interest_codes]
+            signup_meta = {
+                "persona_code": persona_code,
+                "depth_level": persona_default_depth(personas, persona_code),
+                "interests": clean_interests,
+            }
 
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
         success, code_or_msg, verification_id = subscription_manager.request_subscribe(
-            db, tenant_id, email, name
+            db, tenant_id, email, name, signup_meta=signup_meta
         )
 
         if not success:
-            return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
-                "request": request,
-                "tenant": tenant,
-                "error": code_or_msg,
-                "email": email,
-                "name": name,
-            })
+            return _render_form(code_or_msg)
 
         db.commit()
 
@@ -285,24 +312,12 @@ async def subscribe_submit(
                 status_code=303
             )
         else:
-            return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
-                "request": request,
-                "tenant": tenant,
-                "error": "이메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.",
-                "email": email,
-                "name": name,
-            })
+            return _render_form("이메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.")
 
     except Exception as e:
         db.rollback()
         logger.error(f"구독 신청 처리 오류: {e}")
-        return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
-            "request": request,
-            "tenant": tenant,
-            "error": "오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
-            "email": email,
-            "name": name,
-        })
+        return _render_form("오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
     finally:
         db.close()
 
@@ -677,6 +692,111 @@ async def unsubscribe_by_token(request: Request, tenant_id: str, token: str):
             "request": request,
             "tenant": tenant,
             "error": "오류가 발생했습니다.",
+        })
+    finally:
+        db.close()
+
+
+# ==================== 구독 설정 (페르소나 관리) ====================
+
+@app.get("/{tenant_id}/preferences/{token}", response_class=HTMLResponse)
+async def preferences_form(request: Request, tenant_id: str, token: str):
+    """구독 설정 페이지 — 페르소나·관심 알러젠 변경 (구독 해지 토큰으로 식별)"""
+    tenant = get_tenant_or_404(tenant_id)
+    personas = await persona_client.get_personas()
+
+    SessionLocal = get_session_factory()
+    db = SessionLocal()
+    try:
+        subscriber = SubscriberRepository.get_by_unsubscribe_token(db, token)
+        if not subscriber or subscriber.tenant_id != tenant_id:
+            return templates.TemplateResponse(resolve_template(tenant_id, "preferences.html"), {
+                "request": request,
+                "tenant": tenant,
+                "error": "유효하지 않은 링크이거나 구독이 해지된 상태입니다.",
+            })
+
+        try:
+            selected_interests = json.loads(subscriber.interests or "[]")
+        except Exception:
+            selected_interests = []
+
+        return templates.TemplateResponse(resolve_template(tenant_id, "preferences.html"), {
+            "request": request,
+            "tenant": tenant,
+            "token": token,
+            "email": subscriber.email,
+            "personas": personas,
+            "interest_allergens": INTEREST_ALLERGENS if personas else [],
+            "persona_code": subscriber.persona_code or "",
+            "selected_interests": selected_interests,
+        })
+    finally:
+        db.close()
+
+
+@app.post("/{tenant_id}/preferences/{token}", response_class=HTMLResponse)
+async def preferences_submit(
+    request: Request,
+    tenant_id: str,
+    token: str,
+    persona_code: str = Form(default=""),
+    interests: list[str] = Form(default=[]),
+):
+    """구독 설정 저장 — 페르소나·관심 알러젠"""
+    tenant = get_tenant_or_404(tenant_id)
+    personas = await persona_client.get_personas()
+
+    SessionLocal = get_session_factory()
+    db = SessionLocal()
+    try:
+        subscriber = SubscriberRepository.get_by_unsubscribe_token(db, token)
+        if not subscriber or subscriber.tenant_id != tenant_id:
+            return templates.TemplateResponse(resolve_template(tenant_id, "preferences.html"), {
+                "request": request,
+                "tenant": tenant,
+                "error": "유효하지 않은 링크이거나 구독이 해지된 상태입니다.",
+            })
+
+        # 화이트리스트 검증 — 카탈로그/정적 리스트에 있는 code 만 수용
+        valid_persona_codes = {p.get("code") for p in personas}
+        valid_interest_codes = {a["code"] for a in INTEREST_ALLERGENS}
+        clean_persona = persona_code if persona_code in valid_persona_codes else ""
+        clean_interests = [i for i in interests if i in valid_interest_codes]
+        depth = (persona_default_depth(personas, clean_persona)
+                 if clean_persona else "practical")
+
+        SubscriberRepository.update_persona(
+            db, subscriber.id,
+            persona_code=clean_persona,   # "" → NULL (일반 구독자 = patient 폴백)
+            depth_level=depth,
+            interests=clean_interests,
+        )
+        db.commit()
+
+        return templates.TemplateResponse(resolve_template(tenant_id, "preferences.html"), {
+            "request": request,
+            "tenant": tenant,
+            "token": token,
+            "email": subscriber.email,
+            "personas": personas,
+            "interest_allergens": INTEREST_ALLERGENS if personas else [],
+            "persona_code": clean_persona,
+            "selected_interests": clean_interests,
+            "saved": True,
+        })
+    except Exception as e:
+        db.rollback()
+        logger.error(f"구독 설정 저장 오류: {e}")
+        return templates.TemplateResponse(resolve_template(tenant_id, "preferences.html"), {
+            "request": request,
+            "tenant": tenant,
+            "token": token,
+            "personas": personas,
+            "interest_allergens": INTEREST_ALLERGENS if personas else [],
+            "persona_code": persona_code,
+            "selected_interests": interests,
+            "error": "오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
         })
     finally:
         db.close()
