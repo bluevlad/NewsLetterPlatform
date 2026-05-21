@@ -40,6 +40,14 @@ _TERMINAL_COVERAGE = {"covered", "unsupported"}
 
 _RESULT_TEMPLATE = "persona_result.html"
 
+# E2 — 이메일 섹션 딥링크가 전달하는 section 코드 → 사용자 표시 라벨.
+# daily_report.html 의 섹션과 정본 계약 context.section 을 잇는다.
+_SECTION_LABELS = {
+    "headlines": "핵심 헤드라인",
+    "industry": "산업·기업 동향",
+    "key_papers": "주요 논문",
+}
+
 
 def _callback_url() -> str:
     """expandable job 완료 시 AllergyInsight 가 역호출할 콜백 URL."""
@@ -127,6 +135,43 @@ async def expansion_callback(
         db.close()
 
 
+@router.get("/{tenant_id}/persona/request", response_class=HTMLResponse)
+async def persona_request_landing(
+    request: Request,
+    tenant_id: str,
+    token: str = "",
+    section: str = "",
+    topic: str = "",
+):
+    """콘텐츠 요청 랜딩 페이지 — 이메일 딥링크 진입점 (E1·E2).
+
+    **부작용 없음** — 메일 보안 스캐너가 링크를 자동 GET 해도 안전하다.
+    실제 요청은 이 페이지의 폼 → POST /persona/topic-request 로만 일어난다.
+    """
+    tenant = get_tenant_or_404(tenant_id)
+    section = section if section in _SECTION_LABELS else ""
+
+    db = get_session_factory()()
+    try:
+        subscriber = SubscriberRepository.get_by_unsubscribe_token(db, token)
+        if not subscriber or subscriber.tenant_id != tenant_id:
+            return templates.TemplateResponse("persona_request.html", {
+                "request": request, "tenant": tenant,
+                "error": "유효하지 않은 링크이거나 구독이 해지된 상태입니다.",
+            })
+        return templates.TemplateResponse("persona_request.html", {
+            "request": request,
+            "tenant": tenant,
+            "token": token,
+            "email": subscriber.email,
+            "section": section,
+            "section_label": _SECTION_LABELS.get(section),
+            "topic": (topic or "").strip()[:200],
+        })
+    finally:
+        db.close()
+
+
 @router.post("/{tenant_id}/persona/topic-request", response_class=HTMLResponse)
 async def persona_topic_request(
     request: Request,
@@ -136,6 +181,7 @@ async def persona_topic_request(
     topic: str = Form(default=""),
     depth: str = Form(default=""),
     framing: str = Form(default=""),
+    section: str = Form(default=""),
 ):
     """수신자 콘텐츠 선택·변형 요청 (셀프 서비스).
 
@@ -168,7 +214,7 @@ async def persona_topic_request(
         }
         context = {
             "callback_url": _callback_url(),
-            "section": None,
+            "section": (section if section in _SECTION_LABELS else None),
             "current_content_ids": [],
         }
         payload = build_topic_request(

@@ -8,8 +8,14 @@ from datetime import datetime
 from typing import Any, Dict
 
 from .config import DRUG_SECTION_BG, DRUG_SECTION_COLOR
+from ...config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _persona_enabled() -> bool:
+    """페르소나 키 설정 여부 — 이메일 콘텐츠 요청 CTA 노출 가드 (E1·E2)."""
+    return bool(settings.allergy_insight_newsletter_api_key)
 
 
 def _empty_drug_updates() -> Dict[str, Any]:
@@ -81,6 +87,8 @@ class AllergyInsightFormatter:
                 "trend_company_count": 0,
             }),
             "generated_at": generated_at,
+            # 이메일 콘텐츠 요청 CTA(E1·E2) — 키 설정 시에만 노출.
+            "persona_enabled": _persona_enabled(),
         }
 
     def format_weekly(self, history_data: list, collected_data: dict = None) -> dict:
@@ -548,6 +556,7 @@ class AllergyInsightFormatter:
                 "trend_company_count": 0,
             },
             "generated_at": now,
+            "persona_enabled": _persona_enabled(),
         }
 
     # ------------------------------------------------------------------

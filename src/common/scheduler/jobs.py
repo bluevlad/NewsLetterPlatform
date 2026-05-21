@@ -439,7 +439,17 @@ def run_send_job(
                 f"{settings.web_base_url}/{tenant_id}"
                 f"/unsubscribe/token/{subscriber.unsubscribe_token}"
             )
+            # 페르소나 콘텐츠 요청 딥링크 (E1·E2) — 수신자별 토큰 주입.
+            # daily_report.html 의 CTA 가 persona_enabled 일 때만 placeholder 를
+            # 렌더하므로, 미노출 시 아래 replace 는 무해한 no-op.
+            persona_request_url = (
+                f"{settings.web_base_url}/{tenant_id}"
+                f"/persona/request?token={subscriber.unsubscribe_token}"
+            )
             subscriber_html = html_content.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
+            subscriber_html = subscriber_html.replace(
+                "__PERSONA_REQUEST_URL__", persona_request_url
+            )
 
             messages.append({
                 "recipient": subscriber.email,
@@ -776,7 +786,17 @@ def run_adhoc_send(
                 f"{settings.web_base_url}/{tenant_id}"
                 f"/unsubscribe/token/{subscriber.unsubscribe_token}"
             )
+            # 페르소나 콘텐츠 요청 딥링크 (E1·E2) — 수신자별 토큰 주입.
+            # daily_report.html 의 CTA 가 persona_enabled 일 때만 placeholder 를
+            # 렌더하므로, 미노출 시 아래 replace 는 무해한 no-op.
+            persona_request_url = (
+                f"{settings.web_base_url}/{tenant_id}"
+                f"/persona/request?token={subscriber.unsubscribe_token}"
+            )
             subscriber_html = html_content.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
+            subscriber_html = subscriber_html.replace(
+                "__PERSONA_REQUEST_URL__", persona_request_url
+            )
 
             messages.append({
                 "recipient": subscriber.email,
