@@ -35,7 +35,7 @@ from .models import (
     Base, Subscriber, SendHistory, CollectedData,
     CollectedDataHistory, EmailVerification, VerificationType,
     NewsletterType, NewsletterArchive, SentArticle, BounceLog,
-    CollectionMetric,
+    CollectionMetric, SubscriberTopicRequest,
 )
 
 
@@ -65,6 +65,8 @@ def init_db(database_url: str = "sqlite:///./data/newsletterplatform.db") -> Non
     _migrate_subscriber_send_slot(_engine)
     _migrate_sent_articles_company_name(_engine)
     _migrate_collection_metrics(_engine)
+    _migrate_subscriber_persona_columns(_engine)
+    _migrate_email_verification_signup_meta(_engine)
 
 
 def _migrate_subscriber_send_slot(engine) -> None:
@@ -85,6 +87,67 @@ def _migrate_subscriber_send_slot(engine) -> None:
                 logger.info("subscribers 테이블에 send_slot 컬럼 추가 + 기존 행 'late' 일괄 배정 완료")
     except Exception as e:
         logger.debug(f"subscribers send_slot 마이그레이션 스킵: {e}")
+
+
+def _migrate_subscriber_persona_columns(engine) -> None:
+    """subscribers 테이블에 페르소나 적응형 4컬럼 추가 (N1).
+
+    기존 행: persona_code/purpose/interests = NULL (런타임 'patient' 폴백),
+    depth_level = 'practical' 기본값 적용. nullable/DEFAULT 추가만 — 무중단.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(subscribers)"))
+            columns = {row[1] for row in result}
+            added = []
+            if "persona_code" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE subscribers ADD COLUMN persona_code VARCHAR(30)"
+                ))
+                added.append("persona_code")
+            if "purpose" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE subscribers ADD COLUMN purpose VARCHAR(50)"
+                ))
+                added.append("purpose")
+            if "depth_level" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE subscribers ADD COLUMN depth_level VARCHAR(20) DEFAULT 'practical'"
+                ))
+                added.append("depth_level")
+            if "interests" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE subscribers ADD COLUMN interests TEXT"
+                ))
+                added.append("interests")
+            if added:
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_subscriber_tenant_persona "
+                    "ON subscribers (tenant_id, persona_code, is_active)"
+                ))
+                conn.commit()
+                logger.info(f"subscribers 페르소나 컬럼 추가 완료: {added}")
+    except Exception as e:
+        logger.debug(f"subscribers 페르소나 마이그레이션 스킵: {e}")
+
+
+def _migrate_email_verification_signup_meta(engine) -> None:
+    """email_verifications 테이블에 signup_meta(JSON) 컬럼 추가 (N1).
+
+    구독 폼에서 고른 페르소나 선택을 인증 단계 너머로 운반하기 위함.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(email_verifications)"))
+            columns = {row[1] for row in result}
+            if "signup_meta" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE email_verifications ADD COLUMN signup_meta TEXT"
+                ))
+                conn.commit()
+                logger.info("email_verifications 테이블에 signup_meta 컬럼 추가 완료")
+    except Exception as e:
+        logger.debug(f"email_verifications signup_meta 마이그레이션 스킵: {e}")
 
 
 def _migrate_sent_articles_company_name(engine) -> None:
