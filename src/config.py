@@ -63,8 +63,10 @@ class Settings(BaseSettings):
     # 빈 값이면 persona_client 가 호출하지 않고 기존 발송 경로로 graceful degrade.
     # AllergyInsight 측 NEWSLETTER_API_KEY 와 동일 값으로 설정해야 인증이 통과한다.
     # base URL 은 allergy_insight_api_url 재사용 (동일 백엔드 포트 9040).
+    # 필드명(_api_key)과 env 변수명(_KEY)이 달라 validation_alias 필수 —
+    # pydantic v2 는 Field(env=...) 를 무시하고 필드명 대문자화로 매칭하므로.
     allergy_insight_newsletter_api_key: str = Field(
-        default="", env="ALLERGY_INSIGHT_NEWSLETTER_KEY"
+        default="", validation_alias="ALLERGY_INSIGHT_NEWSLETTER_KEY"
     )
     standup_api_url: str = Field(
         default="http://host.docker.internal:9060",
