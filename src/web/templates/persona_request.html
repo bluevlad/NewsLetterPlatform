@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}맞춤 콘텐츠 요청 - {{ tenant.display_name }}{% endblock %}
+{% block header_subtitle %}{{ tenant.brand_config.tagline }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>맞춤 콘텐츠 요청</h2>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% else %}
+        {% if email %}
+        <p class="text-muted text-small">{{ email }} 님</p>
+        {% endif %}
+
+        {% if section_label %}
+        <div class="alert alert-info">
+            「{{ section_label }}」 분야에 관심이 있으시군요. 관련 맞춤 콘텐츠를 받아보세요.
+        </div>
+        {% else %}
+        <p class="text-muted text-small">
+            내 역할에 맞는 콘텐츠를 받아보거나, 원하는 새 주제를 요청할 수 있습니다.
+        </p>
+        {% endif %}
+
+        {# 선택(select) — 내 페르소나 (또는 섹션) 맞춤 콘텐츠 #}
+        <form method="POST" action="{{ base_path }}/{{ tenant.tenant_id }}/persona/topic-request">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="request_type" value="select">
+            {% if section %}<input type="hidden" name="section" value="{{ section }}">{% endif %}
+            <button type="submit" class="btn btn-primary">
+                {% if section_label %}{{ section_label }} 관련 콘텐츠 받아보기{% else %}내 맞춤 콘텐츠 받아보기{% endif %}
+            </button>
+        </form>
+
+        {# 변형(transform) — 새 주제 자유 입력 #}
+        <form method="POST" action="{{ base_path }}/{{ tenant.tenant_id }}/persona/topic-request" class="mt-2">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="request_type" value="transform">
+            <div class="form-group" style="margin-top: 1.25rem;">
+                <label for="topic">새 주제 요청 <span class="text-muted">(자유 입력)</span></label>
+                <input type="text" id="topic" name="topic" maxlength="200"
+                       value="{{ topic or '' }}"
+                       placeholder="예: 땅콩 알러지 경구면역요법 최신 동향">
+            </div>
+            <div class="form-group">
+                <label for="depth">콘텐츠 깊이</label>
+                <select id="depth" name="depth" class="select-input">
+                    <option value="">기본 (내 페르소나 설정)</option>
+                    <option value="general">쉽게 — 핵심 위주</option>
+                    <option value="practical">실무 — 적용 중심</option>
+                    <option value="expert">전문 — 근거·심화</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-secondary">새 주제 요청하기</button>
+        </form>
+    {% endif %}
+
+    {% if token %}
+    <p class="text-center text-muted text-small mt-2">
+        <a href="{{ base_path }}/{{ tenant.tenant_id }}/preferences/{{ token }}">구독 설정 전체 보기</a>
+    </p>
+    {% endif %}
+</div>
+
+<style>
+    .select-input {
+        width: 100%; padding: .875rem 1rem;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid var(--border-color); border-radius: 8px;
+        color: var(--text-color); font-size: 1rem;
+    }
+</style>
+{% endblock %}
