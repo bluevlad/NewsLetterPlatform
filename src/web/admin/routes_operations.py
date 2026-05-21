@@ -118,6 +118,7 @@ async def preview_email(request: Request, tenant_id: str,
         template_name = tenant.get_email_template(newsletter_type)
         html_content = renderer.render(template_name, context)
         html_content = html_content.replace("__UNSUBSCRIBE_URL__", "#preview")
+        html_content = html_content.replace("__PERSONA_REQUEST_URL__", "#preview")
 
         return templates.TemplateResponse("admin/_preview.html", {
             "request": request,
@@ -191,6 +192,14 @@ async def send_test_email(request: Request, tenant_id: str,
         template_name = tenant.get_email_template(newsletter_type)
         html_content = renderer.render(template_name, context)
         html_content = html_content.replace("__UNSUBSCRIBE_URL__", "#test")
+        # 페르소나 요청 CTA(E1·E2) — 수신자가 실제 구독자면 진짜 랜딩 URL 주입.
+        test_sub = SubscriberRepository.get_by_email(db, tenant_id, email.strip())
+        persona_url = (
+            f"{settings.web_base_url}/{tenant_id}/persona/request"
+            f"?token={test_sub.unsubscribe_token}"
+            if test_sub else "#test"
+        )
+        html_content = html_content.replace("__PERSONA_REQUEST_URL__", persona_url)
 
         subject = f"[TEST] {tenant.generate_subject(newsletter_type=newsletter_type)}"
         result = sender.send(
