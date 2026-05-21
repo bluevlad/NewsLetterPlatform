@@ -38,6 +38,7 @@ from ..tenant.allergy_insight.persona_client import (
 )
 from .shared import templates, templates_dir, get_db, get_tenant_or_404
 from .admin import admin_router
+from .routes_persona import router as persona_router
 
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
@@ -135,6 +136,10 @@ async def intro_page():
 
 # Admin 라우터 등록 (/{tenant_id} 보다 먼저)
 app.include_router(admin_router)
+
+# 페르소나 콘텐츠 선택·변형 라우터 (N2) — /{tenant_id}/persona/* 가
+# 일반 /{tenant_id}/* 라우트보다 먼저 매칭되도록 여기서 등록.
+app.include_router(persona_router)
 
 
 def resolve_template(tenant_id: str, template_name: str) -> str:
