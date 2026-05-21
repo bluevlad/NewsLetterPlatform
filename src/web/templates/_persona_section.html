@@ -1,0 +1,35 @@
+{# 페르소나 콘텐츠 섹션 1개 — covered 응답 sections[] 항목.
+   섹션: {type, title, items[]}. items 는 섹션 종류별 다형 필드 (설계 §8):
+   papers: evidence_level/is_guideline · industry: company_name/count_7d ·
+   news: content_category/allergen_code. 키 존재 시에만 태그 노출. #}
+<div class="persona-section">
+    <h3 class="persona-section-title">{{ section.title or section.type or "추천 콘텐츠" }}</h3>
+    {# section 은 dict — .items 는 dict.items() 메서드와 충돌하므로 ['items'] 사용 #}
+    {% if section["items"] %}
+    <ul class="persona-items">
+        {% for item in section["items"] %}
+        <li class="persona-item">
+            {% if item.url %}
+            <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.title or item.topic or "(제목 없음)" }}</a>
+            {% else %}
+            <strong>{{ item.title or item.topic or "(제목 없음)" }}</strong>
+            {% endif %}
+            {% if item.summary %}<p class="persona-item-summary">{{ item.summary }}</p>{% endif %}
+            {% set has_meta = item.evidence_level or item.is_guideline or item.company_name or item.count_7d or item.content_category or item.allergen_code %}
+            {% if has_meta %}
+            <div class="persona-item-meta">
+                {% if item.evidence_level %}<span class="persona-tag">근거 {{ item.evidence_level }}</span>{% endif %}
+                {% if item.is_guideline %}<span class="persona-tag">가이드라인</span>{% endif %}
+                {% if item.company_name %}<span class="persona-tag">{{ item.company_name }}</span>{% endif %}
+                {% if item.count_7d %}<span class="persona-tag">최근 7일 {{ item.count_7d }}건</span>{% endif %}
+                {% if item.content_category %}<span class="persona-tag">{{ item.content_category }}</span>{% endif %}
+                {% if item.allergen_code %}<span class="persona-tag">{{ item.allergen_code }}</span>{% endif %}
+            </div>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted text-small">표시할 항목이 없습니다.</p>
+    {% endif %}
+</div>

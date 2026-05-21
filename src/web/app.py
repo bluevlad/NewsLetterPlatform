@@ -25,7 +25,7 @@ from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
 from ..common.database.repository import (
     get_session, SendHistoryRepository, NewsletterArchiveRepository,
-    SubscriberRepository,
+    SubscriberRepository, SubscriberTopicRequestRepository,
 )
 from ..common.security import (
     is_honeypot_filled,
@@ -38,6 +38,7 @@ from ..tenant.allergy_insight.persona_client import (
 )
 from .shared import templates, templates_dir, get_db, get_tenant_or_404
 from .admin import admin_router
+from .routes_persona import router as persona_router
 
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
@@ -135,6 +136,10 @@ async def intro_page():
 
 # Admin 라우터 등록 (/{tenant_id} 보다 먼저)
 app.include_router(admin_router)
+
+# 페르소나 콘텐츠 선택·변형 라우터 (N2) — /{tenant_id}/persona/* 가
+# 일반 /{tenant_id}/* 라우트보다 먼저 매칭되도록 여기서 등록.
+app.include_router(persona_router)
 
 
 def resolve_template(tenant_id: str, template_name: str) -> str:
@@ -721,6 +726,11 @@ async def preferences_form(request: Request, tenant_id: str, token: str):
         except Exception:
             selected_interests = []
 
+        # N2 — 콘텐츠 선택·변형 요청 이력 (최근 10건)
+        topic_history = SubscriberTopicRequestRepository.list_by_subscriber(
+            db, tenant_id, subscriber.id, limit=10
+        )
+
         return templates.TemplateResponse(resolve_template(tenant_id, "preferences.html"), {
             "request": request,
             "tenant": tenant,
@@ -730,6 +740,7 @@ async def preferences_form(request: Request, tenant_id: str, token: str):
             "interest_allergens": INTEREST_ALLERGENS if personas else [],
             "persona_code": subscriber.persona_code or "",
             "selected_interests": selected_interests,
+            "topic_history": topic_history,
         })
     finally:
         db.close()
