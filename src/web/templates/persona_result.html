@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}맞춤 콘텐츠 - {{ tenant.display_name }}{% endblock %}
+{% block header_subtitle %}{{ tenant.brand_config.tagline }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>맞춤 콘텐츠 요청 결과</h2>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% else %}
+        {% if topic %}
+        <p class="text-muted text-small">요청 주제: <strong>{{ topic }}</strong></p>
+        {% endif %}
+        {% include "_persona_result.html" %}
+    {% endif %}
+
+    {% if token %}
+    <p class="text-center text-muted text-small mt-2">
+        <a href="{{ base_path }}/{{ tenant.tenant_id }}/preferences/{{ token }}">← 구독 설정으로 돌아가기</a>
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

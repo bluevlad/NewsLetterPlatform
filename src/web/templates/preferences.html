@@ -25,6 +25,58 @@
         {% include "_persona_picker.html" %}
         <button type="submit" class="btn btn-primary mt-2">설정 저장</button>
     </form>
+
+    {# --- 콘텐츠 선택·변형 (N2) --- #}
+    <div class="topic-request-block">
+        <h3 class="topic-request-title">맞춤 콘텐츠 요청</h3>
+        <p class="text-muted text-small">
+            내 역할에 맞는 콘텐츠를 받아보거나, 원하는 새 주제를 요청할 수 있습니다.
+        </p>
+
+        {# 선택(select) — 내 페르소나 맞춤 콘텐츠 전체 #}
+        <form method="POST" action="{{ base_path }}/{{ tenant.tenant_id }}/persona/topic-request">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="request_type" value="select">
+            <button type="submit" class="btn btn-secondary">내 맞춤 콘텐츠 받아보기</button>
+        </form>
+
+        {# 변형(transform) — 새 주제 자유 입력 #}
+        <form method="POST" action="{{ base_path }}/{{ tenant.tenant_id }}/persona/topic-request" class="mt-2">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="request_type" value="transform">
+            <div class="form-group">
+                <label for="topic">새 주제 요청 <span class="text-muted">(자유 입력)</span></label>
+                <input type="text" id="topic" name="topic" maxlength="200"
+                       placeholder="예: 땅콩 알러지 경구면역요법 최신 동향">
+            </div>
+            <div class="form-group">
+                <label for="depth">콘텐츠 깊이</label>
+                <select id="depth" name="depth" class="select-input">
+                    <option value="">기본 (내 페르소나 설정)</option>
+                    <option value="general">쉽게 — 핵심 위주</option>
+                    <option value="practical">실무 — 적용 중심</option>
+                    <option value="expert">전문 — 근거·심화</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">주제 요청하기</button>
+        </form>
+    </div>
+
+    {% if topic_history %}
+    <div class="topic-request-block">
+        <h3 class="topic-request-title">최근 요청 내역</h3>
+        <ul class="topic-history">
+            {% for h in topic_history %}
+            <li class="topic-history-item">
+                <span class="topic-history-topic">
+                    {{ h.topic or ("내 맞춤 콘텐츠" if h.request_type == "select" else "(주제 없음)") }}
+                </span>
+                <span class="topic-history-coverage coverage-{{ h.coverage }}">{{ h.coverage }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
     {% else %}
     <div class="alert alert-info">
         페르소나 맞춤 설정을 현재 사용할 수 없습니다. 잠시 후 다시 시도해주세요.
@@ -36,4 +88,38 @@
     </p>
     {% endif %}
 </div>
+
+<style>
+    .topic-request-block {
+        margin-top: 1.5rem; padding-top: 1.5rem;
+        border-top: 1px solid var(--border-color);
+    }
+    .topic-request-title {
+        font-size: 1rem; font-weight: 600; margin: 0 0 .35rem;
+        color: var(--text-color);
+    }
+    .select-input {
+        width: 100%; padding: .875rem 1rem;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid var(--border-color); border-radius: 8px;
+        color: var(--text-color); font-size: 1rem;
+    }
+    .topic-history { list-style: none; margin: .5rem 0 0; padding: 0; }
+    .topic-history-item {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: .5rem; padding: .5rem .7rem; margin-bottom: .4rem;
+        background: rgba(15, 23, 42, 0.5);
+        border: 1px solid var(--border-color); border-radius: 8px;
+        font-size: .85rem;
+    }
+    .topic-history-topic { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .topic-history-coverage {
+        flex-shrink: 0; font-size: .72rem; padding: .12rem .5rem;
+        border-radius: 999px; background: rgba(148, 163, 184, 0.15);
+        color: var(--text-muted);
+    }
+    .coverage-covered { background: rgba(16, 185, 129, 0.15); color: var(--action-color); }
+    .coverage-expandable { background: rgba(245, 158, 11, 0.15); color: var(--warning-color); }
+    .coverage-unsupported { background: rgba(239, 68, 68, 0.12); color: var(--danger-color); }
+</style>
 {% endblock %}
