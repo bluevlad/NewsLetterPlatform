@@ -153,6 +153,17 @@ class Settings(BaseSettings):
     subscribe_rate_limit_email_minutes: int = Field(default=5, env="SUBSCRIBE_RATE_LIMIT_EMAIL_MINUTES")
     subscribe_rate_limit_email_per_day: int = Field(default=3, env="SUBSCRIBE_RATE_LIMIT_EMAIL_PER_DAY")
 
+    # LLMOps 관측 보고 (BATCH_RUN_REPORTING v0.3.0, fire-and-forget)
+    # 비어 있으면 보고 비활성. consumer_id 는 service-registry llm_consumers[].id 와 일치.
+    llmops_enabled: bool = Field(default=False, env="LLMOPS_ENABLED")
+    llmops_url: str = Field(
+        default="http://host.docker.internal:9110/api/batch-runs", env="LLMOPS_URL"
+    )
+    llmops_api_key: str = Field(default="", env="LLMOPS_API_KEY")
+    tech_briefing_consumer_id: str = Field(
+        default="tech-briefing-newsletter", env="TECH_BRIEFING_CONSUMER_ID"
+    )
+
     class Config:
         env_file = Path(__file__).parent.parent / ".env"
         env_file_encoding = "utf-8"
