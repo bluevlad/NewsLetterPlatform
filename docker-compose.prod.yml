@@ -19,6 +19,7 @@ services:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
     networks:
       - unmong-network
+      - database-network
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -56,6 +57,7 @@ services:
     command: ["python", "-m", "src.main", "--web"]
     networks:
       - unmong-network
+      - database-network
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -73,4 +75,7 @@ services:
 networks:
   unmong-network:
     name: unmong-main_unmong-network
+    external: true
+  # 공유 PostgreSQL(postgresql:5432) 접근 — SQLite→PG 마이그레이션
+  database-network:
     external: true
