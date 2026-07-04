@@ -3,11 +3,11 @@ Admin 인증 모듈 - 세션 기반 인증 + 로그인/로그아웃 + Google Sig
 """
 
 import secrets
-import time
 import logging
 
 from fastapi import APIRouter, Request, Form, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from ...config import settings
 from ..shared import templates
@@ -19,31 +19,46 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# in-memory 세션 저장소: {token: expiry_timestamp}
-_sessions: dict[str, float] = {}
+# 세션 서명 시크릿 — settings.session_secret(안정값) 우선.
+# 미설정 시 기동 시 임의 생성(과거 in-memory 와 동일하게 재시작 시 세션 소실)
+# 하되 경고. 운영은 SESSION_SECRET 설정 필수.
+if settings.session_secret:
+    _session_secret = settings.session_secret
+else:
+    _session_secret = secrets.token_urlsafe(32)
+    logger.warning(
+        "SESSION_SECRET 미설정 — 임의 키 사용. 재시작 시 관리자 세션이 소실되고 "
+        "다중 워커에서 세션이 공유되지 않습니다. 운영에서는 SESSION_SECRET 을 설정하세요."
+    )
+
+# 상태 비저장(stateless) 서명 토큰: 서버측 저장소 없이 서명+만료로 검증.
+# → 재시작·다중 워커에서 세션 유지(기존 in-memory dict 의 소실/불일치 문제 해결).
+_serializer = URLSafeTimedSerializer(_session_secret, salt="admin-session")
 
 
 def create_session() -> str:
-    """새 세션 생성, 토큰 반환"""
-    token = secrets.token_urlsafe(32)
-    expiry = time.time() + settings.admin_session_hours * 3600
-    _sessions[token] = expiry
-    return token
+    """새 세션 토큰 생성(서명된 토큰). 서버측 저장 없음."""
+    return _serializer.dumps({"t": "admin"})
 
 
 def validate_session(token: str) -> bool:
-    """세션 유효성 검증"""
-    if not token or token not in _sessions:
+    """세션 유효성 검증 — 서명 + 만료(admin_session_hours) 확인."""
+    if not token:
         return False
-    if time.time() > _sessions[token]:
-        del _sessions[token]
+    try:
+        _serializer.loads(token, max_age=settings.admin_session_hours * 3600)
+        return True
+    except (BadSignature, SignatureExpired):
         return False
-    return True
 
 
 def delete_session(token: str) -> None:
-    """세션 삭제"""
-    _sessions.pop(token, None)
+    """로그아웃 — stateless 이므로 서버측 상태는 없고 쿠키 삭제로 처리한다.
+
+    (토큰 즉시 무효화가 필요하면 후속으로 denylist 를 도입한다. 현재는 만료 +
+    쿠키 삭제로 관리한다.)
+    """
+    return None
 
 
 def require_admin(request: Request) -> bool:
