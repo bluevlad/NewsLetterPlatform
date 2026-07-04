@@ -14,6 +14,8 @@ from typing import Optional
 import httpx
 from fastapi import Request
 
+from ...config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,11 +66,22 @@ def is_honeypot_filled(value: Optional[str]) -> bool:
     return bool(value and value.strip())
 
 
-def get_client_ip(request: Request) -> str:
-    """리버스 프록시 환경에서 실제 클라이언트 IP 추출"""
+def get_client_ip(request: Request, trusted_hops: Optional[int] = None) -> str:
+    """리버스 프록시 환경에서 실제 클라이언트 IP 추출.
+
+    X-Forwarded-For 의 **맨 왼쪽**은 클라이언트가 임의로 위조할 수 있어
+    (예: `X-Forwarded-For: 1.2.3.4` 를 그대로 주입) rate-limit 우회에 악용된다.
+    우리 신뢰 프록시(nginx 게이트웨이)가 append 한 **오른쪽에서 trusted_hops
+    번째** 값을 쓴다 — 이 위치는 클라이언트가 덮어쓸 수 없다.
+    """
+    hops = trusted_hops if trusted_hops is not None else getattr(settings, "trusted_proxy_hops", 1)
+    hops = max(hops, 1)
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            idx = min(hops, len(parts))
+            return parts[-idx]
     if request.client:
         return request.client.host
     return "unknown"

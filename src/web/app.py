@@ -103,15 +103,26 @@ class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
                         status_code=403,
                         content={"error": "Forbidden: invalid origin"},
                     )
+            elif request.cookies.get("admin_session"):
+                # Origin/Referer 부재 + 쿠키 인증(브라우저 관리자 요청) → CSRF 방어 공백.
+                # 쿠키라는 ambient credential 을 쓰는 요청은 Origin 필수. 서버간 API
+                # 호출(쿠키 없음)은 그대로 통과시켜 수집기 연동을 깨지 않는다.
+                logger.warning("CSRF check failed: admin POST without origin path=%s", request.url.path)
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": "Forbidden: missing origin"},
+                )
         return await call_next(request)
 
 # CSRF 미들웨어 적용
 app.add_middleware(CSRFOriginCheckMiddleware)
 
 # Starlette SessionMiddleware
-# secret_key: 앱 시작 시마다 새 키 생성 (in-memory 세션과 동일 lifecycle)
+# secret_key: SESSION_SECRET(안정값) 우선 — 재시작/다중 워커에서 서명 세션 유지.
+# 미설정 시에만 기동 시 임의 생성(과거 동작).
 import secrets as _secrets
-app.add_middleware(SessionMiddleware, secret_key=_secrets.token_urlsafe(32))
+_session_key = settings.session_secret or _secrets.token_urlsafe(32)
+app.add_middleware(SessionMiddleware, secret_key=_session_key)
 
 # 구독 매니저
 subscription_manager = SubscriptionManager()
@@ -705,6 +716,7 @@ async def unsubscribe_by_token(request: Request, tenant_id: str, token: str):
 # ==================== 구독 설정 (페르소나 관리) ====================
 
 @app.get("/{tenant_id}/preferences/{token}", response_class=HTMLResponse)
+@limiter.limit("30/hour")
 async def preferences_form(request: Request, tenant_id: str, token: str):
     """구독 설정 페이지 — 페르소나·관심 알러젠 변경 (구독 해지 토큰으로 식별)"""
     tenant = get_tenant_or_404(tenant_id)
@@ -747,6 +759,7 @@ async def preferences_form(request: Request, tenant_id: str, token: str):
 
 
 @app.post("/{tenant_id}/preferences/{token}", response_class=HTMLResponse)
+@limiter.limit("20/hour")
 async def preferences_submit(
     request: Request,
     tenant_id: str,

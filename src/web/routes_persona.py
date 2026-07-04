@@ -14,6 +14,7 @@ import logging
 
 from fastapi import APIRouter, Request, Form, Header
 from fastapi.responses import HTMLResponse, JSONResponse
+from slowapi import Limiter
 
 from ..config import settings
 from ..common.database.repository import (
@@ -21,6 +22,7 @@ from ..common.database.repository import (
     SubscriberRepository,
     SubscriberTopicRequestRepository,
 )
+from ..common.security import get_client_ip
 from ..tenant.allergy_insight.persona_client import (
     PersonaNewsletterClient,
     build_topic_request,
@@ -31,6 +33,10 @@ from .shared import templates, get_tenant_or_404
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 토큰 기반 공개 엔드포인트의 남용(토큰 대입·이메일 열람·LLM job 유발) 방어용
+# rate limiter. app.state.limiter 와 동일한 클라이언트 IP 키를 사용한다.
+limiter = Limiter(key_func=get_client_ip)
 
 _persona_client = PersonaNewsletterClient()
 _formatter = AllergyInsightFormatter()
@@ -136,6 +142,7 @@ async def expansion_callback(
 
 
 @router.get("/{tenant_id}/persona/request", response_class=HTMLResponse)
+@limiter.limit("30/hour")
 async def persona_request_landing(
     request: Request,
     tenant_id: str,
@@ -173,6 +180,7 @@ async def persona_request_landing(
 
 
 @router.post("/{tenant_id}/persona/topic-request", response_class=HTMLResponse)
+@limiter.limit("10/hour")
 async def persona_topic_request(
     request: Request,
     tenant_id: str,

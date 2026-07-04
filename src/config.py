@@ -138,6 +138,14 @@ class Settings(BaseSettings):
     # Admin
     admin_password: str = Field(default="", env="ADMIN_PASSWORD")
     admin_session_hours: int = Field(default=24, env="ADMIN_SESSION_HOURS")
+    # 관리자 세션 서명 시크릿 (안정값). 설정 시 세션이 재시작·다중 워커에서 유지된다.
+    # 비어 있으면 기동 시 임의 생성(기존 동작 — 재시작 시 세션 소실). 운영은 반드시 설정.
+    # 생성: openssl rand -hex 32
+    session_secret: str = Field(default="", env="SESSION_SECRET")
+
+    # 리버스 프록시 신뢰 홉 수 — X-Forwarded-For 오른쪽에서 N번째(신뢰 프록시가 본 IP).
+    # 게이트웨이 nginx 1단이면 1. 앞단에 CDN(Cloudflare 등)이 있으면 2.
+    trusted_proxy_hops: int = Field(default=1, env="TRUSTED_PROXY_HOPS")
 
     # Google Sign-In (Admin 로그인용 - client_id만 필요)
     google_client_id: str = Field(default="", env="GOOGLE_CLIENT_ID")
@@ -152,6 +160,17 @@ class Settings(BaseSettings):
     # 이메일 기반 — 동일 메일로 N분/N일 내 재발송 횟수 제한
     subscribe_rate_limit_email_minutes: int = Field(default=5, env="SUBSCRIBE_RATE_LIMIT_EMAIL_MINUTES")
     subscribe_rate_limit_email_per_day: int = Field(default=3, env="SUBSCRIBE_RATE_LIMIT_EMAIL_PER_DAY")
+
+    # LLMOps 관측 보고 (BATCH_RUN_REPORTING v0.3.0, fire-and-forget)
+    # 비어 있으면 보고 비활성. consumer_id 는 service-registry llm_consumers[].id 와 일치.
+    llmops_enabled: bool = Field(default=False, env="LLMOPS_ENABLED")
+    llmops_url: str = Field(
+        default="http://host.docker.internal:9110/api/batch-runs", env="LLMOPS_URL"
+    )
+    llmops_api_key: str = Field(default="", env="LLMOPS_API_KEY")
+    tech_briefing_consumer_id: str = Field(
+        default="tech-briefing-newsletter", env="TECH_BRIEFING_CONSUMER_ID"
+    )
 
     class Config:
         env_file = Path(__file__).parent.parent / ".env"
