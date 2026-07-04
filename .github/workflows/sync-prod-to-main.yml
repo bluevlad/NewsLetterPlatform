@@ -24,7 +24,7 @@ jobs:
     # 자기 자신이 만든 main push 가 만든 prod push 에는 재진입 안 함 (안전 가드)
     if: github.actor != 'prod-sync-bot' && !contains(github.event.head_commit.message, '[skip-sync]')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.SYNC_PAT }}
