@@ -6,7 +6,7 @@
 # 도입 절차:
 #   1) 이 파일을 .github/workflows/register-fix-to-dashboard.yml 로 복사
 #   2) repo Secrets 등록:
-#      - QA_DASHBOARD_API_URL  (예: https://qadashboard.unmong.com/api)
+#      - QA_DASHBOARD_API_URL  (예: https://qaagent.unmong.com/api)
 #      - QA_DASHBOARD_API_KEY  (QA-Dashboard 운영자 발급)
 #   3) CLAUDE.md 의 fix 커밋 표준에 Discovery-Method 필수 명시
 #      (또는 표준 PROD_TO_MAIN_AUTO_SYNC 와 함께 루트 CLAUDE.md 한 곳에서 강제)
