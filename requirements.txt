@@ -34,7 +34,7 @@ itsdangerous>=2.1.0
 PyJWT>=2.8.0
 
 # Utilities
-pyyaml>=6.0.0
+pyyaml>=6.0.3
 
 # Rate limiting (구독 폼 어뷰즈 방어)
 slowapi>=0.1.9
