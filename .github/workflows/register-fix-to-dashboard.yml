@@ -101,9 +101,14 @@ jobs:
               completedAt:      now | todate
             }')
 
-          curl -fsSL -X POST "$QA_DASHBOARD_API_URL/fix-results" \
+          # 베스트-에포트 텔레메트리 — 대시보드가 거부(단일 프로젝트 스코프 시 422)
+          # 하거나 다운되어도 CI(fix 커밋) 를 실패시키지 않는다. 성공 시에만 등록.
+          HTTP=$(curl -sS -o /tmp/qa_resp.txt -w "%{http_code}" -X POST "$QA_DASHBOARD_API_URL/fix-results" \
             -H "Authorization: Bearer $QA_DASHBOARD_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
-
-          echo "::notice::fix commit registered to QA Dashboard (commit=$COMMIT_HASH, source=developer, strategy=$STRATEGY)"
+            -d "$PAYLOAD" || echo "000")
+          if [ "$HTTP" = "200" ] || [ "$HTTP" = "201" ]; then
+            echo "::notice::fix commit registered to QA Dashboard (commit=$COMMIT_HASH, source=developer, strategy=$STRATEGY, HTTP=$HTTP)"
+          else
+            echo "::warning::QA Dashboard 등록 스킵 (HTTP $HTTP) — $(head -c 300 /tmp/qa_resp.txt 2>/dev/null)"
+          fi
