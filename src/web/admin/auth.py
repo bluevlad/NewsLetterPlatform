@@ -185,6 +185,9 @@ def _verify_google_id_token(credential: str) -> dict:
         credential,
         google_requests.Request(),
         settings.google_client_id,
+        # 서버-구글 시계 미세 드리프트로 인한 "Token used too early" 401 방지
+        # (구글 권장, 최대 60s). 기본값 0 은 실운영에 너무 엄격.
+        clock_skew_in_seconds=10,
     )
     if idinfo["iss"] not in ("accounts.google.com", "https://accounts.google.com"):
         raise ValueError("Invalid issuer")
