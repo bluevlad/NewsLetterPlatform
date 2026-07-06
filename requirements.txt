@@ -12,7 +12,7 @@ psycopg2-binary>=2.9.9  # SQLite→PostgreSQL 마이그레이션
 aiosmtplib>=3.0.0
 
 # Scheduler
-apscheduler>=3.10.0
+apscheduler>=3.11.3
 
 # Template
 jinja2>=3.1.0
