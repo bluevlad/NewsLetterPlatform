@@ -1,5 +1,6 @@
 """TechBriefing 데이터 수집기 — 3 sources (GitHub Releases / NVD CVE / RSS).
 
+수집 도메인: AI/LLM 생태계 (+ 운영 스택 CVE 잔존 — config.NVD_KEYWORDS 참조).
 각 소스는 독립적으로 fail-safe — 한쪽 실패해도 다른 섹션은 살아남는다.
 LLM 호출은 MVP 범위 외 (raw description / RSS summary 그대로 사용, truncate).
 """
@@ -458,16 +459,16 @@ class TechBriefingCollector:
 def _ecosystem_for_keyword(kw: str) -> str:
     """NVD 키워드 → ecosystem 라벨 매핑."""
     kw_l = kw.lower()
-    if any(x in kw_l for x in ("spring", "tomcat", "log4j", "hibernate")):
+    if any(x in kw_l for x in ("spring", "tomcat")):
         return "java-be"
-    if "kotlin" in kw_l:
-        return "language"
-    if "typescript" in kw_l:
-        return "language"
-    if "next.js" in kw_l:
-        return "react-meta"
-    if "react" in kw_l:
-        return "react-core"
-    if "node" in kw_l:
-        return "runtime"
+    if any(x in kw_l for x in ("pytorch", "hugging face")):
+        return "ml-framework"
+    if "vllm" in kw_l:
+        return "inference"
+    if any(x in kw_l for x in ("ollama", "webui", "llama.cpp")):
+        return "local-llm"
+    if "langchain" in kw_l:
+        return "agent"
+    if "mlflow" in kw_l:
+        return "llm-ops"
     return "tooling"

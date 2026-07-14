@@ -1,9 +1,9 @@
-"""TechBriefing 테넌트 — Java/React 일일 기술 브리핑.
+"""TechBriefing 테넌트 — AI/LLM 일일 기술 브리핑.
 
 3 sources MVP:
-  - GitHub Releases (Spring/React/Kotlin/TS/Vite/Next.js …)
-  - NVD CVE feed (Java/JS 생태)
-  - 공식 블로그 RSS (Spring · React · Kotlin · TypeScript · Next.js · Vite)
+  - GitHub Releases (PyTorch/Transformers/vLLM/Ollama/LangChain/MLX …)
+  - NVD CVE feed (AI 툴체인 + 운영 스택 Spring/Tomcat 잔존)
+  - 공식 블로그 RSS (OpenAI · Hugging Face · Google AI · DeepMind · PyTorch · Ollama)
 
 3 sections:
   1. 오늘의 헤드라인 (top 5, 1프로젝트 1)
@@ -87,4 +87,4 @@ class TechBriefingTenant(BaseTenant):
         if report_date is None:
             report_date = datetime.now()
         date_str = report_date.strftime("%Y-%m-%d")
-        return f"{self.email_subject_prefix} {date_str} Java/React 일일 브리핑"
+        return f"{self.email_subject_prefix} {date_str} AI/LLM 일일 브리핑"

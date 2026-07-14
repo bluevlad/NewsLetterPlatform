@@ -73,7 +73,7 @@ class Settings(BaseSettings):
         env="STANDUP_API_URL"
     )
 
-    # 스케줄러 - TechBriefing (Daily, Java/React 기술 뉴스레터)
+    # 스케줄러 - TechBriefing (Daily, AI/LLM 기술 뉴스레터)
     tech_collect_hour: int = Field(default=6, env="TECH_COLLECT_HOUR")
     tech_collect_minute: int = Field(default=30, env="TECH_COLLECT_MINUTE")
     tech_send_hour: int = Field(default=8, env="TECH_SEND_HOUR")

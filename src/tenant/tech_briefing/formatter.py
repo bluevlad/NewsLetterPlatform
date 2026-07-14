@@ -29,6 +29,11 @@ _STOPWORDS = {
     "new", "support", "supports", "added", "add", "use", "using", "used",
     "introducing", "announcing", "what", "we", "you",
     "ga", "rc", "beta", "alpha", "milestone",
+    # URL/마크다운 잔여 토큰 — AI repo 릴리즈 노트에 링크가 많아 빈출
+    "https", "http", "www", "com", "org", "github", "html", "href",
+    # 추가 일반 불용어 (릴리즈 노트 산문에서 빈출)
+    "that", "this", "when", "not", "now", "can", "will", "has", "have",
+    "full", "changelog", "compare", "pull", "merge", "branch",
 }
 _TOKEN_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9\-]{2,}")
 
@@ -94,6 +99,8 @@ def _enrich(item: Dict[str, Any]) -> Dict[str, Any]:
 def _extract_keywords(text: str) -> List[str]:
     if not text:
         return []
+    # URL 은 통째로 제거 — 경로 조각(github/blob/releases 등)이 키워드로 오르지 않게
+    text = re.sub(r"https?://\S+", " ", text)
     tokens = _TOKEN_PATTERN.findall(text.lower())
     out = []
     for t in tokens:
