@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TechBriefing AI/LLM 일일 브리핑</title>
+    <title>TechBriefing AI 학습·커리어 일일 브리핑</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; background-color: #eff6ff;">
     <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 720px; margin: 0 auto; background-color: #ffffff;">
@@ -12,7 +12,7 @@
         <tr>
             <td style="background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%); padding: 32px 30px; text-align: center;">
                 <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 700; letter-spacing: -0.3px;">TechBriefing</h1>
-                <p style="margin: 8px 0 0 0; color: #bfdbfe; font-size: 15px; font-weight: 600;">AI · LLM 일일 브리핑 · Today's {{ stats.headline_count }}</p>
+                <p style="margin: 8px 0 0 0; color: #bfdbfe; font-size: 15px; font-weight: 600;">AI 학습·커리어 일일 브리핑 · Today's {{ stats.headline_count }}</p>
                 <p style="margin: 12px 0 0 0; color: #ffffff; font-size: 14px;">
                     {{ report_date.strftime('%Y.%m.%d (%a)') }}
                 </p>
@@ -23,7 +23,7 @@
         <tr>
             <td style="padding: 14px 30px 0 30px;">
                 <div style="color:#6b7280; font-size:11px; text-align:right;">
-                    수집: 릴리즈 {{ stats.release_count }} · CVE {{ stats.cve_count }} · 블로그 {{ stats.rss_count }} (총 {{ stats.total_items }})
+                    수집: 교육·세미나 {{ stats.course_count }} · 정책 {{ stats.policy_count }} · 뉴스 {{ stats.news_count }} (총 {{ stats.total_items }})
                 </div>
                 {% if service_summary %}
                 <div style="margin-top:10px;">
@@ -45,72 +45,62 @@
                     🎯 Today's {{ headlines|length }}
                 </h2>
                 {% for h in headlines %}
-                <div style="margin-bottom:18px; padding:16px 18px; background:#ffffff; border:1px solid #e5e7eb; border-left:5px solid {% if h.service_tags %}#4338ca{% else %}#1d4ed8{% endif %}; border-radius:5px;">
+                <div style="margin-bottom:18px; padding:16px 18px; background:#ffffff; border:1px solid #e5e7eb; border-left:5px solid {% if h.is_recruiting %}#b91c1c{% else %}#1d4ed8{% endif %}; border-radius:5px;">
                     <div style="margin-bottom:8px;">
-                        <span style="display:inline-block; background:{{ h.ecosystem_bg }}; color:{{ h.ecosystem_color }}; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;">{{ h.ecosystem_label }}</span>
-                        <span style="display:inline-block; background:#eff6ff; color:#1d4ed8; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; margin-left:4px;">tier {{ h.tier }}</span>
-                        {% for tag in h.service_tags %}
-                        <span style="display:inline-block; background:#eef2ff; color:#3730a3; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; margin-left:4px;">🎯 {{ tag.service }} +{{ tag.score }}</span>
-                        {% endfor %}
-                        {% if h.source == 'nvd_cve' and h.cvss %}
-                        <span style="display:inline-block; background:#fef2f2; color:#b91c1c; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; margin-left:4px;">CVSS {{ h.cvss }}{% if h.severity %} · {{ h.severity|upper }}{% endif %}</span>
+                        <span style="display:inline-block; background:{{ h.category_bg }}; color:{{ h.category_color }}; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.4px;">{{ h.category_label }}</span>
+                        {% if h.is_recruiting %}
+                        <span style="display:inline-block; background:#fef2f2; color:#b91c1c; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; margin-left:4px;">📢 모집·마감</span>
+                        {% endif %}
+                        {% if h.keyword %}
+                        <span style="display:inline-block; background:#eff6ff; color:#1d4ed8; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; margin-left:4px;">{{ h.keyword }}</span>
                         {% endif %}
                         <span style="color:#6b7280; font-size:11px; margin-left:6px;">
-                            {% if h.source == 'github_release' %}Release{% elif h.source == 'nvd_cve' %}CVE{% elif h.source == 'rss_blog' %}{{ h.blog_label }}{% else %}{{ h.source }}{% endif %} · {{ h.published_display }}
+                            {{ h.origin }} · {{ h.published_display }}
                         </span>
                     </div>
-                    {% set show_orig = h.title_ko and h.title_ko != h.title_safe %}
-                    <div style="color:#111827; font-size:16px; font-weight:700; line-height:1.4; margin-bottom:{% if show_orig %}3px{% else %}8px{% endif %};">
-                        {% if h.url %}<a href="{{ h.url }}" style="color:#111827; text-decoration:none;">{{ h.title_ko or h.title_safe }}</a>{% else %}{{ h.title_ko or h.title_safe }}{% endif %}
+                    <div style="color:#111827; font-size:16px; font-weight:700; line-height:1.4; margin-bottom:8px;">
+                        {% if h.url %}<a href="{{ h.url }}" style="color:#111827; text-decoration:none;">{{ h.title_safe }}</a>{% else %}{{ h.title_safe }}{% endif %}
                     </div>
-                    {# 번역 결과가 원제와 다를 때만 영문 원제를 작게 병기 (CVE-ID 등 동일하면 생략) #}
-                    {% if show_orig %}
-                    <div style="color:#9ca3af; font-size:11px; line-height:1.4; margin-bottom:8px;">{{ h.title_safe }}</div>
-                    {% endif %}
 
-                    {# Phase 2 deep analysis (LLM) — 있으면 4섹션 노출, 없으면 summary fallback #}
+                    {# Deep analysis (LLM) — 있으면 4섹션 노출, 없으면 summary fallback #}
                     {% if h.analysis %}
-                        {% if h.analysis.what_changed %}
+                        {% if h.analysis.what_it_is %}
                         <div style="margin-top:10px;">
-                            <div style="color:#6b7280; font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:4px;">무엇이 바뀌었나</div>
-                            <div style="color:#374151; font-size:13px; line-height:1.6;">{{ h.analysis.what_changed }}</div>
+                            <div style="color:#6b7280; font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:4px;">무슨 소식인가</div>
+                            <div style="color:#374151; font-size:13px; line-height:1.6;">{{ h.analysis.what_it_is }}</div>
                         </div>
                         {% endif %}
-                        {% if h.analysis.service_impact %}
+                        {% if h.analysis.who_benefits %}
                         <div style="margin-top:10px; padding:10px 12px; background:#eef2ff; border-radius:4px;">
-                            <div style="color:#3730a3; font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:4px;">서비스 영향</div>
-                            <div style="color:#1e1b4b; font-size:13px; line-height:1.6;">{{ h.analysis.service_impact }}</div>
+                            <div style="color:#3730a3; font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:4px;">누구에게 유용한가</div>
+                            <div style="color:#1e1b4b; font-size:13px; line-height:1.6;">{{ h.analysis.who_benefits }}</div>
                         </div>
                         {% endif %}
                         {% if h.analysis.recommendation and h.analysis.recommendation.level %}
                         {% set rec = h.analysis.recommendation %}
-                        {% set rec_color = {'ADOPT':'#b91c1c','TRIAL':'#c2410c','ASSESS':'#a16207','HOLD':'#475569'}.get(rec.level, '#475569') %}
-                        {% set rec_bg    = {'ADOPT':'#fee2e2','TRIAL':'#ffedd5','ASSESS':'#fef9c3','HOLD':'#f1f5f9'}.get(rec.level, '#f1f5f9') %}
-                        {% set rec_emoji = {'ADOPT':'🟥','TRIAL':'🟧','ASSESS':'🟨','HOLD':'⬜'}.get(rec.level, '⬜') %}
+                        {% set rec_color = {'APPLY':'#b91c1c','PLAN':'#c2410c','WATCH':'#a16207','SKIP':'#475569'}.get(rec.level, '#475569') %}
+                        {% set rec_bg    = {'APPLY':'#fee2e2','PLAN':'#ffedd5','WATCH':'#fef9c3','SKIP':'#f1f5f9'}.get(rec.level, '#f1f5f9') %}
+                        {% set rec_emoji = {'APPLY':'🟥','PLAN':'🟧','WATCH':'🟨','SKIP':'⬜'}.get(rec.level, '⬜') %}
+                        {% set rec_label = {'APPLY':'지금 신청·확인','PLAN':'참여 계획 수립','WATCH':'후속 소식 관찰','SKIP':'관련성 낮음'}.get(rec.level, rec.level) %}
                         <div style="margin-top:10px; padding:10px 12px; background:{{ rec_bg }}; border-radius:4px;">
                             <div style="color:{{ rec_color }}; font-size:11px; font-weight:700; margin-bottom:4px;">
-                                {{ rec_emoji }} 권장: {{ rec.level }}
+                                {{ rec_emoji }} 권장: {{ rec.level }} — {{ rec_label }}
                             </div>
                             {% if rec.rationale %}
                             <div style="color:#374151; font-size:12px; line-height:1.55;">{{ rec.rationale }}</div>
                             {% endif %}
                         </div>
                         {% endif %}
-                        {% if h.analysis.estimated_cost %}
+                        {% if h.analysis.action_tip %}
                         <div style="margin-top:8px; color:#6b7280; font-size:11px;">
-                            <strong>예상 코스트:</strong> {{ h.analysis.estimated_cost }}
+                            <strong>다음 행동:</strong> {{ h.analysis.action_tip }}
                         </div>
                         {% endif %}
                     {% else %}
-                        {# LLM analyzer 미동작 or 실패시 fallback — summary (번역 있으면 한글) #}
-                        {% if h.summary_ko or h.summary_safe %}
-                        <div style="color:#4b5563; font-size:13px; line-height:1.6;">{{ h.summary_ko or h.summary_safe }}</div>
+                        {# LLM analyzer 미동작 or 실패시 fallback — summary #}
+                        {% if h.summary_safe %}
+                        <div style="color:#4b5563; font-size:13px; line-height:1.6;">{{ h.summary_safe }}</div>
                         {% endif %}
-                        {% for tag in h.service_tags %}{% if tag.reason %}
-                        <div style="margin-top:8px; padding:6px 10px; background:#eef2ff; border-radius:4px; color:#3730a3; font-size:11px;">
-                            <strong>{{ tag.service }}</strong> · {{ tag.reason }}
-                        </div>
-                        {% endif %}{% endfor %}
                     {% endif %}
                 </div>
                 {% endfor %}
@@ -136,18 +126,10 @@
                             <td style="padding:5px 8px; border-bottom:1px solid #f3f4f6;">
                                 <div style="color:#374151; font-size:12px; line-height:1.5;">
                                     {% if it.url %}<a href="{{ it.url }}" style="color:#374151; text-decoration:none;">{% endif %}
-                                    {% if it.source == 'nvd_cve' %}
-                                        <strong>{{ it.cve_id }}</strong>{% if it.cvss %} <span style="color:#b91c1c;">CVSS {{ it.cvss }}</span>{% endif %} · {{ it.matched_keyword }}
-                                    {% elif it.source == 'github_release' %}
-                                        <strong>{{ it.project_short }}</strong> {{ it.tag }}{% if it.extra_count and it.extra_count > 0 %} <span style="color:#6b7280;">외 {{ it.extra_count }}개 버전</span>{% endif %}{% if it.group_breaking %} <span style="color:#854d0e;">[breaking]</span>{% endif %}{% if it.group_deprecation %} <span style="color:#6d28d9;">[deprecated]</span>{% endif %}
-                                    {% else %}
-                                        {{ it.title_safe[:90] }}{% if it.title_safe|length > 90 %}…{% endif %}
-                                    {% endif %}
+                                    {{ it.title_safe[:90] }}{% if it.title_safe|length > 90 %}…{% endif %}
                                     {% if it.url %}</a>{% endif %}
-                                    {% for tag in it.service_tags %}
-                                    <span style="display:inline-block; background:#eef2ff; color:#3730a3; padding:1px 5px; border-radius:6px; font-size:10px; font-weight:700; margin-left:4px;">🎯 {{ tag.service }}</span>
-                                    {% endfor %}
-                                    <span style="color:#9ca3af; font-size:10px; margin-left:4px;">· {{ it.published_display }}</span>
+                                    {% if it.is_recruiting %}<span style="color:#b91c1c; font-size:10px; font-weight:700; margin-left:4px;">📢</span>{% endif %}
+                                    <span style="color:#9ca3af; font-size:10px; margin-left:4px;">· {{ it.origin }} · {{ it.published_display }}</span>
                                 </div>
                             </td>
                         </tr>
@@ -168,17 +150,17 @@
         </tr>
         {% endif %}
 
-        <!-- Footer mini-list: deprecations + 키워드 트렌드 -->
-        {% if footer_extras.deprecations or footer_extras.keywords %}
+        <!-- Footer mini-list: 모집·마감 임박 + 키워드 트렌드 -->
+        {% if footer_extras.recruiting or footer_extras.keywords %}
         <tr>
             <td style="padding: 18px 30px 0 30px;">
                 <div style="border-top:1px solid #e5e7eb; padding-top:14px;">
-                    {% if footer_extras.deprecations %}
+                    {% if footer_extras.recruiting %}
                     <div style="margin-bottom:10px;">
-                        <div style="color:#6d28d9; font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px;">Deprecations · {{ footer_extras.deprecations|length }}</div>
+                        <div style="color:#b91c1c; font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px;">📢 모집·마감 임박 · {{ footer_extras.recruiting|length }}</div>
                         <div style="color:#6b7280; font-size:11px; line-height:1.7;">
-                            {% for d in footer_extras.deprecations %}
-                            {% if d.url %}<a href="{{ d.url }}" style="color:#6b7280;">{{ d.project_short }} {{ d.tag }}</a>{% else %}{{ d.project_short }} {{ d.tag }}{% endif %}{% if not loop.last %} · {% endif %}
+                            {% for r in footer_extras.recruiting %}
+                            {% if r.url %}<a href="{{ r.url }}" style="color:#6b7280;">{{ r.title_safe[:60] }}</a>{% else %}{{ r.title_safe[:60] }}{% endif %}{% if not loop.last %}<br>{% endif %}
                             {% endfor %}
                         </div>
                     </div>
@@ -202,8 +184,8 @@
         <tr>
             <td style="padding: 22px 30px 26px 30px;">
                 <div style="border-top:1px solid #e5e7eb; padding-top:14px; color:#6b7280; font-size:10px; line-height:1.6;">
-                    데이터 소스: GitHub Releases · NVD CVE · 공식 블로그 RSS (OpenAI · Hugging Face · Google AI · DeepMind · PyTorch · Ollama).<br>
-                    importance = tier + source + CVSS − age, relevance = Service Profile 매칭. 분석 = qwen2.5-coder (Ollama, 로컬).<br>
+                    데이터 소스: Google News RSS 키워드 검색 (AI 교육 · 부트캠프 · 세미나) · 정책브리핑 korea.kr — SkillRadar 수집 대상 기반.<br>
+                    importance = 카테고리 + 모집신호 + 공식출처 − age. 분석 = exaone3.5 (Ollama, 로컬).<br>
                     생성: {{ generated_at.strftime('%Y-%m-%d %H:%M') }}
                 </div>
                 <div style="margin-top:12px; color:#9ca3af; font-size:11px;">

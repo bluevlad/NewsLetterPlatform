@@ -1,39 +1,31 @@
 """TechBriefing 시그널 기반 스코어링 + Service Relevance 평가.
 
-LLM 호출 없이 명시적 시그널(CVSS, project tier, days_old, source 가중치)만으로
-0~10 스케일 importance score 산출.
+LLM 호출 없이 명시적 시그널(카테고리 가중, 모집·마감 신호, 공식 출처,
+days_old)만으로 0~10 스케일 importance score 산출.
 
-추가로 운영 서비스(hopenvision 등)의 Service Profile 시그널과 매칭하여
-서비스별 relevance 점수를 부여 — 헤드라인 선별과 메일 카드 태깅에 사용.
+추가로 Service Profile 시그널과 매칭하여 서비스별 relevance 점수를 부여 —
+헤드라인 선별과 메일 카드 태깅에 사용. (교육·커리어 도메인에서는 매칭이
+드물지만 메커니즘은 범용이라 유지.)
 
 importance_score 수식 (요약):
     base = 5.0
-    + tier_weight    (S=+1.5, A=+1.0, B=+0.5)
-    + source_weight  (cve=+2.5, github_release=+1.5, rss_blog=+0.8)
-    + cvss_boost     (CVSS >= 9 → +2.0, >=7 → +1.0, >=4 → +0.5)
-    + breaking_boost (release.is_breaking → +1.0)
-    - age_penalty    (days_old / 7, max 1.5)
+    + category_weight  (policy=+1.5, course=+1.2, seminar=+1.0, news=+0.8)
+    + recruiting_boost (모집/신청/접수/마감 힌트 → +1.0)
+    + official_boost   (정부 출처 korea.kr → +0.7)
+    - age_penalty      (days_old / 2, max 2.0 — 뉴스 사이클 기준)
     clamp [0, 10]
 
 service_relevance 수식 (per 서비스):
     + per_high_interest × matched_high (cap high_cap)
     + per_known_debt    × matched_debt (cap debt_cap)
     - per_low_interest  × matched_low
-    clamp [-per_low_interest * inf, high_cap + debt_cap]
 """
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from .config import PROJECT_TIER_WEIGHT
+from .config import CATEGORY_WEIGHT
 from .service_profiles import ServiceProfile, load_profiles
-
-
-_SOURCE_WEIGHT = {
-    "nvd_cve":        2.5,
-    "github_release": 1.5,
-    "rss_blog":       0.8,
-}
 
 
 def _days_old(published: Any) -> float:
@@ -56,28 +48,18 @@ def score_item(item: Dict[str, Any]) -> float:
     """단일 아이템 importance score 계산."""
     base = 5.0
 
-    tier = item.get("tier") or "B"
-    tier_weight_map = {"S": 1.5, "A": 1.0, "B": 0.5}
-    base += tier_weight_map.get(tier, 0.5)
+    category = item.get("category") or "news"
+    base += CATEGORY_WEIGHT.get(category, 0.8)
 
-    source = item.get("source") or ""
-    base += _SOURCE_WEIGHT.get(source, 0.0)
-
-    if source == "nvd_cve":
-        cvss = item.get("cvss")
-        if isinstance(cvss, (int, float)):
-            if cvss >= 9.0:
-                base += 2.0
-            elif cvss >= 7.0:
-                base += 1.0
-            elif cvss >= 4.0:
-                base += 0.5
-
-    if source == "github_release" and item.get("is_breaking"):
+    if item.get("is_recruiting"):
         base += 1.0
 
+    origin = (item.get("origin") or "") + " " + (item.get("url") or "")
+    if "korea.kr" in origin or "정책브리핑" in origin:
+        base += 0.7
+
     days = _days_old(item.get("published_at"))
-    age_penalty = min(1.5, days / 7.0)
+    age_penalty = min(2.0, days / 2.0)
     base -= age_penalty
 
     return max(0.0, min(10.0, round(base, 2)))
@@ -87,8 +69,7 @@ def _haystack(item: Dict[str, Any]) -> str:
     """매칭 대상 텍스트 — title + summary (소문자)."""
     return (
         (item.get("title") or "") + " " +
-        (item.get("summary") or "") + " " +
-        (item.get("release_name") or "")
+        (item.get("summary") or "")
     ).lower()
 
 

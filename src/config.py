@@ -73,13 +73,11 @@ class Settings(BaseSettings):
         env="STANDUP_API_URL"
     )
 
-    # 스케줄러 - TechBriefing (Daily, AI/LLM 기술 뉴스레터)
+    # 스케줄러 - TechBriefing (Daily, AI 학습·커리어 뉴스레터)
     tech_collect_hour: int = Field(default=6, env="TECH_COLLECT_HOUR")
     tech_collect_minute: int = Field(default=30, env="TECH_COLLECT_MINUTE")
     tech_send_hour: int = Field(default=8, env="TECH_SEND_HOUR")
     tech_send_minute: int = Field(default=0, env="TECH_SEND_MINUTE")
-    # 선택 — GitHub API rate limit 완화용 (60/h → 5000/h). 빈 값이면 unauthenticated.
-    tech_github_token: str = Field(default="", env="TECH_GITHUB_TOKEN")
 
     # TechBriefing — Ollama 기반 LLM deep analyzer
     # localhost:11434 (개발/macOS) · host.docker.internal:11434 (Docker 컨테이너)
@@ -89,8 +87,9 @@ class Settings(BaseSettings):
     tech_briefing_llm_enabled: bool = Field(
         default=True, env="TECH_BRIEFING_LLM_ENABLED"
     )
+    # 한국어 교육·커리어 콘텐츠 분석 — 한국어 특화 exaone (SkillRadar compose 와 동일 모델)
     tech_briefing_llm_model: str = Field(
-        default="qwen2.5-coder:14b", env="TECH_BRIEFING_LLM_MODEL"
+        default="exaone3.5:7.8b", env="TECH_BRIEFING_LLM_MODEL"
     )
     tech_briefing_llm_timeout_sec: int = Field(
         default=90, env="TECH_BRIEFING_LLM_TIMEOUT_SEC"
@@ -100,10 +99,6 @@ class Settings(BaseSettings):
     )
     tech_briefing_llm_temperature: float = Field(
         default=0.2, env="TECH_BRIEFING_LLM_TEMPERATURE"
-    )
-    # Today's N 헤드라인 제목/요약 한글 번역 (analyzer 와 독립 배치 1콜)
-    tech_briefing_translate_enabled: bool = Field(
-        default=True, env="TECH_BRIEFING_TRANSLATE_ENABLED"
     )
     allergy_insight_admin_name: str = Field(
         default="",

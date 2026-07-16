@@ -1,178 +1,193 @@
-"""TechBriefing digest 고도화 테스트.
+"""TechBriefing digest 테스트 — 교육·커리어 도메인.
 
-#1 릴리즈 버전 통합(_consolidate_releases)
-#2 보안 CVE 적용/기타 분리(_split_cves_by_relevance + format)
+#1 헤드라인 선별 (카테고리 다양성 + 제목 중복 제거)
+#2 카테고리별 digest 그룹 구성 (교육과정/세미나·행사/정책·지원/뉴스)
+#3 푸터 모집·마감 임박 + 한글 키워드 트렌드
+#4 collector 분류/스코어 시그널
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from src.config import settings
+from src.tenant.tech_briefing.collector import _classify_course, _is_recruiting
 from src.tenant.tech_briefing.formatter import TechBriefingFormatter
+from src.tenant.tech_briefing.scorer import score_item
 
 
 @pytest.fixture(autouse=True)
 def _disable_llm():
     """digest 테스트는 LLM 불필요 — Ollama 호출 차단."""
-    orig_t = settings.tech_briefing_translate_enabled
     orig_l = settings.tech_briefing_llm_enabled
-    settings.tech_briefing_translate_enabled = False
     settings.tech_briefing_llm_enabled = False
     yield
-    settings.tech_briefing_translate_enabled = orig_t
     settings.tech_briefing_llm_enabled = orig_l
 
 
-def _release(project_short, tag, published, *, breaking=False,
-             deprecation=False, score=6.0):
+def _item(title, category, *, source=None, keyword="AI 교육", origin="구글뉴스",
+          url=None, recruiting=False, published=None, summary=""):
+    url = url or f"https://news.example/{abs(hash(title))}"
     return {
-        "source": "github_release",
-        "project": f"org/{project_short}",
-        "project_short": project_short,
-        "tag": tag,
-        "title": f"{project_short} {tag}",
-        "ecosystem": "tooling",
-        "tier": "B",
-        "published_at": published,
-        "summary": "",
-        "is_breaking": breaking,
-        "has_deprecation": deprecation,
-        "importance_score": score,
-        "relevance_max": 0.0,
-        "dedup_key": f"gh-release:org/{project_short}:{tag}",
+        "source": source or ("course" if category in ("course", "seminar") else category),
+        "category": category,
+        "keyword": keyword,
+        "origin": origin,
+        "title": title,
+        "url": url,
+        "published_at": published or datetime.now(timezone.utc),
+        "summary": summary,
+        "is_recruiting": recruiting,
+        "dedup_key": f"{category}:{url}",
     }
 
 
-def _cve(idx, ecosystem):
+def _payload(news=(), policy=(), course=()):
     return {
-        "source": "nvd_cve",
-        "project": f"cve-proj-{idx}",
-        "project_short": f"p{idx}",
-        "ecosystem": ecosystem,
-        "tier": "S",
-        "title": f"CVE-2026-X{idx}",
-        "cve_id": f"CVE-2026-X{idx}",
-        "summary": "",
-        "cvss": 9.5,
-        "severity": "critical",
-        "matched_keyword": "x",
-        "published_at": datetime(2026, 5, 19),
-        "dedup_key": f"cve:CVE-2026-X{idx}",
+        "tech_daily": {
+            "report_date": datetime.now(timezone.utc).isoformat(),
+            "news_items": list(news),
+            "policy_items": list(policy),
+            "course_items": list(course),
+            "stats": {
+                "news_count": len(news),
+                "policy_count": len(policy),
+                "course_count": len(course),
+            },
+        }
     }
 
 
-# ─── #1 릴리즈 버전 통합 ───────────────────────────────────────────
+# ─── collector 시그널 ───────────────────────────────────────────────
 
-def test_consolidate_releases_groups_by_project():
-    """같은 프로젝트의 여러 버전 → 1개 통합 엔트리."""
-    fmt = TechBriefingFormatter()
-    items = [
-        _release("hibernate-orm", "7.3.5", datetime(2026, 5, 19), score=6.0),
-        _release("hibernate-orm", "7.3.4", datetime(2026, 5, 15),
-                 breaking=True, score=6.5),
-        _release("hibernate-orm", "7.3.3", datetime(2026, 5, 10), score=5.0),
-        _release("react", "19.2.0", datetime(2026, 5, 18),
-                 deprecation=True, score=7.0),
-    ]
-    result = fmt._consolidate_releases(items)
-
-    assert len(result) == 2  # 2개 프로젝트로 통합
-    by_proj = {e["project_short"]: e for e in result}
-
-    hib = by_proj["hibernate-orm"]
-    assert hib["version_count"] == 3
-    assert hib["extra_count"] == 2
-    assert hib["tag"] == "7.3.5"            # 대표 = 최신 발행
-    assert hib["group_breaking"] is True    # 7.3.4 가 breaking → 그룹 OR
-    assert hib["group_deprecation"] is False
-
-    react = by_proj["react"]
-    assert react["extra_count"] == 0
-    assert react["group_deprecation"] is True
-
-    # 그룹 정렬 — react(7.0) > hibernate-orm(max 6.5)
-    assert result[0]["project_short"] == "react"
+def test_classify_course_seminar_hints():
+    assert _classify_course("생성형 AI 컨퍼런스 개최") == "seminar"
+    assert _classify_course("AI 실무 Webinar 안내") == "seminar"
+    assert _classify_course("KDT 부트캠프 5기 모집") == "course"
 
 
-def test_consolidate_releases_empty():
-    assert TechBriefingFormatter()._consolidate_releases([]) == []
+def test_is_recruiting_hints():
+    assert _is_recruiting("AI 부트캠프 수강생 모집") is True
+    assert _is_recruiting("지원사업 접수 마감 임박") is True
+    assert _is_recruiting("AI 교육 시장 동향 분석") is False
 
 
-# ─── #2 보안 CVE 적용/기타 분리 ──────────────────────────────────
+# ─── scorer ─────────────────────────────────────────────────────────
 
-def test_split_cves_by_relevance():
-    """service_relevance 매칭 여부로 적용/기타 분리, 순서 보존."""
-    applied_cve = {"cve_id": "CVE-A",
-                   "service_relevance": {"hopenvision": {"score": 4.0,
-                                                         "reason": "관심: Tomcat"}}}
-    zero_score = {"cve_id": "CVE-B",
-                  "service_relevance": {"hopenvision": {"score": 0.0}}}
-    no_key = {"cve_id": "CVE-C"}
+def test_score_policy_beats_news():
+    """같은 조건이면 정책(공식 출처) > 뉴스."""
+    now = datetime.now(timezone.utc)
+    policy = score_item({
+        "category": "policy", "origin": "정책브리핑",
+        "url": "https://www.korea.kr/x", "published_at": now,
+    })
+    news = score_item({
+        "category": "news", "origin": "구글뉴스",
+        "url": "https://news.example/y", "published_at": now,
+    })
+    assert policy > news
 
-    applied, other = TechBriefingFormatter._split_cves_by_relevance(
-        [applied_cve, zero_score, no_key]
+
+def test_score_recruiting_boost():
+    now = datetime.now(timezone.utc)
+    base = {"category": "course", "origin": "구글뉴스", "published_at": now}
+    plain = score_item(dict(base))
+    recruiting = score_item(dict(base, is_recruiting=True))
+    assert recruiting == pytest.approx(plain + 1.0)
+
+
+def test_score_age_penalty():
+    fresh = score_item({
+        "category": "news",
+        "published_at": datetime.now(timezone.utc),
+    })
+    stale = score_item({
+        "category": "news",
+        "published_at": datetime.now(timezone.utc) - timedelta(days=10),
+    })
+    assert fresh - stale == pytest.approx(2.0, abs=0.1)  # cap 2.0
+
+
+# ─── formatter: 헤드라인 ────────────────────────────────────────────
+
+def test_headline_category_diversity():
+    """같은 카테고리는 최대 2건 — 나머지 슬롯은 다른 카테고리로."""
+    course = [_item(f"부트캠프 {i} 모집", "course", recruiting=True) for i in range(5)]
+    news = [_item(f"AI 뉴스 {i}", "news") for i in range(3)]
+    ctx = TechBriefingFormatter().format(_payload(news=news, course=course))
+
+    categories = [h["category"] for h in ctx["headlines"]]
+    assert categories.count("course") <= 2
+    assert "news" in categories
+    assert len(ctx["headlines"]) <= 5
+
+
+def test_headline_duplicate_title_removed():
+    """같은 기사가 여러 키워드에서 잡혀도 제목 기준 1건만."""
+    dup1 = _item("AI 부트캠프 대규모 모집", "course", url="https://a.example/1")
+    dup2 = _item("AI 부트캠프 대규모 모집", "course", url="https://b.example/2")
+    ctx = TechBriefingFormatter().format(_payload(course=[dup1, dup2]))
+    titles = [h["title_safe"] for h in ctx["headlines"]]
+    assert titles.count("AI 부트캠프 대규모 모집") == 1
+
+
+# ─── formatter: digest 그룹 ─────────────────────────────────────────
+
+def test_digest_groups_by_category():
+    """헤드라인 제외분이 카테고리 그룹으로 배치되고 한글 라벨을 단다."""
+    course = [_item(f"교육 {i}", "course") for i in range(4)]
+    seminar = [_item(f"세미나 {i} 컨퍼런스", "seminar") for i in range(3)]
+    policy = [_item(f"정책 {i}", "policy", origin="정책브리핑") for i in range(3)]
+    news = [_item(f"뉴스 {i}", "news") for i in range(3)]
+    ctx = TechBriefingFormatter().format(
+        _payload(news=news, policy=policy, course=course + seminar)
     )
-    assert [c["cve_id"] for c in applied] == ["CVE-A"]
-    assert [c["cve_id"] for c in other] == ["CVE-B", "CVE-C"]
+
+    labels = [g["label"] for g in ctx["digest_groups"]]
+    assert set(labels) <= {"교육과정", "세미나·행사", "정책·지원", "뉴스"}
+    assert ctx["digest_total"] == sum(len(g["entries"]) for g in ctx["digest_groups"])
+    # 헤드라인과 digest 는 겹치지 않음
+    headline_keys = {h["dedup_key"] for h in ctx["headlines"]}
+    for g in ctx["digest_groups"]:
+        for e in g["entries"]:
+            assert e["dedup_key"] not in headline_keys
 
 
-def test_format_digest_structure():
-    """format() — 릴리즈는 프로젝트 통합, CVE는 적용/기타 그룹 분리."""
-    fmt = TechBriefingFormatter()
-    # Tomcat(hopenvision high_interest) 매칭 CVE 7개 — 서로 다른 ecosystem.
-    # relevance 부스트로 점수가 높아 5개는 헤드라인, 2개는 digest "적용 프로젝트".
-    ecos = ["java-be", "react-core", "react-state", "react-meta",
-            "language", "runtime", "tooling"]
-    tomcat_cves = []
-    for i, eco in enumerate(ecos):
-        tomcat_cves.append({
-            "source": "nvd_cve", "project": f"tomcat-{i}",
-            "project_short": f"tomcat-{i}", "ecosystem": eco, "tier": "S",
-            "title": f"CVE-2026-T{i} Apache Tomcat flaw",
-            "cve_id": f"CVE-2026-T{i}",
-            "summary": "Apache Tomcat vulnerability",
-            "cvss": 7.0, "severity": "high", "matched_keyword": "tomcat",
-            "published_at": datetime(2026, 5, 19),
-            "dedup_key": f"cve:CVE-2026-T{i}",
-        })
-    # express CVE — hopenvision 미매칭 → digest "기타".
-    express_cve = {
-        "source": "nvd_cve", "project": "express", "project_short": "express",
-        "ecosystem": "styling", "tier": "S",
-        "title": "CVE-2026-8888 express flaw", "cve_id": "CVE-2026-8888",
-        "summary": "A web framework path traversal issue",
-        "cvss": 5.0, "severity": "medium", "matched_keyword": "express",
-        "published_at": datetime(2026, 5, 19), "dedup_key": "cve:CVE-2026-8888",
-    }
-    releases = [
-        _release("hibernate-orm", "7.3.5", datetime(2026, 5, 19)),
-        _release("hibernate-orm", "7.3.4", datetime(2026, 5, 15)),
-        _release("react", "19.2.0", datetime(2026, 5, 18)),
+def test_digest_group_cap():
+    course = [_item(f"교육 {i}", "course") for i in range(20)]
+    ctx = TechBriefingFormatter().format(_payload(course=course))
+    for g in ctx["digest_groups"]:
+        assert len(g["entries"]) <= TechBriefingFormatter.DIGEST_PER_GROUP_LIMIT
+
+
+# ─── formatter: 푸터 ────────────────────────────────────────────────
+
+def test_footer_recruiting_list():
+    recruiting = [_item(f"부트캠프 {i}기 모집", "course", recruiting=True) for i in range(8)]
+    plain = [_item("AI 교육 동향", "news")]
+    ctx = TechBriefingFormatter().format(_payload(news=plain, course=recruiting))
+
+    footer = ctx["footer_extras"]["recruiting"]
+    assert 0 < len(footer) <= TechBriefingFormatter.FOOTER_RECRUITING_LIMIT
+    assert all(r["is_recruiting"] for r in footer)
+
+
+def test_keyword_trend_extracts_hangul():
+    items = [
+        _item(f"엔비디아 채용연계 과정 {i}", "course",
+              summary="엔비디아 협력 채용연계 교육") for i in range(3)
     ]
-    payload = {"tech_daily": {
-        "github_releases": releases,
-        "cves": tomcat_cves + [express_cve],
-        "rss_articles": [],
-        "report_date": "2026-05-20",
-        "stats": {},
-    }}
-    ctx = fmt.format(payload)
-    groups = {g["label"]: g for g in ctx["digest_groups"]}
+    ctx = TechBriefingFormatter().format(_payload(course=items))
+    keywords = [k["keyword"] for k in ctx["footer_extras"]["keywords"]]
+    assert "엔비디아" in keywords
+    # 검색 키워드 구성어(교육 등)는 stopword 로 제외
+    assert "교육" not in keywords
 
-    # #1 — 릴리즈 3건이 2개 프로젝트로 통합
-    assert "릴리즈" in groups
-    rel_entries = groups["릴리즈"]["entries"]
-    assert len(rel_entries) == 2
-    hib = next(e for e in rel_entries if e["project_short"] == "hibernate-orm")
-    assert hib["extra_count"] == 1
 
-    # #2 — 보안 적용/기타 그룹 분리
-    assert "🎯 보안 · 적용 프로젝트" in groups
-    assert "보안 · 기타" in groups
-    applied_ids = {e["cve_id"] for e in groups["🎯 보안 · 적용 프로젝트"]["entries"]}
-    other_ids = {e["cve_id"] for e in groups["보안 · 기타"]["entries"]}
-    # 적용 프로젝트 = Tomcat 매칭 CVE 잔여분
-    assert applied_ids and all(cid.startswith("CVE-2026-T") for cid in applied_ids)
-    # 기타 = 미매칭 express
-    assert "CVE-2026-8888" in other_ids
+# ─── formatter: 빈 입력 ─────────────────────────────────────────────
+
+def test_empty_payload_yields_empty_context():
+    ctx = TechBriefingFormatter().format({})
+    assert ctx["headlines"] == []
+    assert ctx["digest_groups"] == []
+    assert ctx["stats"]["total_items"] == 0

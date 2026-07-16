@@ -1,14 +1,14 @@
-"""TechBriefing 테넌트 — AI/LLM 일일 기술 브리핑.
+"""TechBriefing 테넌트 — AI 학습·커리어 일일 브리핑.
 
-3 sources MVP:
-  - GitHub Releases (PyTorch/Transformers/vLLM/Ollama/LangChain/MLX …)
-  - NVD CVE feed (AI 툴체인 + 운영 스택 Spring/Tomcat 잔존)
-  - 공식 블로그 RSS (OpenAI · Hugging Face · Google AI · DeepMind · PyTorch · Ollama)
+3 sources (SkillRadar 수집 대상과 동일 기반):
+  - 뉴스 키워드 검색 (Google News RSS — AI 교육/부트캠프/강의)
+  - 정책 (korea.kr 정책 RSS + 정책 키워드 검색)
+  - 교육·세미나 (교육/행사 키워드 검색, 세미나 힌트 분류)
 
 3 sections:
-  1. 오늘의 헤드라인 (top 5, 1프로젝트 1)
-  2. 릴리즈 & 보안 (new_releases / breaking_changes / cves / deprecations)
-  3. 키워드 트렌드 (rising)
+  1. 오늘의 헤드라인 (top 5, 카테고리 다양성)
+  2. 카테고리별 다이제스트 (교육과정 / 세미나·행사 / 정책·지원 / 뉴스)
+  3. 푸터 미니 리스트 (모집·마감 임박 / 키워드 트렌드)
 """
 
 from typing import Any, Dict, List, Optional
@@ -87,4 +87,4 @@ class TechBriefingTenant(BaseTenant):
         if report_date is None:
             report_date = datetime.now()
         date_str = report_date.strftime("%Y-%m-%d")
-        return f"{self.email_subject_prefix} {date_str} AI/LLM 일일 브리핑"
+        return f"{self.email_subject_prefix} {date_str} AI 학습·커리어 일일 브리핑"

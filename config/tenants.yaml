@@ -79,9 +79,9 @@ tenants:
       color_scheme: "Red"
 
   tech-briefing:
-    display_name: "TechBriefing Java/React 일일 브리핑"
-    description: "GitHub Releases · NVD CVE · 공식 블로그 RSS 합성 일일 기술 브리핑 (Java/React)"
-    api_base_url: "(N/A — 외부 GitHub/NVD/RSS 직접 호출)"
+    display_name: "TechBriefing AI 학습·커리어 일일 브리핑"
+    description: "AI 교육과정 · 세미나 · 정책 · 뉴스 큐레이션 일일 브리핑 (SkillRadar 수집 대상 기반)"
+    api_base_url: "(N/A — 외부 Google News RSS/korea.kr 직접 호출)"
     email_subject_prefix: "[TechBriefing]"
     email_template: "tech_briefing/daily_report.html"
     schedule:
