@@ -9,7 +9,7 @@ sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.9  # SQLite→PostgreSQL 마이그레이션
 
 # Email
-aiosmtplib>=3.0.0
+aiosmtplib>=5.1.2
 
 # Scheduler
 apscheduler>=3.10.0
