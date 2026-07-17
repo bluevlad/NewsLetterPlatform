@@ -1,9 +1,8 @@
 """TechBriefing 테넌트 — AI 학습·커리어 일일 브리핑.
 
-3 sources (SkillRadar 수집 대상과 동일 기반):
-  - 뉴스 키워드 검색 (Google News RSS — AI 교육/부트캠프/강의)
-  - 정책 (korea.kr 정책 RSS + 정책 키워드 검색)
-  - 교육·세미나 (교육/행사 키워드 검색, 세미나 힌트 분류)
+데이터 소스: SkillRadar 백엔드(9070) 뉴스레터 공급 API
+  - GET /api/v1/newsletter/daily — 그날의 큐레이션 4종(course/seminar/policy/news)
+  - 수집·정규화·LLM 요약은 SkillRadar 담당, 여기서는 스코어링·편성·발송만
 
 3 sections:
   1. 오늘의 헤드라인 (top 5, 카테고리 다양성)

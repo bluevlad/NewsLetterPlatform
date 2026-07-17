@@ -108,6 +108,7 @@ NewsLetterPlatform/
 | 서비스 | 포트 | Docker 컨테이너명 |
 |--------|------|-------------------|
 | AllergyInsight Backend | 9040 | allergyinsight-backend |
+| SkillRadar Backend | 9070 | skillradar-api |
 
 ## Configuration
 
@@ -121,6 +122,8 @@ NewsLetterPlatform/
 |------|------|------|
 | `ALLERGY_INSIGHT_API_URL` | AllergyInsight Backend base URL | 기본 `http://localhost:9040` |
 | `ALLERGY_INSIGHT_NEWSLETTER_KEY` | 페르소나 적응형 뉴스레터 API 인증 키 (`X-Newsletter-Key`) | AllergyInsight 측 `NEWSLETTER_API_KEY`와 동일 값. 빈 값이면 페르소나 기능 자동 비활성화 |
+| `SKILLRADAR_API_URL` | SkillRadar Backend base URL (TechBriefing 데이터 소스) | 기본 `http://host.docker.internal:9070` |
+| `SKILLRADAR_NEWSLETTER_KEY` | SkillRadar 뉴스레터 공급 API 인증 키 (`X-Newsletter-Key`) | SkillRadar 측 `NEWSLETTER_API_KEY`와 동일 값. 빈 값이면 TechBriefing 수집 스킵 |
 
 ## Help Page 관리
 
