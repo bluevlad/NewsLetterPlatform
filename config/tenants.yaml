@@ -89,6 +89,12 @@ tenants:
       collect_minute: 30
       send_hour: 8
       send_minute: 0
+      # weekly — 매주 금요일 (월~금 daily 이력 집계 + SkillRadar 공개 통계)
+      weekly_day_of_week: "fri"
+      weekly_collect_hour: 6
+      weekly_collect_minute: 0
+      weekly_send_hour: 9
+      weekly_send_minute: 30
     is_active: true
     brand:
       primary_color: "#1d4ed8"

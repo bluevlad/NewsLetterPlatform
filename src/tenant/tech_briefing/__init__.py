@@ -54,7 +54,7 @@ class TechBriefingTenant(BaseTenant):
 
     @property
     def supported_frequencies(self) -> List[str]:
-        return ["daily"]
+        return ["daily", "weekly"]
 
     @property
     def schedule_config(self) -> Dict[str, int]:
@@ -64,6 +64,22 @@ class TechBriefingTenant(BaseTenant):
             "send_hour": settings.tech_send_hour,
             "send_minute": settings.tech_send_minute,
         }
+
+    @property
+    def weekly_schedule_config(self) -> Dict[str, Any]:
+        return {
+            "day_of_week": settings.tech_weekly_day_of_week,
+            "collect_hour": settings.tech_weekly_collect_hour,
+            "collect_minute": settings.tech_weekly_collect_minute,
+            "send_hour": settings.tech_weekly_send_hour,
+            "send_minute": settings.tech_weekly_send_minute,
+        }
+
+    @property
+    def dedup_recent_days(self) -> Optional[int]:
+        """최근 7일 발송 항목 재노출 차단 — SkillRadar 정정 upsert 가
+        fetched_at 을 갱신해 같은 리소스가 재수집되는 케이스 방어."""
+        return 7
 
     async def collect_data(
         self, *,
@@ -75,15 +91,49 @@ class TechBriefingTenant(BaseTenant):
             exclude_companies=exclude_companies,
         )
 
+    async def collect_summary_data(self, newsletter_type: str,
+                                    date_from=None, date_to=None) -> Dict[str, Any]:
+        """weekly: SkillRadar 공개 통계 (보조 데이터 — 본문은 daily 이력 집계)."""
+        if newsletter_type != "weekly":
+            return {}
+        return await self._collector.collect_weekly_summary()
+
     def extract_collection_metrics(self) -> List[Dict[str, Any]]:
         return self._collector.drain_metrics()
 
     def format_report(self, collected_data: Dict[str, Any]) -> Dict[str, Any]:
         return self._formatter.format(collected_data)
 
+    def format_summary_report(self, newsletter_type: str,
+                               history_data: list,
+                               collected_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        if newsletter_type != "weekly":
+            return {}
+        return self._formatter.format_weekly(history_data, collected_data)
+
+    def extract_sent_article_entries(
+        self, context: Dict[str, Any]
+    ) -> List[tuple]:
+        """daily 발송 context 에서 sent_articles 기록 대상 추출.
+
+        메일에 노출된 항목 전부(headlines + digest entries)를 기록 —
+        다음 7일간 동일 리소스 재노출 차단. article_id 는 collector 가
+        SkillRadar UUID 에서 파생한 63-bit dedup_id.
+        """
+        entries: List[tuple] = []
+        for h in context.get("headlines") or []:
+            if h.get("dedup_id") is not None:
+                entries.append((int(h["dedup_id"]), h.get("url"), "headline", None))
+        for group in context.get("digest_groups") or []:
+            for it in group.get("entries") or []:
+                if it.get("dedup_id") is not None:
+                    entries.append((int(it["dedup_id"]), it.get("url"), "digest", None))
+        return entries
+
     def generate_subject(self, report_date=None, newsletter_type: str = "daily") -> str:
         from datetime import datetime
         if report_date is None:
             report_date = datetime.now()
         date_str = report_date.strftime("%Y-%m-%d")
-        return f"{self.email_subject_prefix} {date_str} AI 학습·커리어 일일 브리핑"
+        label = "주간 브리핑" if newsletter_type == "weekly" else "일일 브리핑"
+        return f"{self.email_subject_prefix} {date_str} AI 학습·커리어 {label}"

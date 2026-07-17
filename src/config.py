@@ -90,6 +90,15 @@ class Settings(BaseSettings):
     tech_send_hour: int = Field(default=8, env="TECH_SEND_HOUR")
     tech_send_minute: int = Field(default=0, env="TECH_SEND_MINUTE")
 
+    # 스케줄러 - TechBriefing (Weekly: 매주 금요일)
+    # _get_period_range("weekly") 가 "이번 주 월요일~오늘" 이라 금요일 발송 기준
+    # (AllergyInsight weekly 와 동일한 이유).
+    tech_weekly_day_of_week: str = Field(default="fri", env="TECH_WEEKLY_DAY_OF_WEEK")
+    tech_weekly_collect_hour: int = Field(default=6, env="TECH_WEEKLY_COLLECT_HOUR")
+    tech_weekly_collect_minute: int = Field(default=0, env="TECH_WEEKLY_COLLECT_MINUTE")
+    tech_weekly_send_hour: int = Field(default=9, env="TECH_WEEKLY_SEND_HOUR")
+    tech_weekly_send_minute: int = Field(default=30, env="TECH_WEEKLY_SEND_MINUTE")
+
     # TechBriefing — Ollama 기반 LLM deep analyzer
     # localhost:11434 (개발/macOS) · host.docker.internal:11434 (Docker 컨테이너)
     ollama_base_url: str = Field(

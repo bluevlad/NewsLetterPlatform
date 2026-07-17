@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechBriefing AI 학습·커리어 주간 브리핑</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; background-color: #eff6ff;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 720px; margin: 0 auto; background-color: #ffffff;">
+
+        <!-- Header -->
+        <tr>
+            <td style="background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%); padding: 32px 30px; text-align: center;">
+                <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 700; letter-spacing: -0.3px;">TechBriefing</h1>
+                <p style="margin: 8px 0 0 0; color: #bfdbfe; font-size: 15px; font-weight: 600;">AI 학습·커리어 주간 브리핑</p>
+                <p style="margin: 12px 0 0 0; color: #ffffff; font-size: 14px;">
+                    {{ report_range.from.strftime('%Y.%m.%d') }} ~ {{ report_range.to.strftime('%Y.%m.%d') }}
+                </p>
+            </td>
+        </tr>
+
+        <!-- 주간 통계 -->
+        <tr>
+            <td style="padding: 18px 30px 0 30px;">
+                <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                    <tr>
+                        <td style="width:25%; padding:12px; background:#eff6ff; border-radius:5px; text-align:center;">
+                            <div style="color:#1e3a8a; font-size:22px; font-weight:700;">{{ totals.total }}</div>
+                            <div style="color:#6b7280; font-size:11px; margin-top:2px;">이번 주 수집
+                                {% if totals.delta is not none %}
+                                <span style="font-weight:700; color:{% if totals.delta >= 0 %}#15803d{% else %}#b91c1c{% endif %};">
+                                    ({{ '+' if totals.delta >= 0 }}{{ totals.delta }})
+                                </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td style="width:8px;"></td>
+                        <td style="width:25%; padding:12px; background:#dcfce7; border-radius:5px; text-align:center;">
+                            <div style="color:#15803d; font-size:22px; font-weight:700;">{{ totals.course }}</div>
+                            <div style="color:#6b7280; font-size:11px; margin-top:2px;">교육·세미나</div>
+                        </td>
+                        <td style="width:8px;"></td>
+                        <td style="width:25%; padding:12px; background:#fee2e2; border-radius:5px; text-align:center;">
+                            <div style="color:#b91c1c; font-size:22px; font-weight:700;">{{ totals.policy }}</div>
+                            <div style="color:#6b7280; font-size:11px; margin-top:2px;">정책·지원</div>
+                        </td>
+                        <td style="width:8px;"></td>
+                        <td style="width:25%; padding:12px; background:#cffafe; border-radius:5px; text-align:center;">
+                            <div style="color:#0e7490; font-size:22px; font-weight:700;">{{ totals.news }}</div>
+                            <div style="color:#6b7280; font-size:11px; margin-top:2px;">뉴스</div>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+
+        <!-- Section 1: 이 주의 헤드라인 -->
+        {% if week_headlines %}
+        <tr>
+            <td style="padding: 22px 30px 0 30px;">
+                <h2 style="margin: 0 0 16px 0; padding-bottom: 8px; border-bottom: 3px solid #1d4ed8; color: #1e3a8a; font-size: 18px;">
+                    🏆 이 주의 헤드라인 {{ week_headlines|length }}
+                </h2>
+                {% for h in week_headlines %}
+                <div style="margin-bottom:14px; padding:14px 16px; background:#ffffff; border:1px solid #e5e7eb; border-left:5px solid {% if h.is_recruiting %}#b91c1c{% else %}#1d4ed8{% endif %}; border-radius:5px;">
+                    <div style="margin-bottom:6px;">
+                        <span style="display:inline-block; background:{{ h.category_bg }}; color:{{ h.category_color }}; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.4px;">{{ h.category_label }}</span>
+                        {% if h.is_recruiting %}
+                        <span style="display:inline-block; background:#fef2f2; color:#b91c1c; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; margin-left:4px;">📢 모집·마감</span>
+                        {% endif %}
+                        <span style="color:#6b7280; font-size:11px; margin-left:6px;">
+                            {{ h.origin }} · {{ h.published_display }}
+                        </span>
+                    </div>
+                    <div style="color:#111827; font-size:15px; font-weight:700; line-height:1.4;">
+                        {% if h.url %}<a href="{{ h.url }}" style="color:#111827; text-decoration:none;">{{ h.title_safe }}</a>{% else %}{{ h.title_safe }}{% endif %}
+                    </div>
+                    {% if h.summary_safe %}
+                    <div style="margin-top:6px; color:#4b5563; font-size:12px; line-height:1.6;">{{ h.summary_safe[:180] }}{% if h.summary_safe|length > 180 %}…{% endif %}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Section 2: 모집·마감 임박 -->
+        {% if recruiting %}
+        <tr>
+            <td style="padding: 12px 30px 0 30px;">
+                <h2 style="margin: 0 0 12px 0; padding-bottom: 6px; border-bottom: 2px solid #fecaca; color: #b91c1c; font-size: 15px;">
+                    📢 모집·마감 체크리스트 · {{ recruiting|length }}
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                    {% for r in recruiting %}
+                    <tr>
+                        <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">
+                            <div style="color:#374151; font-size:12px; line-height:1.5;">
+                                {% if r.d_day is defined and r.d_day is not none %}
+                                <span style="display:inline-block; background:{% if r.d_day <= 3 %}#fee2e2{% else %}#fef9c3{% endif %}; color:{% if r.d_day <= 3 %}#b91c1c{% else %}#a16207{% endif %}; padding:1px 7px; border-radius:8px; font-size:10px; font-weight:700; margin-right:5px;">D-{{ r.d_day }}</span>
+                                {% endif %}
+                                {% if r.url %}<a href="{{ r.url }}" style="color:#374151; text-decoration:none;">{% endif %}
+                                {{ r.title_safe[:80] }}{% if r.title_safe|length > 80 %}…{% endif %}
+                                {% if r.url %}</a>{% endif %}
+                                <span style="color:#9ca3af; font-size:10px; margin-left:4px;">· {{ r.origin }}</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Section 3: 주간 키워드 트렌드 -->
+        {% if keywords %}
+        <tr>
+            <td style="padding: 18px 30px 0 30px;">
+                <h2 style="margin: 0 0 10px 0; padding-bottom: 6px; border-bottom: 2px solid #a5f3fc; color: #0e7490; font-size: 15px;">
+                    📈 주간 키워드 트렌드
+                </h2>
+                <div>
+                    {% for kw in keywords %}
+                    <span style="display:inline-block; background:#ecfeff; color:#0e7490; padding:3px 10px; border-radius:10px; font-size:12px; margin-right:5px; margin-bottom:6px;">
+                        {{ kw.keyword }}{% if kw.co_keywords %} <span style="color:#67e8f9; font-size:10px;">+{{ kw.co_keywords[:2]|join('·') }}</span>{% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Section 4: 일별 수집 추이 -->
+        {% if daily_trend %}
+        <tr>
+            <td style="padding: 18px 30px 0 30px;">
+                <h2 style="margin: 0 0 10px 0; padding-bottom: 6px; border-bottom: 2px solid #e5e7eb; color: #4b5563; font-size: 14px;">
+                    📊 일별 수집 추이
+                </h2>
+                <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                    {% for d in daily_trend %}
+                    <tr>
+                        <td style="width:80px; padding:3px 0; color:#6b7280; font-size:11px;">{{ d.date_display }}</td>
+                        <td style="padding:3px 0;">
+                            <div style="background:#3b82f6; height:10px; border-radius:3px; width:{{ (d.total / trend_max * 100)|round|int if trend_max else 0 }}%; min-width:2px;"></div>
+                        </td>
+                        <td style="width:110px; padding:3px 0 3px 8px; color:#9ca3af; font-size:10px; text-align:right;">
+                            {{ d.total }}건 (교 {{ d.course }} · 정 {{ d.policy }} · 뉴 {{ d.news }})
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                {% if skillradar_stats and skillradar_stats.resources_total %}
+                <div style="margin-top:8px; color:#9ca3af; font-size:10px;">
+                    SkillRadar 누적 리소스 {{ skillradar_stats.resources_total }}건
+                    {% if skillradar_stats.last_ingest_at %} · 최근 수집 {{ skillradar_stats.last_ingest_at[:16] }}{% endif %}
+                </div>
+                {% endif %}
+            </td>
+        </tr>
+        {% endif %}
+
+        <!-- Footer -->
+        <tr>
+            <td style="padding: 22px 30px 26px 30px;">
+                <div style="border-top:1px solid #e5e7eb; padding-top:14px; color:#6b7280; font-size:10px; line-height:1.6;">
+                    데이터 소스: SkillRadar 백엔드 API (AI 교육·세미나·정책·뉴스 수집·큐레이션) — 한 주(월~금) daily 이력 집계.<br>
+                    importance = 카테고리 + 모집신호 + 공식출처 − age.<br>
+                    생성: {{ generated_at.strftime('%Y-%m-%d %H:%M') }}
+                </div>
+                <div style="margin-top:12px; color:#9ca3af; font-size:11px;">
+                    구독을 원하지 않으시면 <a href="__UNSUBSCRIBE_URL__" style="color:#1d4ed8; text-decoration:underline;">여기</a>에서 해지할 수 있습니다.
+                </div>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

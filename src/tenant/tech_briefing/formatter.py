@@ -228,6 +228,143 @@ class TechBriefingFormatter:
             "generated_at": report_date,
         }
 
+    # ─── weekly ───
+
+    # 이 주의 헤드라인 한도 (카테고리 4종 × max 2 = 8 과 정합)
+    WEEKLY_HEADLINE_LIMIT = 8
+    WEEKLY_RECRUITING_LIMIT = 8
+    WEEKLY_KEYWORD_LIMIT = 10
+
+    def format_weekly(
+        self,
+        history_data: List[Dict[str, Any]],
+        collected_data: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
+        """주간 요약 — 한 주(월~금)의 daily 이력(tech_daily)을 집계.
+
+        history_data: CollectedDataRepository.get_history_range() 결과
+            [{collected_date, data_type, data}, ...]
+        collected_data: weekly 수집 캐시 (tech_weekly.skillradar_stats) +
+            스케줄러가 주입하는 _prev_history (전주 이력, WoW Δ 용)
+        빈 이력이면 {} 반환 — 스케줄러가 발송 스킵.
+        """
+        collected_data = collected_data or {}
+        daily_rows = [
+            (row.get("collected_date"), row.get("data") or {})
+            for row in (history_data or [])
+            if row.get("data_type") == "tech_daily" and row.get("data")
+        ]
+        if not daily_rows:
+            return {}
+
+        # 주간 전체 아이템 — URL/제목 기준 dedupe (정정 upsert 재등장 방어,
+        # 먼저 나온 날 기준 유지).
+        seen: set[str] = set()
+        all_items: List[Dict[str, Any]] = []
+        daily_trend: List[Dict[str, Any]] = []
+        for day, payload in daily_rows:
+            stats = payload.get("stats") or {}
+            day_total = 0
+            for bucket in ("news_items", "policy_items", "course_items"):
+                for it in payload.get(bucket) or []:
+                    day_total += 1
+                    key = (it.get("url") or it.get("title") or "").strip().lower()
+                    if not key or key in seen:
+                        continue
+                    seen.add(key)
+                    all_items.append(it)
+            daily_trend.append({
+                "date": day,
+                "date_display": day.strftime("%m-%d(%a)") if hasattr(day, "strftime") else str(day),
+                "news": stats.get("news_count", 0),
+                "policy": stats.get("policy_count", 0),
+                "course": stats.get("course_count", 0),
+                "total": day_total,
+            })
+
+        annotate_scores(all_items)
+        week_headlines = self._select_headlines(all_items, self.WEEKLY_HEADLINE_LIMIT)
+
+        # 모집·마감 — deadline 있는 항목은 임박순, 나머지 모집 신호는 스코어순.
+        today = datetime.now().date()
+        with_deadline: List[Dict[str, Any]] = []
+        without_deadline: List[Dict[str, Any]] = []
+        for it in all_items:
+            if not it.get("is_recruiting"):
+                continue
+            d = self._parse_deadline(it.get("deadline"))
+            if d and d >= today:
+                it["deadline_dt"] = d
+                it["d_day"] = (d - today).days
+                with_deadline.append(it)
+            elif not d:
+                without_deadline.append(it)
+        with_deadline.sort(key=lambda x: x["deadline_dt"])
+        recruiting = (
+            with_deadline + self._sort_by_score(without_deadline)
+        )[: self.WEEKLY_RECRUITING_LIMIT]
+
+        keywords = self._compute_rising_keywords(
+            all_items, limit=self.WEEKLY_KEYWORD_LIMIT
+        )
+
+        totals = {
+            "news": sum(d["news"] for d in daily_trend),
+            "policy": sum(d["policy"] for d in daily_trend),
+            "course": sum(d["course"] for d in daily_trend),
+            "total": sum(d["total"] for d in daily_trend),
+        }
+
+        # Week-over-Week Δ — 전주 이력이 있으면 총량 비교.
+        prev_total = self._history_total(collected_data.get("_prev_history"))
+        totals["prev_total"] = prev_total
+        totals["delta"] = (totals["total"] - prev_total) if prev_total is not None else None
+
+        skillradar_stats = (
+            (collected_data.get("tech_weekly") or {}).get("skillradar_stats") or {}
+        )
+
+        return {
+            "report_range": {
+                "from": daily_rows[0][0],
+                "to": daily_rows[-1][0],
+            },
+            "week_headlines": [_enrich(h) for h in week_headlines],
+            "recruiting": [_enrich(x) for x in recruiting],
+            "keywords": keywords,
+            "daily_trend": daily_trend,
+            "trend_max": max((d["total"] for d in daily_trend), default=0),
+            "totals": totals,
+            "skillradar_stats": skillradar_stats,
+            "generated_at": datetime.now(),
+        }
+
+    @staticmethod
+    def _parse_deadline(value: Any):
+        """SkillRadar deadline(ISO date str) → date. 실패 시 None."""
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value)).date()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _history_total(prev_history: Any):
+        """전주 이력에서 tech_daily 아이템 총량. 이력 없으면 None."""
+        if not prev_history:
+            return None
+        total = 0
+        found = False
+        for row in prev_history:
+            if row.get("data_type") != "tech_daily" or not row.get("data"):
+                continue
+            found = True
+            payload = row["data"]
+            for bucket in ("news_items", "policy_items", "course_items"):
+                total += len(payload.get(bucket) or [])
+        return total if found else None
+
     # ─── helpers ───
 
     def _empty_context(self) -> Dict[str, Any]:
@@ -284,9 +421,10 @@ class TechBriefingFormatter:
         return kept
 
     def _compute_rising_keywords(
-        self, items: List[Dict[str, Any]]
+        self, items: List[Dict[str, Any]], limit: int = None
     ) -> List[Dict[str, Any]]:
         """제목 + 요약에서 토큰 빈도. importance_score 가중치 부여."""
+        limit = limit or self.FOOTER_KEYWORD_LIMIT
         weighted: Counter = Counter()
         co_occurrence: Dict[str, Counter] = {}
         for it in items:
@@ -304,10 +442,10 @@ class TechBriefingFormatter:
                     if other != t:
                         co_occurrence[t][other] += 1
 
-        max_n = max(self.FOOTER_KEYWORD_LIMIT * 2, 16)
+        max_n = max(limit * 2, 16)
         top = weighted.most_common(max_n)
         rising = []
-        for kw, weight in top[: self.FOOTER_KEYWORD_LIMIT]:
+        for kw, weight in top[:limit]:
             co = [k for k, _ in co_occurrence.get(kw, Counter()).most_common(3)]
             rising.append({
                 "keyword": kw,

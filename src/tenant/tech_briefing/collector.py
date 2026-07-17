@@ -12,6 +12,7 @@ API:
       즉석 구성(fallback: true). 빈 결과도 200 + stats 0건.
 """
 
+import hashlib
 import logging
 import time
 from contextlib import contextmanager
@@ -55,6 +56,18 @@ def _is_recruiting(title: str) -> bool:
     return any(h in (title or "") for h in RECRUITING_HINTS)
 
 
+def dedup_id_for(raw_key: str) -> int:
+    """SkillRadar UUID/URL → 63-bit 양수 int.
+
+    sent_articles.article_id 가 Integer 컬럼이라 UUID 문자열을 그대로 못 쓴다.
+    안정 해시로 파생 — 동일 리소스는 매 실행 동일 ID (교차일 dedup 성립).
+    """
+    digest = hashlib.blake2b(
+        (raw_key or "").encode("utf-8"), digest_size=8
+    ).digest()
+    return int.from_bytes(digest, "big") >> 1  # 부호 비트 제거 (63-bit 양수)
+
+
 def _map_item(raw: Dict[str, Any], *, source: str, category: str) -> Dict[str, Any]:
     """SkillRadar resource → tech_daily 아이템 매핑.
 
@@ -75,6 +88,9 @@ def _map_item(raw: Dict[str, Any], *, source: str, category: str) -> Dict[str, A
         # 모집 신호: 제목 힌트 + SkillRadar deadline 메타
         "is_recruiting": _is_recruiting(title) or bool(raw.get("deadline")),
         "dedup_key": f"{category}:{url or title}",
+        # 교차일 dedup 용 안정 int ID — sent_articles.article_id 로 기록.
+        # SkillRadar UUID 우선, 없으면 URL/제목 기반.
+        "dedup_id": dedup_id_for(raw.get("id") or url or title),
         # SkillRadar 원본 메타 — dedup(Phase 3)/개인화 대비 보존
         "skillradar_id": raw.get("id"),
         "cost": raw.get("cost"),
@@ -120,6 +136,35 @@ class TechBriefingCollector:
             metric["latency_ms"] = int((time.monotonic() - started) * 1000)
             self._metrics.append(metric)
 
+    async def collect_weekly_summary(self) -> Dict[str, Any]:
+        """SkillRadar 공개 통계 수집 (weekly 요약용 보조 데이터).
+
+        /api/v1/public/stats 는 공개 엔드포인트 — 인증 불필요.
+        {sources_enabled, resources_total, today_total, today_by_type,
+         daily_new[7일], last_ingest_at, last_issue_date}
+        실패해도 weekly 본문(이력 집계)은 살아야 하므로 빈 dict 폴백.
+        """
+        url = f"{self.api_base_url}/api/v1/public/stats"
+        with self._track(
+            data_type="skillradar_stats", api_path="/api/v1/public/stats",
+        ) as m:
+            try:
+                async with httpx.AsyncClient(
+                    timeout=API_TIMEOUT, trust_env=False
+                ) as client:
+                    async def _request():
+                        response = await client.get(url)
+                        response.raise_for_status()
+                        return response.json()
+
+                    stats = await retry_async(_request, max_retries=2, base_delay=2.0)
+            except Exception as e:
+                logger.warning(f"SkillRadar 통계 수집 실패 (weekly 보조): {e}")
+                m["error"] = str(e)[:480]
+                return {}
+            m["raw_count"] = m["final_count"] = 1
+        return {"tech_weekly": {"skillradar_stats": stats}}
+
     async def _fetch_daily(self) -> Optional[Dict[str, Any]]:
         """SkillRadar /api/v1/newsletter/daily 호출. 실패 시 None."""
         url = f"{self.api_base_url}/api/v1/newsletter/daily"
@@ -138,8 +183,8 @@ class TechBriefingCollector:
 
     async def collect_daily(
         self,
-        exclude_ids: Optional[List[int]] = None,  # base interface 호환 (미사용)
-        exclude_companies: Optional[List[str]] = None,
+        exclude_ids: Optional[List[int]] = None,  # 최근 발송 dedup_id (7일)
+        exclude_companies: Optional[List[str]] = None,  # 미사용
     ) -> Dict[str, Any]:
         """SkillRadar 호출 → 섹션 매핑 → 기존 tech_daily 구조 반환.
 
@@ -179,6 +224,10 @@ class TechBriefingCollector:
 
             # 섹션 매핑 + URL/제목 기준 안전 dedup (SkillRadar 가 자연키로
             # 이미 중복 제거하지만, 섹션 간 동일 URL 재등장 방어).
+            # 교차일 dedup: 최근 발송 dedup_id(sent_articles) 는 원천 제외 —
+            # SkillRadar 의 정정 upsert 가 fetched_at 을 갱신해 같은 항목이
+            # 다음날 다시 내려오는 케이스 차단.
+            excluded = set(exclude_ids or [])
             seen: set[str] = set()
             buckets: Dict[str, List[Dict[str, Any]]] = {
                 "news": [], "policy": [], "course": [],
@@ -187,6 +236,9 @@ class TechBriefingCollector:
                 source, category = _SECTION_MAP[section]
                 for raw in sections.get(section) or []:
                     item = _map_item(raw, source=source, category=category)
+                    if item["dedup_id"] in excluded:
+                        m["excluded_by_ids"] += 1
+                        continue
                     key = (item["url"] or item["title"]).strip().lower()
                     if not key or key in seen:
                         continue
