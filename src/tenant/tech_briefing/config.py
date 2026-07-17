@@ -1,13 +1,9 @@
 """TechBriefing 테넌트 설정 — AI 학습·커리어 일일 브리핑.
 
-3 sources (SkillRadar 수집 대상과 동일 기반):
-  1. 뉴스 키워드 검색 — Google News RSS (AI 교육/부트캠프/강의)
-  2. 정책 — 정부 정책 RSS(korea.kr) + 정책 키워드 뉴스 검색
-  3. 교육·세미나 — 교육/행사 키워드 뉴스 검색 (+선택 RSS)
-
-2026-07 도메인 전환 2단계: AI/LLM 개발 생태계(릴리즈/CVE/블로그) →
-SkillRadar 교육·커리어 대상으로 완전 대체. 키워드/RSS 기본값은
-SkillRadar app/core/config.py 의 기본값과 동기를 유지한다.
+데이터 소스: SkillRadar 백엔드(9070) 뉴스레터 공급 API (collector 참조).
+수집 키워드/RSS 소스 관리는 SkillRadar admin(source_configs)으로 일원화 —
+과거 이 파일에 있던 키워드/RSS 복제 상수는 Phase 2 에서 제거됐다.
+여기에는 플랫폼 측 편성(스코어링·분류·브랜드) 설정만 남긴다.
 """
 
 from ..base import BrandConfig, BrandFeature
@@ -18,39 +14,8 @@ EMAIL_SUBJECT_PREFIX = "[TechBriefing]"
 EMAIL_TEMPLATE = "tech_briefing/daily_report.html"
 
 
-# ─── 수집 키워드/RSS — SkillRadar 기본값과 동기 유지 ────────────────
-# (SkillRadar: NEWS_KEYWORDS / POLICY_KEYWORDS / POLICY_RSS_FEEDS / COURSE_KEYWORDS)
-NEWS_KEYWORDS: list[str] = [
-    "AI 교육",
-    "AI 부트캠프",
-    "인공지능 강의",
-    "생성형 AI 교육",
-]
-
-POLICY_KEYWORDS: list[str] = [
-    "AI 인재양성",
-    "인공지능 정책",
-    "디지털 직업훈련",
-    "K-디지털",
-]
-
-# (label, url) — 정부 보도자료. korea.kr 은 키워드 1차 필터 후 사용.
-# 주의: /rss/policy.xml 은 2026-07 현재 404 — 전체 정책 피드(policy_all)만 유효.
-POLICY_RSS_FEEDS: list[tuple[str, str]] = [
-    ("정책브리핑", "https://www.korea.kr/rss/policy_all.xml"),
-]
-
-COURSE_KEYWORDS: list[str] = [
-    "AI 부트캠프 모집",
-    "KDT 국비지원",
-    "AI 세미나",
-    "AI 컨퍼런스",
-]
-
-# 교육/세미나 신뢰 RSS (운영자 확장 지점 — SkillRadar COURSE_RSS_FEEDS 대응).
-COURSE_RSS_FEEDS: list[tuple[str, str]] = []
-
 # 제목에 이 힌트가 있으면 course → seminar 로 분류 (SkillRadar course.py 와 동일).
+# 수집 경로에서는 SkillRadar 가 분류해서 내려주므로 재분류 유틸/테스트용.
 SEMINAR_HINTS: list[str] = [
     "세미나", "컨퍼런스", "웨비나", "밋업", "포럼", "행사",
     "webinar", "conference",
@@ -60,10 +25,6 @@ SEMINAR_HINTS: list[str] = [
 RECRUITING_HINTS: list[str] = [
     "모집", "신청", "접수", "마감", "선발", "지원자",
 ]
-
-# 키워드당 검색 결과 상한 / 정책 RSS 파싱 상한.
-MAX_PER_KEYWORD = 8
-RSS_MAX_ITEMS = 30
 
 
 # ─── 카테고리 → 한글 라벨/색상 ─────────────────────────────────────
