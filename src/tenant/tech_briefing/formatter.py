@@ -96,6 +96,11 @@ def _enrich(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+# 조사로 끝나는 토큰 필터 — SkillRadar LLM 요약(장문 한국어 산문)에서
+# '기술을', '있는' 같은 곡용형이 키워드로 오르는 것 방지.
+_PARTICLE_ENDINGS = ("을", "를", "은", "는", "이", "가", "의", "에", "로", "와", "과", "도")
+
+
 def _extract_keywords(text: str) -> List[str]:
     if not text:
         return []
@@ -108,6 +113,12 @@ def _extract_keywords(text: str) -> List[str]:
         if lowered in _STOPWORDS:
             continue
         if lowered.isdigit():
+            continue
+        # 한글 곡용형 제외 — 용언 활용('~다' 종결)과 조사 결합형은
+        # 트렌드 신호가 아니라 문장 구성 요소.
+        if re.fullmatch(r"[가-힣]+", t) and (
+            t.endswith("다") or t.endswith(_PARTICLE_ENDINGS)
+        ):
             continue
         out.append(lowered)
     return out

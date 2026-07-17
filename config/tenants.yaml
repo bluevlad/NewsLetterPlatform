@@ -80,8 +80,8 @@ tenants:
 
   tech-briefing:
     display_name: "TechBriefing AI 학습·커리어 일일 브리핑"
-    description: "AI 교육과정 · 세미나 · 정책 · 뉴스 큐레이션 일일 브리핑 (SkillRadar 수집 대상 기반)"
-    api_base_url: "(N/A — 외부 Google News RSS/korea.kr 직접 호출)"
+    description: "AI 교육과정 · 세미나 · 정책 · 뉴스 큐레이션 일일 브리핑 (SkillRadar 백엔드 API 연동)"
+    api_base_url: "${SKILLRADAR_API_URL}"
     email_subject_prefix: "[TechBriefing]"
     email_template: "tech_briefing/daily_report.html"
     schedule:

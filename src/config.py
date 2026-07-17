@@ -72,6 +72,17 @@ class Settings(BaseSettings):
         default="http://host.docker.internal:9060",
         env="STANDUP_API_URL"
     )
+    # SkillRadar Backend — TechBriefing 테넌트 데이터 소스 (뉴스레터 공급 API).
+    # localhost:9070 (개발/macOS 직접 실행) · host.docker.internal:9070 (Docker)
+    skillradar_api_url: str = Field(
+        default="http://host.docker.internal:9070",
+        env="SKILLRADAR_API_URL"
+    )
+    # SkillRadar 뉴스레터 공급 API 인증 키 (X-Newsletter-Key 헤더).
+    # SkillRadar 측 NEWSLETTER_API_KEY 와 동일 값. 빈 값이면 수집 스킵.
+    skillradar_newsletter_key: str = Field(
+        default="", env="SKILLRADAR_NEWSLETTER_KEY"
+    )
 
     # 스케줄러 - TechBriefing (Daily, AI 학습·커리어 뉴스레터)
     tech_collect_hour: int = Field(default=6, env="TECH_COLLECT_HOUR")
