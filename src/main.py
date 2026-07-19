@@ -22,17 +22,23 @@ from src.tenant.allergy_insight import AllergyInsightTenant
 from src.tenant.standup import StandUpTenant
 from src.tenant.tech_briefing import TechBriefingTenant
 
-# 로깅 설정
+from src.common.json_logging import JsonFormatter, use_json_logging
+
+# 로깅 설정 — stdout은 JSON(LogAnalyzer 수집용), 파일은 가독 포맷 유지
+_plain_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+_stream_handler = logging.StreamHandler(sys.stdout)
+_stream_handler.setFormatter(JsonFormatter() if use_json_logging() else _plain_formatter)
+
+_file_handler = logging.FileHandler(
+    settings.BASE_DIR / "logs" / "newsletterplatform.log",
+    encoding="utf-8"
+)
+_file_handler.setFormatter(_plain_formatter)
+
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(
-            settings.BASE_DIR / "logs" / "newsletterplatform.log",
-            encoding="utf-8"
-        ),
-    ],
+    handlers=[_stream_handler, _file_handler],
 )
 
 logger = logging.getLogger(__name__)
