@@ -26,7 +26,7 @@ google-auth[requests]>=2.55.1
 # Configuration
 pydantic>=2.5.0
 pydantic-settings>=2.14.2
-python-dotenv>=1.0.0
+python-dotenv>=1.2.2
 
 # Session middleware
 itsdangerous>=2.2.0
