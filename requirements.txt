@@ -5,7 +5,7 @@ uvicorn>=0.27.0
 python-multipart>=0.0.32
 
 # Database
-sqlalchemy>=2.0.0
+sqlalchemy>=2.0.51
 psycopg2-binary>=2.9.9  # SQLite→PostgreSQL 마이그레이션
 
 # Email
