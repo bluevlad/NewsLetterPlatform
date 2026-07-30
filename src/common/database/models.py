@@ -110,6 +110,7 @@ class SendHistory(Base):
     subject = Column(String(500))
     newsletter_type = Column(String(20), default="daily", nullable=False)
     # 발송 모드: 'normal'(정식 발송) | 'weekend_test'(주말 관리자 테스트)
+    #          | 'holiday_test'(평일 공휴일 관리자 테스트)
     # | 추후 'manual'/'preview' 등 확장 가능. 통계 집계 시 'normal'만 필터링.
     send_mode = Column(String(20), default="normal", nullable=False)
     is_success = Column(Boolean, default=False)

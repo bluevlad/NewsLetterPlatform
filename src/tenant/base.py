@@ -95,11 +95,15 @@ class BaseTenant(ABC):
 
     @property
     def weekend_test_mode(self) -> bool:
-        """주말(토/일) 발송을 일반 구독자가 아닌 SUPER_ADMIN_EMAILS 로만 보낼지 여부.
+        """휴일(주말·공휴일) 발송을 일반 구독자가 아닌 SUPER_ADMIN_EMAILS 로만 보낼지 여부.
 
-        True(기본): 주말은 early 슬롯에만 관리자 1명에게 테스트 발송, dedup 미기록,
-                    SendHistory.send_mode='weekend_test' 로 기록되어 통계에서 제외 가능.
-        False: 평일·주말 동일하게 정식 발송.
+        휴일 판정: 토/일 + 법정 공휴일(대체휴일 포함) + EXTRA_HOLIDAYS 지정일
+        — src/common/holiday.py 참조.
+
+        True(기본): 휴일은 early 슬롯에만 관리자 테스트 발송, dedup 미기록,
+                    SendHistory.send_mode='weekend_test'(주말) / 'holiday_test'(공휴일)
+                    로 기록되어 통계에서 제외 가능.
+        False: 영업일·휴일 동일하게 정식 발송.
         """
         return True
 

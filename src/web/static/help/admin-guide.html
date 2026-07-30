@@ -230,6 +230,39 @@
         <h3>스케줄러 (<code>/admin/scheduler</code>)</h3>
         <p>일일, 주간, 월간 뉴스레터 발송 스케줄 구성과 현재 동작 상태를 모니터링합니다.</p>
 
+        <h3>휴일 발송 정책 (주말·공휴일 관리자 테스트 모드)</h3>
+        <p>주말(토·일)과 한국 법정 공휴일(대체휴일 포함)에는 일반 구독자에게 발송하지 않고, <strong>SUPER_ADMIN_EMAILS에만 early 슬롯 1회 테스트 발송</strong>합니다. 파이프라인 정상 동작을 매일 확인하면서 구독자 피로도를 줄이기 위한 정책입니다.</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>항목</th>
+                    <th>설명</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>휴일 판정</td>
+                    <td>토/일 + 법정 공휴일(<code>holidays</code> 패키지 KR 달력, 대체휴일 포함) + <code>EXTRA_HOLIDAYS</code> 지정일</td>
+                </tr>
+                <tr>
+                    <td>발송 이력 구분</td>
+                    <td><code>send_mode</code>: 주말 = <code>weekend_test</code>, 평일 공휴일 = <code>holiday_test</code> (정식 발송 <code>normal</code>과 통계 분리)</td>
+                </tr>
+                <tr>
+                    <td>dedup 풀 격리</td>
+                    <td>휴일 테스트 발송은 <code>sent_articles</code>에 기록하지 않으므로, 휴일 기간 기사가 다음 영업일 정식 발송에 포함될 수 있습니다</td>
+                </tr>
+                <tr>
+                    <td>회사 지정 휴무일</td>
+                    <td>환경변수 <code>EXTRA_HOLIDAYS</code>에 <code>YYYY-MM-DD</code>를 콤마로 나열 (예: <code>2026-12-31,2027-01-02</code>)</td>
+                </tr>
+                <tr>
+                    <td>수동 발송</td>
+                    <td>관리자 수동 발송(manual)은 휴일에도 정상 발송됩니다 (운영자 의도 우선)</td>
+                </tr>
+            </tbody>
+        </table>
+
         <!-- 5. 테넌트별 데이터 수집 -->
         <h2>5. 테넌트별 데이터 수집</h2>
 
