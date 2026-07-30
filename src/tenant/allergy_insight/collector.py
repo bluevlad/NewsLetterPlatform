@@ -19,6 +19,10 @@ Redesign Phase 1 endpoints (NEWSLETTER_REDESIGN_SPEC §3.2):
 N2 신규 인용 endpoints (전문가용 섹션):
   - GET  /api/public/analytics/allergen-trend/ranking → 상승/하락 알러젠 랭킹
   - GET  /api/public/analytics/treatments/overview → 신흥 치료법 통계
+  - GET  /api/public/analytics/spotlight/today → 알러지 스폿라이트 (다중 카드).
+        선정·콘텐츠 조립·이력 기록은 서버(`spotlight_service`)가 담당하고
+        collector 는 렌더링만 한다. 이력 기반 스테일니스 선정 + 신규 콘텐츠 diff —
+        plans/spotlight-staleness-rotation-plan.md
 """
 
 import logging
@@ -475,13 +479,21 @@ class AllergyInsightCollector:
     # ─────────────────────────────────────────────────────────────
 
     # 알러젠 코드 → 한글 라벨 (백엔드 영문 코드 그대로 노출하면 가독성↓)
+    # 스폿라이트는 서버가 label_kr 을 내려주므로 이 맵은 폴백 용도.
+    # 트렌드 랭킹(allergen-trend/ranking)은 아직 코드만 주므로 여기서 매핑한다.
+    # 코드 정본: AllergyInsight `app/core/allergen/ALLERGEN_NAMES_KR` +
+    # `PaperLinkExtractor.ALLERGEN_KEYWORDS` (복수형 tree_nuts 주의).
     _ALLERGEN_LABEL_KR = {
         "fish": "어류",
         "shellfish": "갑각류",
         "milk": "우유",
         "egg": "계란",
         "peanut": "땅콩",
+        "tree_nuts": "견과류",
         "tree_nut": "견과류",
+        "pet_dander": "반려동물 비듬",
+        "bee_venom": "벌독",
+        "wheat_gluten": "밀(글루텐)",
         "walnut": "호두",
         "almond": "아몬드",
         "cashew": "캐슈넛",
@@ -541,8 +553,8 @@ class AllergyInsightCollector:
         """알러젠 상승/하락 랭킹 수집.
 
         direction: rising / declining / stable / new (백엔드 패턴 준수).
-        track_label: 메트릭 data_type 오버라이드. spotlight 처럼 동일 엔드포인트를
-            다른 의미로 호출할 때 중복 라벨 방지용. None 이면 'allergen_trend_<direction>'.
+        track_label: 메트릭 data_type 오버라이드. 동일 엔드포인트를 다른 의미로
+            호출할 때 중복 라벨 방지용. None 이면 'allergen_trend_<direction>'.
         실패 또는 빈 응답 → 빈 리스트.
 
         Returns: [{allergen_code, label_kr, paper_count, total_papers,
@@ -662,28 +674,63 @@ class AllergyInsightCollector:
                 return empty
 
     async def _collect_spotlight(
-        self, rotation_seed: int = 0, candidate_limit: int = 8
-    ) -> Optional[Dict[str, Any]]:
-        """오늘의 알러지 스폿라이트 1건.
+        self,
+        count: int = 3,
+        trending_slots: int = 1,
+        max_papers: int = 3,
+    ) -> list[Dict[str, Any]]:
+        """오늘의 알러지 스폿라이트 (다중 카드).
 
-        rising 랭킹 상위 candidate_limit 중 rotation_seed 로 1건 선정 → 일별 회전.
-        Returns: 단일 dict 또는 None (데이터 없음).
+        선정은 서버(AllergyInsight `spotlight_service`)가 수행한다.
+        전체 알러젠 풀에서 가장 오래 다루지 않은 대상을 우선 고르고, 이전 회차
+        이후의 신규 논문과 미노출 처방 섹션만 조립해 내려준다. 이력 기록도
+        서버가 담당하므로 collector 는 렌더링만 한다.
+
+        구 방식(rising 랭킹을 날짜로 회전)은 rising 판정 알러젠이 2~3종뿐이라
+        어류·견과류가 반복 노출됐다. 설계: plans/spotlight-staleness-rotation-plan.md
+
+        Returns: 카드 리스트. 실패 또는 데이터 없음 → 빈 리스트 (템플릿이 섹션 숨김).
         """
-        candidates = await self._collect_allergen_ranking(
-            direction="rising",
-            limit=candidate_limit,
-            track_label="spotlight",
-        )
-        if not candidates:
-            return None
-        idx = rotation_seed % len(candidates)
-        chosen = candidates[idx]
-        # 추가 표시용 필드
-        return {
-            **chosen,
-            "rotation_index": idx,
-            "candidate_total": len(candidates),
-        }
+        with self._track(
+            data_type="spotlight",
+            api_path="/api/public/analytics/spotlight/today",
+        ) as m:
+            try:
+                raw = await self._get(
+                    "/api/public/analytics/spotlight/today",
+                    auth_required=False,
+                    params={
+                        "count": count,
+                        "trending_slots": trending_slots,
+                        "max_papers": max_papers,
+                    },
+                )
+                body = self._unwrap(raw)
+                spotlights = body.get("spotlights", []) or []
+
+                cards = []
+                for s in spotlights:
+                    code = s.get("allergen_code") or ""
+                    cards.append({
+                        **s,
+                        # 서버가 label_kr 을 내려주지만, 누락 시 로컬 매핑으로 폴백
+                        "label_kr": s.get("label_kr") or self._allergen_label(code),
+                    })
+
+                m["raw_count"] = len(spotlights)
+                m["final_count"] = len(cards)
+                logger.info(
+                    "AllergyInsight 스폿라이트 수집 완료: %d건 %s",
+                    len(cards),
+                    [(c["allergen_code"], c.get("slot_type")) for c in cards],
+                )
+                return cards
+            except Exception as e:
+                m["error"] = str(e)[:480]
+                logger.warning(
+                    f"AllergyInsight 스폿라이트 수집 실패 (빈 리스트 폴백): {e}"
+                )
+                return []
 
     async def _collect_weekly_metrics(
         self, report_date: Optional[str] = None, window_days: int = 7
@@ -963,10 +1010,7 @@ class AllergyInsightCollector:
 
             # 7. N2 신규 — 알러지 인사이트 스폿라이트 / 신흥 치료법 / 알러젠 트렌드.
             #    모두 fail-safe 폴백, 빈 결과면 템플릿이 섹션 자동 숨김.
-            today = date.today()
-            # 월·일을 합쳐 회전 — 같은 달 내 매일 다른 인덱스 보장
-            rotation_seed = today.toordinal()
-            spotlight = await self._collect_spotlight(rotation_seed=rotation_seed)
+            spotlights = await self._collect_spotlight()
             treatments = await self._collect_treatments_overview()
             trends_rising = await self._collect_allergen_ranking(
                 direction="rising", limit=5
@@ -986,7 +1030,9 @@ class AllergyInsightCollector:
                 "drug_updates": drug_updates,
                 "weekly_metrics": weekly_metrics,
                 # N2 신규
-                "spotlight": spotlight,
+                "spotlights": spotlights,
+                # 구 템플릿/소비자 호환 — 첫 카드를 단일 객체 키로도 노출
+                "spotlight": spotlights[0] if spotlights else None,
                 "treatments": treatments,
                 "trends_rising": trends_rising,
                 "trends_declining": trends_declining,
@@ -1012,7 +1058,7 @@ class AllergyInsightCollector:
                 f"기업다이제스트 {len(company_digest)}건, "
                 f"논문 {len(paper_items)}건, "
                 f"약물 {drug_updates.get('total', 0)}건, "
-                f"스폿라이트={'1건' if spotlight else '0건'}, "
+                f"스폿라이트={len(spotlights)}건, "
                 f"신흥치료법={len(treatments.get('top_emerging', []))}건, "
                 f"트렌드(상승/하락)={len(trends_rising)}/{len(trends_declining)}"
             )

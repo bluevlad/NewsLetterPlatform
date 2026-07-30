@@ -50,7 +50,7 @@ BRAND_CONFIG = BrandConfig(
         BrandFeature(
             icon="&#x1F52C;",
             title="알러지 인사이트 스폿라이트",
-            description="매일 다른 알러젠을 골라 논문 추세·관련 영역을 한눈에 보여드립니다",
+            description="가장 오래 다루지 않은 알러젠을 골라 새로 확인된 논문과 처방 참고 정보를 전해드립니다",
         ),
         BrandFeature(
             icon="&#x1F489;",

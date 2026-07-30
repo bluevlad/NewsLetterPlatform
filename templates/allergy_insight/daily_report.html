@@ -135,43 +135,97 @@
         </tr>
         {% endif %}
 
-        <!-- 🔬 알러지 인사이트 스폿라이트 (N2 신규, 1건, 일별 회전) -->
-        {% if spotlight %}
+        <!-- 🔬 알러지 인사이트 스폿라이트
+             선정: 서버(spotlight_service) — 이력 기반 스테일니스 + 신규 콘텐츠 diff.
+             구 단일 카드(spotlight) 컨텍스트도 폴백으로 지원. -->
+        {% set spotlight_cards = spotlights or ([spotlight] if spotlight else []) %}
+        {% if spotlight_cards %}
         <tr>
             <td style="padding: 0 30px 25px 30px;">
                 <h2 style="margin: 0 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #5e35b1; color: #4527a0; font-size: 18px;">
                     🔬 오늘의 알러지 스폿라이트
                 </h2>
-                <table width="100%" cellpadding="0" cellspacing="0">
+                {% for sp in spotlight_cards %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 14px;">
                     <tr>
                         <td style="background-color: #f3e5f5; border-left: 4px solid #5e35b1; border-radius: 0 8px 8px 0; padding: 18px 20px;">
                             <p style="margin: 0 0 8px 0;">
+                                {% if sp.slot_type == 'trending' %}
                                 <span style="display: inline-block; background-color: #5e35b1; color: #ffffff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px;">상승 트렌드</span>
-                                <span style="font-size: 19px; font-weight: 700; color: #311b92; margin-left: 10px;">{{ spotlight.label_kr or spotlight.allergen_code }}</span>
-                                {% if spotlight.allergen_code and spotlight.label_kr and spotlight.label_kr != spotlight.allergen_code %}
-                                <span style="color: #888888; font-size: 12px; margin-left: 6px;">{{ spotlight.allergen_code }}</span>
+                                {% elif sp.days_since_featured is none %}
+                                <span style="display: inline-block; background-color: #00796b; color: #ffffff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px;">첫 소개</span>
+                                {% else %}
+                                <span style="display: inline-block; background-color: #455a64; color: #ffffff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px;">{{ sp.days_since_featured }}일 만에 다시 보기</span>
                                 {% endif %}
+                                <span style="font-size: 19px; font-weight: 700; color: #311b92; margin-left: 10px;">{{ sp.label_kr or sp.allergen_code }}</span>
                             </p>
                             <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 10px;">
                                 <tr>
                                     <td style="padding: 4px 8px 4px 0; vertical-align: top;">
                                         <p style="margin: 0; color: #5e35b1; font-size: 11px; font-weight: 600;">관련 논문</p>
-                                        <p style="margin: 2px 0 0 0; color: #311b92; font-size: 18px; font-weight: 700;">{{ spotlight.paper_count }}<span style="font-size: 12px; font-weight: 500; color: #555555;">/{{ spotlight.total_papers }}</span></p>
+                                        <p style="margin: 2px 0 0 0; color: #311b92; font-size: 18px; font-weight: 700;">{{ sp.paper_count }}<span style="font-size: 12px; font-weight: 500; color: #555555;">/{{ sp.total_papers }}</span></p>
                                     </td>
                                     <td style="padding: 4px 8px; vertical-align: top;">
                                         <p style="margin: 0; color: #5e35b1; font-size: 11px; font-weight: 600;">언급 비율</p>
-                                        <p style="margin: 2px 0 0 0; color: #311b92; font-size: 18px; font-weight: 700;">{{ (spotlight.mention_rate * 100)|round(2) }}<span style="font-size: 12px; font-weight: 500;">%</span></p>
+                                        <p style="margin: 2px 0 0 0; color: #311b92; font-size: 18px; font-weight: 700;">{{ ((sp.mention_rate or 0) * 100)|round(2) }}<span style="font-size: 12px; font-weight: 500;">%</span></p>
                                     </td>
                                     <td style="padding: 4px 0 4px 8px; vertical-align: top;">
                                         <p style="margin: 0; color: #5e35b1; font-size: 11px; font-weight: 600;">전년 대비</p>
-                                        <p style="margin: 2px 0 0 0; color: #c62828; font-size: 18px; font-weight: 700;">+{{ spotlight.change_rate|round(1) }}<span style="font-size: 12px; font-weight: 500;">%</span></p>
+                                        {% if sp.change_rate is none %}
+                                        <p style="margin: 2px 0 0 0; color: #777777; font-size: 18px; font-weight: 700;">—</p>
+                                        {% else %}
+                                        <p style="margin: 2px 0 0 0; color: {% if sp.change_rate >= 0 %}#c62828{% else %}#1565c0{% endif %}; font-size: 18px; font-weight: 700;">{% if sp.change_rate >= 0 %}+{% endif %}{{ sp.change_rate|round(1) }}<span style="font-size: 12px; font-weight: 500;">%</span></p>
+                                        {% endif %}
                                     </td>
                                 </tr>
                             </table>
-                            {% if spotlight.top_link_types %}
+
+                            {% if sp.new_papers %}
+                            <p style="margin: 14px 0 6px 0; color: #4527a0; font-size: 12px; font-weight: 700;">📄 새로 확인된 논문</p>
+                            {% for paper in sp.new_papers %}
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 8px;">
+                                <tr>
+                                    <td style="background-color: #ffffff; border-radius: 6px; padding: 10px 12px;">
+                                        <p style="margin: 0; font-size: 13px; font-weight: 600; color: #311b92; line-height: 1.45;">
+                                            {% if paper.url %}<a href="{{ paper.url }}" style="color: #311b92; text-decoration: none;">{{ paper.title }}</a>{% else %}{{ paper.title }}{% endif %}
+                                        </p>
+                                        <p style="margin: 4px 0 0 0; color: #888888; font-size: 11px;">
+                                            {% if paper.journal %}{{ paper.journal }}{% endif %}{% if paper.year %} · {{ paper.year }}{% endif %}
+                                            {% if paper.link_type_label %}<span style="display: inline-block; background-color: #ede7f6; color: #5e35b1; padding: 1px 6px; border-radius: 3px; margin-left: 4px;">{{ paper.link_type_label }}</span>{% endif %}
+                                        </p>
+                                        {% if paper.clinical_implication %}
+                                        <p style="margin: 6px 0 0 0; color: #444444; font-size: 12px; line-height: 1.5;">{{ paper.clinical_implication }}</p>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            </table>
+                            {% endfor %}
+                            {% endif %}
+
+                            <!-- dict 의 .items 메서드와 충돌하므로 첨자 접근 필수 -->
+                            {% set rx_items = sp.prescription['items'] if sp.prescription else [] %}
+                            {% if rx_items %}
+                            <p style="margin: 14px 0 6px 0; color: #4527a0; font-size: 12px; font-weight: 700;">💊 처방 참고 — {{ sp.prescription.section_label }}</p>
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="background-color: #ffffff; border-radius: 6px; padding: 10px 12px;">
+                                        <ul style="margin: 0; padding-left: 18px; color: #444444; font-size: 12px; line-height: 1.7;">
+                                            {% for item in rx_items %}
+                                            <li>{{ item }}</li>
+                                            {% endfor %}
+                                        </ul>
+                                        {% if sp.prescription.total_items and sp.prescription.total_items > rx_items|length %}
+                                        <p style="margin: 6px 0 0 0; color: #888888; font-size: 11px;">외 {{ sp.prescription.total_items - rx_items|length }}건</p>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            </table>
+                            {% endif %}
+
+                            {% if sp.top_link_types %}
                             <p style="margin: 12px 0 0 0; color: #555555; font-size: 12px;">
                                 주요 연관 영역:
-                                {% for lt in spotlight.top_link_types %}
+                                {% for lt in sp.top_link_types %}
                                 <span style="display: inline-block; background-color: #ffffff; color: #5e35b1; font-size: 11px; padding: 2px 8px; border-radius: 4px; margin-right: 4px; border: 1px solid #d1c4e9;">{{ lt.label }} {{ lt.count }}</span>
                                 {% endfor %}
                             </p>
@@ -179,6 +233,7 @@
                         </td>
                     </tr>
                 </table>
+                {% endfor %}
             </td>
         </tr>
         {% endif %}

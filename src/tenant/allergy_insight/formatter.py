@@ -72,6 +72,8 @@ class AllergyInsightFormatter:
             "drug_updates": drug_updates,
             "weekly_metrics": daily_report.get("weekly_metrics") or {},
             # N2 신규 (collector 가 산출, formatter 는 패스스루)
+            "spotlights": daily_report.get("spotlights") or [],
+            # 구 템플릿 호환 — 단일 카드 키
             "spotlight": daily_report.get("spotlight"),
             "treatments": daily_report.get("treatments") or {},
             "trends_rising": daily_report.get("trends_rising", []),
@@ -541,6 +543,7 @@ class AllergyInsightFormatter:
             "drug_updates": _empty_drug_updates(),
             "weekly_metrics": {},
             # N2 신규
+            "spotlights": [],
             "spotlight": None,
             "treatments": {},
             "trends_rising": [],
