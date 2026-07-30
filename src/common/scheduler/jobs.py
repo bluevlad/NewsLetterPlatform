@@ -23,6 +23,7 @@ from ..database.repository import (
 from ..database.models import CollectionMetric
 from ..delivery.gmail_sender import get_sender
 from ..delivery.bounce_processor import run_bounce_processor
+from ..holiday import KST, holiday_name, non_business_day_reason
 from ..template.renderer import get_renderer
 from .health import update_health
 from .slots import DAILY_SLOTS, get_slot_time
@@ -31,9 +32,9 @@ from ...tenant.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
-# 주말 테스트 모드: KST(UTC+9) 기준 주말이면 관리자에게만 발송
-_KST = timezone(timedelta(hours=9))
-_WEEKEND_TEST_SLOT = "early"  # 주말엔 early 슬롯만 발송 (mid/late는 스킵)
+# 휴일 테스트 모드: KST(UTC+9) 기준 주말·공휴일이면 관리자에게만 발송.
+# 판정(주말/법정 공휴일/EXTRA_HOLIDAYS)은 src/common/holiday.py 참조.
+_HOLIDAY_TEST_SLOT = "early"  # 휴일엔 early 슬롯만 발송 (mid/late는 스킵)
 
 # Stale-cache admin alert: 캐시 데이터가 24시간 초과면 일반 구독자 발송 중단,
 # SUPER_ADMIN_EMAILS 에만 STALE 배너로 발송. (FRESHNESS_PLAN AC-8 / 트랙 F P6)
@@ -42,11 +43,6 @@ STALE_CACHE_THRESHOLD_SECONDS = 24 * 3600
 
 def _html_fingerprint(html: str) -> str:
     return hashlib.sha256(html.encode("utf-8")).hexdigest()
-
-
-def _is_weekend_kst() -> bool:
-    """KST 기준 오늘이 토(5)/일(6)요일이면 True"""
-    return datetime.now(_KST).weekday() >= 5
 
 
 def _latest_collection_error(session, tenant_id: str) -> Optional[str]:
@@ -267,24 +263,32 @@ def run_send_job(
         logger.error(f"[{tenant_id}] 테넌트를 찾을 수 없습니다.")
         return
 
-    # 주말 테스트 모드 판정 — 자동 스케줄(=manual=False)에만 적용
-    weekend_test = (
-        not manual
-        and getattr(tenant, "weekend_test_mode", True)
-        and _is_weekend_kst()
+    # 휴일(주말·공휴일) 테스트 모드 판정 — 자동 스케줄(=manual=False)에만 적용.
+    # 주말=토/일, 공휴일=법정 공휴일(대체휴일 포함)+EXTRA_HOLIDAYS 지정일.
+    today_kst = datetime.now(KST).date()
+    nonbiz_reason = (
+        non_business_day_reason(today_kst)
+        if not manual and getattr(tenant, "weekend_test_mode", True)
+        else None
     )
-    if weekend_test:
-        # 주말엔 early 슬롯만 1회 관리자 테스트 발송. mid/late 는 스킵.
-        if slot and slot != _WEEKEND_TEST_SLOT:
+    holiday_test = nonbiz_reason is not None
+    send_mode = "normal"
+    if holiday_test:
+        # 휴일엔 early 슬롯만 1회 관리자 테스트 발송. mid/late 는 스킵.
+        if slot and slot != _HOLIDAY_TEST_SLOT:
             logger.info(
-                f"{log_prefix} 주말 — early 슬롯만 관리자 테스트 발송, "
+                f"{log_prefix} 휴일({nonbiz_reason}) — early 슬롯만 관리자 테스트 발송, "
                 f"{slot} 슬롯 스킵"
             )
             return
-        log_prefix = f"{log_prefix}[weekend_test]"
-        logger.info(f"{log_prefix} 주말 관리자 테스트 모드로 발송")
-
-    send_mode = "weekend_test" if weekend_test else "normal"
+        # 통계 축 분리: 주말은 기존 weekend_test 유지, 평일 공휴일은 holiday_test
+        send_mode = "weekend_test" if nonbiz_reason == "weekend" else "holiday_test"
+        log_prefix = f"{log_prefix}[{send_mode}]"
+        h_name = holiday_name(today_kst) if nonbiz_reason == "holiday" else None
+        logger.info(
+            f"{log_prefix} 휴일 관리자 테스트 모드로 발송"
+            + (f" (공휴일: {h_name})" if h_name else "")
+        )
     stale_alert = False  # P6 stale-cache 가드 (daily 만 평가, 아래에서 결정)
     duplicate_alert = False  # AC-9 duplicate-content 가드 (daily 자동 발송만 평가)
 
@@ -308,7 +312,7 @@ def run_send_job(
             if (
                 context is not None
                 and not manual
-                and not weekend_test
+                and not holiday_test
                 and max_cache_age is not None
                 and max_cache_age > STALE_CACHE_THRESHOLD_SECONDS
             ):
@@ -361,7 +365,7 @@ def run_send_job(
         if (
             newsletter_type == "daily"
             and not manual
-            and not weekend_test
+            and not holiday_test
             and not stale_alert
             and "prerendered_html" not in context
         ):
@@ -388,7 +392,7 @@ def run_send_job(
                     return
 
         # 아카이브 저장 (수동/주말 테스트/stale·duplicate alert 는 아카이브 생략)
-        if not manual and not weekend_test and not stale_alert and not duplicate_alert:
+        if not manual and not holiday_test and not stale_alert and not duplicate_alert:
             try:
                 NewsletterArchiveRepository.save(
                     session, tenant_id, newsletter_type, subject, html_content
@@ -398,7 +402,7 @@ def run_send_job(
                 logger.warning(f"{log_prefix} 아카이브 저장 실패 (발송은 계속): {e}")
 
         # 구독자 조회 — 주말 테스트·stale·duplicate alert 는 SUPER_ADMIN_EMAILS 만, 평일은 슬롯 필터링
-        if weekend_test or stale_alert or duplicate_alert:
+        if holiday_test or stale_alert or duplicate_alert:
             subscribers = _get_admin_recipients(session, tenant_id)
             if not subscribers:
                 logger.warning(
@@ -416,7 +420,7 @@ def run_send_job(
 
         # 중복 방지: 수동/주말 테스트/stale·duplicate alert 발송은 dedup 스킵
         sent_ids: set[int] = set()
-        if not manual and not weekend_test and not stale_alert and not duplicate_alert:
+        if not manual and not holiday_test and not stale_alert and not duplicate_alert:
             if newsletter_type == "daily":
                 sent_ids = SendHistoryRepository.get_sent_today_subscriber_ids(
                     session, tenant_id, newsletter_type="daily"
@@ -512,7 +516,7 @@ def run_send_job(
         if (
             sent_count >= 1
             and not manual
-            and not weekend_test
+            and not holiday_test
             and not stale_alert
             and not duplicate_alert
             and newsletter_type == "daily"

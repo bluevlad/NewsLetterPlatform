@@ -176,6 +176,11 @@ class Settings(BaseSettings):
     subscribe_rate_limit_email_minutes: int = Field(default=5, env="SUBSCRIBE_RATE_LIMIT_EMAIL_MINUTES")
     subscribe_rate_limit_email_per_day: int = Field(default=3, env="SUBSCRIBE_RATE_LIMIT_EMAIL_PER_DAY")
 
+    # 휴일 발송 정책 — 공휴일(대체휴일 포함)은 holidays 패키지 KR 달력 기준.
+    # extra_holidays: 회사 지정 휴무일 등 추가 휴일 (YYYY-MM-DD 콤마 구분).
+    # 잘못된 형식 항목은 로그 경고 후 무시. 빈 값이면 법정 공휴일만 적용.
+    extra_holidays: str = Field(default="", env="EXTRA_HOLIDAYS")
+
     # LLMOps 관측 보고 (BATCH_RUN_REPORTING v0.3.0, fire-and-forget)
     # 비어 있으면 보고 비활성. consumer_id 는 service-registry llm_consumers[].id 와 일치.
     llmops_enabled: bool = Field(default=False, env="LLMOPS_ENABLED")

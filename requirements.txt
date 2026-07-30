@@ -37,5 +37,8 @@ PyJWT>=2.8.0
 # Utilities
 pyyaml>=6.0.3
 
+# 한국 공휴일 달력 (휴일 발송 정책 — 주말/공휴일 관리자 테스트 모드)
+holidays>=0.101
+
 # Rate limiting (구독 폼 어뷰즈 방어)
 slowapi>=0.1.10
