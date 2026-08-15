@@ -180,6 +180,11 @@ class Settings(BaseSettings):
     # extra_holidays: 회사 지정 휴무일 등 추가 휴일 (YYYY-MM-DD 콤마 구분).
     # 잘못된 형식 항목은 로그 경고 후 무시. 빈 값이면 법정 공휴일만 적용.
     extra_holidays: str = Field(default="", env="EXTRA_HOLIDAYS")
+    # 휴일 관리자 테스트 발송 스위치 — false(기본)면 휴일(주말·공휴일) 자동 발송을
+    # 전체 스킵. true면 기존 정책대로 early 슬롯에 SUPER_ADMIN_EMAILS 테스트 발송.
+    holiday_admin_test_enabled: bool = Field(
+        default=False, env="HOLIDAY_ADMIN_TEST_ENABLED"
+    )
 
     # LLMOps 관측 보고 (BATCH_RUN_REPORTING v0.3.0, fire-and-forget)
     # 비어 있으면 보고 비활성. consumer_id 는 service-registry llm_consumers[].id 와 일치.

@@ -230,8 +230,8 @@
         <h3>스케줄러 (<code>/admin/scheduler</code>)</h3>
         <p>일일, 주간, 월간 뉴스레터 발송 스케줄 구성과 현재 동작 상태를 모니터링합니다.</p>
 
-        <h3>휴일 발송 정책 (주말·공휴일 관리자 테스트 모드)</h3>
-        <p>주말(토·일)과 한국 법정 공휴일(대체휴일 포함)에는 일반 구독자에게 발송하지 않고, <strong>SUPER_ADMIN_EMAILS에만 early 슬롯 1회 테스트 발송</strong>합니다. 파이프라인 정상 동작을 매일 확인하면서 구독자 피로도를 줄이기 위한 정책입니다.</p>
+        <h3>휴일 발송 정책 (주말·공휴일 발송 스킵)</h3>
+        <p>주말(토·일)과 한국 법정 공휴일(대체휴일 포함)에는 <strong>자동 발송을 전체 스킵</strong>합니다 (기본 정책). 환경변수 <code>HOLIDAY_ADMIN_TEST_ENABLED=true</code>로 설정하면 스킵 대신 <strong>SUPER_ADMIN_EMAILS에만 early 슬롯 1회 테스트 발송</strong>하는 관리자 테스트 모드로 동작합니다.</p>
         <table>
             <thead>
                 <tr>
@@ -245,12 +245,16 @@
                     <td>토/일 + 법정 공휴일(<code>holidays</code> 패키지 KR 달력, 대체휴일 포함) + <code>EXTRA_HOLIDAYS</code> 지정일</td>
                 </tr>
                 <tr>
-                    <td>발송 이력 구분</td>
+                    <td>기본 동작</td>
+                    <td>휴일에는 daily/weekly/monthly 자동 발송을 모든 슬롯에서 스킵 (<code>HOLIDAY_ADMIN_TEST_ENABLED=false</code>)</td>
+                </tr>
+                <tr>
+                    <td>발송 이력 구분 (테스트 모드 시)</td>
                     <td><code>send_mode</code>: 주말 = <code>weekend_test</code>, 평일 공휴일 = <code>holiday_test</code> (정식 발송 <code>normal</code>과 통계 분리)</td>
                 </tr>
                 <tr>
                     <td>dedup 풀 격리</td>
-                    <td>휴일 테스트 발송은 <code>sent_articles</code>에 기록하지 않으므로, 휴일 기간 기사가 다음 영업일 정식 발송에 포함될 수 있습니다</td>
+                    <td>휴일 스킵/테스트 발송은 <code>sent_articles</code>에 기록하지 않으므로, 휴일 기간 기사가 다음 영업일 정식 발송에 포함될 수 있습니다</td>
                 </tr>
                 <tr>
                     <td>회사 지정 휴무일</td>

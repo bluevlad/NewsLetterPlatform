@@ -32,9 +32,10 @@ from ...tenant.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
-# 휴일 테스트 모드: KST(UTC+9) 기준 주말·공휴일이면 관리자에게만 발송.
+# 휴일 발송 정책: KST(UTC+9) 기준 주말(토·일)·공휴일이면 자동 발송 전체 스킵.
+# HOLIDAY_ADMIN_TEST_ENABLED=true 일 때만 관리자 테스트 모드(early 슬롯 1회)로 발송.
 # 판정(주말/법정 공휴일/EXTRA_HOLIDAYS)은 src/common/holiday.py 참조.
-_HOLIDAY_TEST_SLOT = "early"  # 휴일엔 early 슬롯만 발송 (mid/late는 스킵)
+_HOLIDAY_TEST_SLOT = "early"  # 휴일 테스트 모드는 early 슬롯만 발송 (mid/late는 스킵)
 
 # Stale-cache admin alert: 캐시 데이터가 24시간 초과면 일반 구독자 발송 중단,
 # SUPER_ADMIN_EMAILS 에만 STALE 배너로 발송. (FRESHNESS_PLAN AC-8 / 트랙 F P6)
@@ -274,7 +275,19 @@ def run_send_job(
     holiday_test = nonbiz_reason is not None
     send_mode = "normal"
     if holiday_test:
-        # 휴일엔 early 슬롯만 1회 관리자 테스트 발송. mid/late 는 스킵.
+        # 기본 정책: 휴일(토·일·공휴일)엔 자동 발송 전체 스킵 (관리자 테스트 포함).
+        if not settings.holiday_admin_test_enabled:
+            h_name = (
+                holiday_name(today_kst) if nonbiz_reason == "holiday" else None
+            )
+            logger.info(
+                f"{log_prefix} 휴일({nonbiz_reason}"
+                + (f": {h_name}" if h_name else "")
+                + ") — 자동 발송 스킵 (HOLIDAY_ADMIN_TEST_ENABLED=false)"
+            )
+            return
+        # 테스트 모드(env 활성 시): 휴일엔 early 슬롯만 1회 관리자 테스트 발송.
+        # mid/late 는 스킵.
         if slot and slot != _HOLIDAY_TEST_SLOT:
             logger.info(
                 f"{log_prefix} 휴일({nonbiz_reason}) — early 슬롯만 관리자 테스트 발송, "

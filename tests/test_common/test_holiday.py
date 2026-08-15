@@ -93,3 +93,40 @@ class TestSendModeMapping:
         assert self._send_mode(None) == "normal"
         assert self._send_mode("weekend") == "weekend_test"
         assert self._send_mode("holiday") == "holiday_test"
+
+
+class TestHolidayFullSkip:
+    """휴일 자동 발송 전체 스킵 정책 (HOLIDAY_ADMIN_TEST_ENABLED).
+
+    - false(기본): 휴일이면 어떤 슬롯도 발송하지 않고 즉시 종료
+    - true: 기존 관리자 테스트 모드 유지 (early 슬롯만 진행)
+    """
+
+    def _run_send(self, monkeypatch, *, enabled: bool, slot: str):
+        from types import SimpleNamespace
+        from src.common.scheduler import jobs
+
+        sender_calls = []
+        fake_tenant = SimpleNamespace(weekend_test_mode=True)
+        fake_registry = SimpleNamespace(get=lambda tid: fake_tenant)
+        monkeypatch.setattr(jobs, "get_registry", lambda: fake_registry)
+        monkeypatch.setattr(jobs, "non_business_day_reason", lambda d=None: "weekend")
+        monkeypatch.setattr(jobs.settings, "holiday_admin_test_enabled", enabled)
+        # get_sender 도달 여부로 스킵/진행 판별 (미설정 sender 로 즉시 종료)
+        monkeypatch.setattr(
+            jobs, "get_sender",
+            lambda: sender_calls.append(1) or SimpleNamespace(is_configured=False),
+        )
+        jobs.run_send_job("test-tenant", "daily", manual=False, slot=slot)
+        return sender_calls
+
+    def test_disabled_skips_all_slots(self, monkeypatch):
+        for slot in ("early", "mid", "late"):
+            assert self._run_send(monkeypatch, enabled=False, slot=slot) == []
+
+    def test_enabled_keeps_admin_test_on_early(self, monkeypatch):
+        assert self._run_send(monkeypatch, enabled=True, slot="early") == [1]
+
+    def test_enabled_still_skips_mid_late(self, monkeypatch):
+        assert self._run_send(monkeypatch, enabled=True, slot="mid") == []
+        assert self._run_send(monkeypatch, enabled=True, slot="late") == []
