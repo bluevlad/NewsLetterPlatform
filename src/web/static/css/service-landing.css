@@ -551,8 +551,244 @@ body::after {
     50% { opacity: 0.4; }
 }
 
+/* ── System Architecture (관제 흐름도) ── */
+.sl-sysarch {
+    animation: fadeInUp 0.7s ease-out 0.3s backwards;
+}
+
+.sl-sysarch-board {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.sl-sysarch-board-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+
+.sl-sysarch-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #10b981;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.sl-sysarch-lane {
+    margin-bottom: 0.25rem;
+}
+
+.sl-sysarch-lane-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--service-color);
+    letter-spacing: 0.04em;
+    margin-bottom: 0.45rem;
+}
+
+.sl-sysarch-lane-nodes {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    flex-wrap: wrap;
+}
+
+.sl-sysarch-node {
+    flex: 1 1 140px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 0.6rem 0.75rem;
+    min-width: 130px;
+}
+
+.sl-sysarch-node.highlight {
+    border-color: var(--service-color);
+    box-shadow: 0 0 12px rgba(var(--glow-r, 59), var(--glow-g, 130), var(--glow-b, 246), 0.15);
+}
+
+.sl-sysarch-node.accent {
+    border-left: 3px solid var(--src-color, var(--service-color));
+}
+
+.sl-sysarch-node-name {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 0.2rem;
+}
+
+.sl-sysarch-node-desc {
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    line-height: 1.45;
+}
+
+.sl-sysarch-port {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.sl-sysarch-sched {
+    display: inline-block;
+    margin-top: 0.35rem;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.55rem;
+    font-weight: 600;
+    padding: 0.12rem 0.4rem;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--text-muted);
+}
+
+.sl-sysarch-arrow {
+    align-self: center;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    padding: 0 0.5rem;
+    opacity: 0.7;
+}
+
+.sl-sysarch-arrow small {
+    display: block;
+    font-size: 0.52rem;
+    white-space: nowrap;
+}
+
+.sl-sysarch-down {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    opacity: 0.6;
+    padding: 0.35rem 0;
+}
+
+.sl-sysarch-sources {
+    flex: 1 1 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.sl-sysarch-ops {
+    margin-top: 1rem;
+    border: 1px dashed rgba(245, 158, 11, 0.45);
+    border-radius: 10px;
+    background: rgba(245, 158, 11, 0.05);
+    padding: 0.6rem 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+}
+
+.sl-sysarch-ops-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #f59e0b;
+    flex-shrink: 0;
+}
+
+.sl-sysarch-ops-item {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.sl-sysarch-ops-item::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #f59e0b;
+    opacity: 0.7;
+}
+
+/* 내용 구성 원리 카드 */
+.sl-principles {
+    margin-top: 0.85rem;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.85rem;
+}
+
+.sl-principle {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-top: 3px solid var(--src-color, var(--service-color));
+    border-radius: 12px;
+    padding: 1rem 1.15rem;
+}
+
+.sl-principle-name {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 0.6rem;
+}
+
+.sl-principle-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    counter-reset: principle;
+}
+
+.sl-principle-steps li {
+    counter-increment: principle;
+    position: relative;
+    padding-left: 1.5rem;
+    margin-bottom: 0.45rem;
+    font-size: 0.64rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.sl-principle-steps li::before {
+    content: counter(principle);
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: rgba(var(--glow-r, 59), var(--glow-g, 130), var(--glow-b, 246), 0.15);
+    color: var(--service-color);
+    font-size: 0.55rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sl-principle-steps b {
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
+    .sl-sysarch-lane-nodes { flex-direction: column; }
+    .sl-sysarch-arrow { transform: rotate(90deg); padding: 0.3rem 0; }
+    .sl-sysarch-arrow small { display: none; }
+    .sl-principles { grid-template-columns: 1fr; }
     .sl-container { padding: 1.5rem 1rem 2rem; }
     .sl-hero h1 { font-size: 1.6rem; }
     .sl-hero { padding: 1.75rem 1rem; }

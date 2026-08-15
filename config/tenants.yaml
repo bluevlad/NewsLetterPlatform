@@ -58,25 +58,7 @@ tenants:
           - "산업/규제"
           - "임상/치료"
 
-  standup:
-    display_name: "StandUp 주간 인사이트"
-    description: "LogAnalyzer · GitHub QA · Auto-Tobe 통합 주간 인사이트 (StandUp 합성)"
-    api_base_url: "${STANDUP_API_URL}"
-    email_subject_prefix: "[StandUp]"
-    email_template: "standup/weekly_report.html"
-    schedule:
-      # weekly only — 매주 월요일 09:30 발송
-      weekly_day_of_week: "mon"
-      weekly_collect_hour: 8
-      weekly_collect_minute: 0
-      weekly_send_hour: 9
-      weekly_send_minute: 30
-    is_active: true
-    brand:
-      primary_color: "#ef4444"
-      primary_color_dark: "#b91c1c"
-      accent_color: "#fca5a5"
-      color_scheme: "Red"
+  # standup: 2026-08-15 서비스 종료 — legacy/standup/ 보관 (복원 절차는 legacy/standup/README.md)
 
   tech-briefing:
     display_name: "TechBriefing AI 학습·커리어 일일 브리핑"

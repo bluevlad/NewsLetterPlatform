@@ -288,7 +288,7 @@ class TestContentHealth:
         body = r.json()
         assert body["status"] in ("ok", "warn")
         assert "allergy-insight" in body["tenants"]
-        assert "standup" in body["tenants"]
+        assert "tech-briefing" in body["tenants"]
 
     def test_liveness_contract_untouched(self, client):
         """QA Agent 계약 — /api/health 는 여전히 {status} liveness."""
