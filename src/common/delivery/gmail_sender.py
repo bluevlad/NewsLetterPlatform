@@ -54,9 +54,13 @@ class GmailSender:
         recipient: str,
         subject: str,
         html_content: str,
-        sender_name: str = "NewsLetterPlatform"
+        sender_name: str = "NewsLetterPlatform",
+        headers: Optional[dict] = None,
     ) -> SendResult:
-        """이메일 발송"""
+        """이메일 발송
+
+        headers: 추가 메일 헤더 (예: List-Unsubscribe / List-Unsubscribe-Post)
+        """
         if not self.is_configured:
             return SendResult(
                 recipient=recipient,
@@ -70,6 +74,8 @@ class GmailSender:
             safe_sender_name = sender_name.replace('\r', '').replace('\n', '').replace('\x00', '')
             message["From"] = f"{safe_sender_name} <{self.sender_email}>"
             message["To"] = recipient
+            for key, value in (headers or {}).items():
+                message[key] = value
 
             html_part = MIMEText(html_content, "html", "utf-8")
             message.attach(html_part)
@@ -117,6 +123,8 @@ class GmailSender:
             safe_sender_name = msg.get("sender_name", "NewsLetterPlatform").replace('\r', '').replace('\n', '').replace('\x00', '')
             message["From"] = f"{safe_sender_name} <{self.sender_email}>"
             message["To"] = recipient
+            for key, value in (msg.get("headers") or {}).items():
+                message[key] = value
 
             html_part = MIMEText(msg["html_content"], "html", "utf-8")
             message.attach(html_part)

@@ -4,12 +4,14 @@ Admin 인증 모듈 - 세션 기반 인증 + 로그인/로그아웃 + Google Sig
 
 import secrets
 import logging
+import time
 
 from fastapi import APIRouter, Request, Form, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from ...config import settings
+from ...common.security.abuse_guard import get_client_ip
 from ..shared import templates
 
 # 리버스 프록시 base path prefix
@@ -91,15 +93,58 @@ def _get_super_admin_emails() -> set[str]:
 
 
 def _set_session_cookie(response: Response, token: str) -> Response:
-    """세션 쿠키 설정 (공통)"""
+    """세션 쿠키 설정 (공통)
+
+    Secure 플래그는 운영 base URL 이 https 인 경우에만 켠다 — 별도
+    env 없이 배포 환경(https 게이트웨이)에서 자동 적용되고, 로컬
+    http 개발에서는 로그인이 깨지지 않는다.
+    """
     response.set_cookie(
         key="admin_session",
         value=token,
         httponly=True,
         samesite="lax",
+        secure=settings.web_base_url.lower().startswith("https"),
         max_age=settings.admin_session_hours * 3600,
     )
     return response
+
+
+# ── 비밀번호 로그인 brute-force 방어 ─────────────────────────────
+# 공개 엔드포인트에 대한 무제한 대입을 막는 프로세스 내 실패 카운터.
+# (단일 워커 운영 전제 — 다중 워커 확장 시 공유 저장소로 이관 필요)
+LOGIN_MAX_FAILURES = 5          # 윈도 내 허용 실패 횟수
+LOGIN_WINDOW_SECONDS = 600      # 실패 집계/잠금 윈도 (10분)
+
+_login_failures: dict[str, list[float]] = {}
+
+
+def _prune_failures(ip: str, now: float) -> list[float]:
+    fails = [t for t in _login_failures.get(ip, []) if now - t < LOGIN_WINDOW_SECONDS]
+    if fails:
+        _login_failures[ip] = fails
+    else:
+        _login_failures.pop(ip, None)
+    return fails
+
+
+def _is_login_locked(ip: str) -> bool:
+    return len(_prune_failures(ip, time.monotonic())) >= LOGIN_MAX_FAILURES
+
+
+def _record_login_failure(ip: str) -> None:
+    now = time.monotonic()
+    fails = _prune_failures(ip, now)
+    _login_failures[ip] = fails + [now]
+
+
+def _clear_login_failures(ip: str) -> None:
+    _login_failures.pop(ip, None)
+
+
+def _reset_login_rate_limit() -> None:
+    """테스트 격리용 전체 초기화."""
+    _login_failures.clear()
 
 
 @router.get("/admin/login", response_class=HTMLResponse)
@@ -146,14 +191,31 @@ async def login_submit(request: Request, password: str = Form(...)):
             status_code=403,
         )
 
+    client_ip = get_client_ip(request)
+    if _is_login_locked(client_ip):
+        logger.warning("Admin 로그인 rate limit 초과: ip=%s", client_ip)
+        return templates.TemplateResponse(
+            "admin/login.html",
+            {
+                "request": request,
+                "error": "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.",
+                "google_oauth_enabled": _is_google_oauth_configured(),
+                "google_client_id": settings.google_client_id if _is_google_oauth_configured() else "",
+                "password_login_enabled": True,
+            },
+            status_code=429,
+        )
+
     if secrets.compare_digest(password, settings.admin_password):
+        _clear_login_failures(client_ip)
         token = create_session()
         response = RedirectResponse(url=f"{_base}/admin", status_code=303)
         _set_session_cookie(response, token)
         logger.info("Admin 로그인 성공 (비밀번호)")
         return response
 
-    logger.warning("Admin 로그인 실패: 잘못된 비밀번호")
+    _record_login_failure(client_ip)
+    logger.warning("Admin 로그인 실패: 잘못된 비밀번호 (ip=%s)", client_ip)
     return templates.TemplateResponse("admin/login.html", {
         "request": request,
         "error": "비밀번호가 일치하지 않습니다.",

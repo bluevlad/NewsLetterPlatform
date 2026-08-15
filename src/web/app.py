@@ -713,8 +713,46 @@ async def unsubscribe_result_page(request: Request, tenant_id: str, email: str =
 
 
 @app.get("/{tenant_id}/unsubscribe/token/{token}", response_class=HTMLResponse)
-async def unsubscribe_by_token(request: Request, tenant_id: str, token: str):
-    """토큰 기반 구독 해지 (이메일 링크)"""
+async def unsubscribe_by_token_confirm(request: Request, tenant_id: str, token: str):
+    """토큰 기반 구독 해지 — 확인 페이지 (상태 변경 없음).
+
+    GET 은 조회만 한다: 메일 보안 스캐너/링크 프리페처가 링크를 자동
+    방문해도 구독이 해지되지 않도록 실제 해지는 POST 로 분리 (SEC-02).
+    기존 발송 메일의 링크(같은 URL)는 이 확인 페이지를 거쳐 계속 동작한다.
+    """
+    tenant = get_tenant_or_404(tenant_id)
+
+    SessionLocal = get_session_factory()
+    db = SessionLocal()
+    try:
+        subscriber = SubscriberRepository.get_by_unsubscribe_token(db, token)
+        if not subscriber:
+            return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_result.html"), {
+                "request": request,
+                "tenant": tenant,
+                "error": "유효하지 않은 링크이거나 이미 해지된 구독입니다.",
+            })
+
+        return templates.TemplateResponse(resolve_template(tenant_id, "unsubscribe_confirm.html"), {
+            "request": request,
+            "tenant": tenant,
+            "email": subscriber.email,
+            "token": token,
+        })
+    finally:
+        db.close()
+
+
+@app.post("/{tenant_id}/unsubscribe/token/{token}", response_class=HTMLResponse)
+async def unsubscribe_by_token_submit(request: Request, tenant_id: str, token: str):
+    """토큰 기반 구독 해지 실행 (POST).
+
+    두 경로가 진입한다:
+    - 확인 페이지의 해지 버튼 (브라우저 form POST — CSRF origin 검증 대상)
+    - RFC 8058 one-click: 메일 제공자가 List-Unsubscribe URL 로
+      `List-Unsubscribe=One-Click` body 를 POST (Origin/쿠키 없음 →
+      CSRF 미들웨어 통과, 토큰 자체가 인가 수단)
+    """
     tenant = get_tenant_or_404(tenant_id)
 
     SessionLocal = get_session_factory()

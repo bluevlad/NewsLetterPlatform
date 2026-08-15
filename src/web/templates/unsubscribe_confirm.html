@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}구독 해지 확인 - {{ tenant.display_name }}{% endblock %}
+{% block header_subtitle %}{{ tenant.display_name }}{% endblock %}
+
+{% block content %}
+<div class="card text-center">
+    <div class="icon-large">&#x2709;&#xFE0F;</div>
+    <h2>구독을 해지하시겠습니까?</h2>
+
+    <p class="text-muted" style="margin: 1.5rem 0;">
+        <strong>{{ email }}</strong> 주소의<br>
+        {{ tenant.display_name }} 뉴스레터 구독을 해지합니다.
+    </p>
+
+    <form method="post" action="{{ base_path }}/{{ tenant.tenant_id }}/unsubscribe/token/{{ token }}">
+        <button type="submit" class="btn btn-primary">구독 해지</button>
+    </form>
+
+    <a href="{{ base_path }}/{{ tenant.tenant_id }}/subscribe" class="btn btn-secondary mt-2">취소하고 돌아가기</a>
+</div>
+{% endblock %}
