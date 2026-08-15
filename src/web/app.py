@@ -466,6 +466,9 @@ async def archive_all(request: Request):
         grouped_by_tenant = {}
         for archive in archives:
             tid = archive.tenant_id
+            # 미등록(레거시 종료) 테넌트는 스킵 — 상세 라우트가 404 라 죽은 링크가 됨
+            if tid not in tenant_map:
+                continue
             if tid not in grouped_by_tenant:
                 grouped_by_tenant[tid] = {}
             month_key = archive.sent_date.strftime("%Y년 %m월")

@@ -33,101 +33,121 @@
                     <div class="sl-feature-desc">모든 테넌트의 발송 뉴스레터를 한 페이지에서 열람 (로그인 불필요)</div>
                     <span class="sl-feature-tag">Public · Archive</span>
                 </a>
-                <a class="sl-feature" href="{{ base_path }}/allergy-insight/subscribe">
-                    <span class="sl-feature-icon">&#128236;</span>
-                    <div class="sl-feature-name">AllergyInsight 구독</div>
-                    <div class="sl-feature-desc">알러지 뉴스·논문·인사이트 주간 브리핑 구독 (이메일 인증)</div>
-                    <span class="sl-feature-tag">Public · Subscribe</span>
-                </a>
-                <a class="sl-feature" href="{{ base_path }}/allergy-insight/archive">
-                    <span class="sl-feature-icon">&#128196;</span>
-                    <div class="sl-feature-name">AllergyInsight 아카이브</div>
-                    <div class="sl-feature-desc">AllergyInsight 백넘버 — HealthPulse 통합 알러지 브리핑 모아보기</div>
-                    <span class="sl-feature-tag">Public · Archive</span>
-                </a>
                 <a class="sl-feature" href="{{ base_path }}/admin">
                     <span class="sl-feature-icon">&#9881;&#65039;</span>
                     <div class="sl-feature-name">관리자 대시보드</div>
-                    <div class="sl-feature-desc">테넌트별 구독자 수·최근 발송·헬스체크 요약을 한 화면에 집약</div>
+                    <div class="sl-feature-desc">테넌트 현황·발송 이력·구독자 관리·발송 운영·스케줄러를 한 화면에서 통합 운영</div>
                     <span class="sl-feature-tag sl-feature-tag--admin-locked">Admin · Dashboard</span>
                 </a>
-                <a class="sl-feature" href="{{ base_path }}/admin/history">
-                    <span class="sl-feature-icon">&#128200;</span>
-                    <div class="sl-feature-name">발송 이력</div>
-                    <div class="sl-feature-desc">발송 일시·수신자 수·성공/실패·재시도 현황 (테넌트별 필터 지원)</div>
-                    <span class="sl-feature-tag sl-feature-tag--admin-locked">Admin · History</span>
-                </a>
-                <a class="sl-feature" href="{{ base_path }}/admin/allergy-insight/subscribers">
-                    <span class="sl-feature-icon">&#128101;</span>
-                    <div class="sl-feature-name">구독자 관리</div>
-                    <div class="sl-feature-desc">테넌트별 구독자 검색·추가·활성/비활성 토글·CSV 내보내기</div>
-                    <span class="sl-feature-tag sl-feature-tag--admin-locked">Admin · Subscribers</span>
-                </a>
-                <a class="sl-feature" href="{{ base_path }}/admin/allergy-insight/send">
-                    <span class="sl-feature-icon">&#128231;</span>
-                    <div class="sl-feature-name">발송 운영</div>
-                    <div class="sl-feature-desc">미리보기·테스트 발송·수집 트리거·즉시 발송(adhoc) 등 발송 운영 액션</div>
-                    <span class="sl-feature-tag sl-feature-tag--admin-locked">Admin · Operations</span>
-                </a>
-                <a class="sl-feature" href="{{ base_path }}/admin/scheduler">
-                    <span class="sl-feature-icon">&#128338;</span>
-                    <div class="sl-feature-name">스케줄러</div>
-                    <div class="sl-feature-desc">APScheduler 등록 작업 목록(daily/weekly/monthly)·다음 실행 시각 확인</div>
-                    <span class="sl-feature-tag sl-feature-tag--admin-locked">Admin · Scheduler</span>
-                </a>
             </div>
         </section>
 
-        <section class="sl-section sl-arch">
-            <div class="sl-section-title">Architecture</div>
-            <div class="sl-arch-diagram">
-                <div class="sl-arch-node">
-                    <div class="sl-arch-node-label">Frontend</div>
-                    <div class="sl-arch-node-tech">Jinja2 + HTMX</div>
+        <section class="sl-section sl-sysarch">
+            <div class="sl-section-title">System Architecture</div>
+            <div class="sl-sysarch-board">
+                <div class="sl-sysarch-board-title">
+                    <span class="sl-sysarch-live-dot"></span>
+                    수집 이후 데이터 연동 — 관제 흐름도
                 </div>
-                <div class="sl-arch-arrow">&#8594;</div>
-                <div class="sl-arch-node highlight">
-                    <div class="sl-arch-node-label">Backend</div>
-                    <div class="sl-arch-node-tech">FastAPI<br><span style="opacity:.7;font-size:.85em;">+ APScheduler</span></div>
+
+                <div class="sl-sysarch-lane">
+                    <div class="sl-sysarch-lane-label">&#9312; 소스 수집 — 원본 서비스 REST API</div>
+                    <div class="sl-sysarch-lane-nodes">
+                        <div class="sl-sysarch-sources">
+                            <div class="sl-sysarch-node accent" style="--src-color:#f43f5e;">
+                                <div class="sl-sysarch-node-name">AllergyInsight Backend <span class="sl-sysarch-port">:9040</span></div>
+                                <div class="sl-sysarch-node-desc">알러지 뉴스·논문 (HealthPulse 통합)</div>
+                                <span class="sl-sysarch-sched">daily 07:30 수집</span>
+                            </div>
+                            <div class="sl-sysarch-node accent" style="--src-color:#06b6d4;">
+                                <div class="sl-sysarch-node-name">SkillRadar Backend <span class="sl-sysarch-port">:9070</span></div>
+                                <div class="sl-sysarch-node-desc">AI 교육과정·세미나·정책·뉴스 큐레이션</div>
+                                <span class="sl-sysarch-sched">daily 06:30 · weekly 금 06:00 수집</span>
+                            </div>
+                        </div>
+                        <div class="sl-sysarch-arrow">&#8594;<small>httpx · X-Newsletter-Key</small></div>
+                        <div class="sl-sysarch-node highlight">
+                            <div class="sl-sysarch-node-name">수집·정규화</div>
+                            <div class="sl-sysarch-node-desc">APScheduler cron 트리거 &#8594; collected_data upsert 캐시 + history 이력 보관 (원본 DB 직접 접근 없음)</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="sl-arch-arrow">&#8594;</div>
-                <div class="sl-arch-node">
-                    <div class="sl-arch-node-label">Database</div>
-                    <div class="sl-arch-node-tech">SQLite<br><span style="opacity:.7;font-size:.85em;">SQLAlchemy 2.0</span></div>
+                <div class="sl-sysarch-down">&#9660;</div>
+
+                <div class="sl-sysarch-lane">
+                    <div class="sl-sysarch-lane-label">&#9313; 데이터 연동·가공 — 수집본을 구독자 맞춤 콘텐츠로</div>
+                    <div class="sl-sysarch-lane-nodes">
+                        <div class="sl-sysarch-node">
+                            <div class="sl-sysarch-node-name">중복 제거</div>
+                            <div class="sl-sysarch-node-desc">article_key 지문 · 최근 7일 dedup 풀 — 이미 발송한 기사 재탕 차단</div>
+                        </div>
+                        <div class="sl-sysarch-arrow">&#8594;</div>
+                        <div class="sl-sysarch-node accent" style="--src-color:#f43f5e;">
+                            <div class="sl-sysarch-node-name">페르소나 적응 <span class="sl-sysarch-port">AllergyInsight</span></div>
+                            <div class="sl-sysarch-node-desc">구독자 역할(페르소나)·관심 알러젠 기준으로 같은 수집본에서 콘텐츠 선택·변형</div>
+                        </div>
+                        <div class="sl-sysarch-arrow">&#8594;</div>
+                        <div class="sl-sysarch-node accent" style="--src-color:#06b6d4;">
+                            <div class="sl-sysarch-node-name">AI 심층 분석 <span class="sl-sysarch-port">TechBriefing</span></div>
+                            <div class="sl-sysarch-node-desc">스코어링 Top-N 선별 &#8594; 로컬 Ollama(qwen2.5-coder) 4섹션 심층 카드 생성</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="sl-arch-arrow" style="opacity:0.3;">&#8226;&#8226;&#8226;</div>
-                <div class="sl-arch-node">
-                    <div class="sl-arch-node-label">Mail</div>
-                    <div class="sl-arch-node-tech">Gmail SMTP<br><span style="opacity:.7;font-size:.85em;">smtplib</span></div>
+                <div class="sl-sysarch-down">&#9660;</div>
+
+                <div class="sl-sysarch-lane">
+                    <div class="sl-sysarch-lane-label">&#9314; 뉴스레터 구성·발송 — 구독자에게 전달</div>
+                    <div class="sl-sysarch-lane-nodes">
+                        <div class="sl-sysarch-node">
+                            <div class="sl-sysarch-node-name">템플릿 렌더링</div>
+                            <div class="sl-sysarch-node-desc">Jinja2 — 테넌트 브랜드·발송 타입(daily/weekly/monthly)별 HTML 구성</div>
+                        </div>
+                        <div class="sl-sysarch-arrow">&#8594;</div>
+                        <div class="sl-sysarch-node">
+                            <div class="sl-sysarch-node-name">SendPlan 수립</div>
+                            <div class="sl-sysarch-node-desc">발송 대상 확정·트랜잭션 분리·실패 재시도 계획</div>
+                        </div>
+                        <div class="sl-sysarch-arrow">&#8594;</div>
+                        <div class="sl-sysarch-node">
+                            <div class="sl-sysarch-node-name">SMTP 발송</div>
+                            <div class="sl-sysarch-node-desc">Gmail SMTP — 구독 해지(RFC 8058)·열람 픽셀·클릭 추적 링크 삽입</div>
+                        </div>
+                        <div class="sl-sysarch-arrow">&#8594;</div>
+                        <div class="sl-sysarch-node highlight">
+                            <div class="sl-sysarch-node-name">구독자 수신</div>
+                            <div class="sl-sysarch-node-desc">AllergyInsight daily 08:30 · TechBriefing daily 08:00 / weekly 금 09:30</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sl-sysarch-ops">
+                    <span class="sl-sysarch-ops-label">&#128225; 관제 Observability</span>
+                    <span class="sl-sysarch-ops-item">콘텐츠 헬스 /api/health/content — 신선도·중복 감시</span>
+                    <span class="sl-sysarch-ops-item">발송 이력 — 성공/실패·재시도 추적</span>
+                    <span class="sl-sysarch-ops-item">Engagement /e/* — 열람·클릭·피드백 회수</span>
+                    <span class="sl-sysarch-ops-item">Slack 경보 — 수집·발송 이상 통지</span>
+                    <span class="sl-sysarch-ops-item">휴일 정책 — 휴일 스킵·영업일 catch-up</span>
                 </div>
             </div>
-        </section>
 
-        <section class="sl-section sl-flow">
-            <div class="sl-section-title">Service Flow</div>
-            <div class="sl-flow-steps">
-                <div class="sl-flow-step">
-                    <div class="sl-flow-step-num">1</div>
-                    <div class="sl-flow-step-label">콘텐츠 수신</div>
-                    <div class="sl-flow-step-desc">AllergyInsight</div>
+            <div class="sl-principles">
+                <div class="sl-principle" style="--src-color:#f43f5e;">
+                    <div class="sl-principle-name">AllergyInsight — 알러지 브리핑 구성 원리</div>
+                    <ol class="sl-principle-steps">
+                        <li><b>수집</b> — HealthPulse 통합 알러지 뉴스·논문을 REST API로 수신해 캐싱</li>
+                        <li><b>선별</b> — article_key 지문으로 최근 7일 발송분과 중복 제거</li>
+                        <li><b>변형</b> — 구독자 페르소나(환자·보호자·의료인 등)와 관심 알러젠에 맞춰 동일 수집본에서 콘텐츠 선택·심도 조정</li>
+                        <li><b>구성</b> — 뉴스·논문 카테고리 섹션 + 페르소나 맞춤 요약으로 daily 발송, 주간/월간은 이력 집계 Summary</li>
+                    </ol>
                 </div>
-                <div class="sl-flow-arrow">&#8594;</div>
-                <div class="sl-flow-step">
-                    <div class="sl-flow-step-num">2</div>
-                    <div class="sl-flow-step-label">템플릿 생성</div>
-                    <div class="sl-flow-step-desc">뉴스레터 편집</div>
-                </div>
-                <div class="sl-flow-arrow">&#8594;</div>
-                <div class="sl-flow-step">
-                    <div class="sl-flow-step-num">3</div>
-                    <div class="sl-flow-step-label">발송</div>
-                    <div class="sl-flow-step-desc">SMTP 이메일 발송</div>
-                </div>
-                <div class="sl-flow-arrow">&#8594;</div>
-                <div class="sl-flow-step">
-                    <div class="sl-flow-step-num">4</div>
-                    <div class="sl-flow-step-label">이력 관리</div>
-                    <div class="sl-flow-step-desc">발송 결과 추적</div>
+                <div class="sl-principle" style="--src-color:#06b6d4;">
+                    <div class="sl-principle-name">TechBriefing — AI 학습·커리어 브리핑 구성 원리</div>
+                    <ol class="sl-principle-steps">
+                        <li><b>수집</b> — SkillRadar가 큐레이션한 AI 교육과정·세미나·정책·뉴스를 수신</li>
+                        <li><b>선별</b> — 스코어링 기반 focused Top-N 항목 선정 (7일 dedup)</li>
+                        <li><b>분석</b> — 로컬 Ollama(qwen2.5-coder)가 항목별 4섹션 심층 카드 생성: 무엇인지 · 누구에게 유익한지 · 추천 의견 · 실행 팁</li>
+                        <li><b>구성</b> — 일일 브리핑 + 주간 결산(월~금 이력 집계·공개 통계)으로 발송</li>
+                    </ol>
                 </div>
             </div>
         </section>

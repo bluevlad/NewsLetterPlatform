@@ -108,9 +108,12 @@ class TestPersonalizeHtml:
 
 
 class TestSchedulerFrequencyGate:
-    """M12: daily 는 supported_frequencies 로 게이트 — StandUp 에 daily 잡 없음."""
+    """M12: daily 는 supported_frequencies 로 게이트.
 
-    def test_standup_has_no_daily_jobs(self):
+    standup 테넌트는 2026-08-15 legacy 이동 — 잡 자체가 등록되지 않아야 한다.
+    """
+
+    def test_registered_jobs(self):
         from apscheduler.schedulers.background import BackgroundScheduler
         from src.main import register_tenants
         from src.common.scheduler import jobs
@@ -120,9 +123,8 @@ class TestSchedulerFrequencyGate:
         jobs.register_all_jobs(sch)
         ids = {j.id for j in sch.get_jobs()}
 
-        assert "collect_standup" not in ids
-        assert not any(i.startswith("send_standup_") for i in ids)
-        assert "collect_weekly_standup" in ids
+        # legacy 이동한 standup 잡은 일절 없음
+        assert not any("standup" in i for i in ids)
         # daily 지원 테넌트는 기존 id 체계 그대로 유지
         assert "collect_allergy-insight" in ids
         assert "send_allergy-insight_early" in ids
@@ -165,5 +167,4 @@ class TestPersonaTenantGate:
         register_tenants()
         reg = get_registry()
         assert reg.get("allergy-insight").persona_enabled is True
-        assert reg.get("standup").persona_enabled is False
         assert reg.get("tech-briefing").persona_enabled is False

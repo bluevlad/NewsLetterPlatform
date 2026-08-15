@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     )
 
     # 테넌트별 스케줄·API·인증 설정은 각 테넌트 패키지로 이관 (P1b, 2026-08-15):
-    #   src/tenant/{allergy_insight,standup,tech_briefing}/config.py 의
+    #   src/tenant/{allergy_insight,tech_briefing}/config.py 의
     #   TenantSettings — env 변수명은 기존 그대로 유지.
     # 여기에는 플랫폼 공유 인프라 설정만 남긴다.
 

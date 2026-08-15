@@ -37,9 +37,10 @@ class TestRepositoryFacade:
 
 
 class TestTenantDiscovery:
-    def test_discovers_three_tenants(self):
+    def test_discovers_active_tenants(self):
+        # standup 은 2026-08-15 legacy/standup/ 으로 이동 — 자동 발견 대상 아님
         registered = discover_and_register()
-        assert registered == ["allergy-insight", "standup", "tech-briefing"]
+        assert registered == ["allergy-insight", "tech-briefing"]
         reg = get_registry()
         assert {t.tenant_id for t in reg.get_all()} >= set(registered)
 
@@ -69,12 +70,6 @@ class TestTenantSettingsEnvMapping:
         s = TechBriefingSettings()
         assert s.skillradar_newsletter_key == "sr-key"
         assert s.tech_briefing_llm_top_n == 9
-
-    def test_standup_env_names(self, monkeypatch):
-        monkeypatch.setenv("STANDUP_WEEKLY_DAY_OF_WEEK", "tue")
-        from src.tenant.standup.config import StandUpSettings
-        s = StandUpSettings()
-        assert s.standup_weekly_day_of_week == "tue"
 
     def test_global_settings_no_longer_carries_tenant_fields(self):
         from src.config import settings
