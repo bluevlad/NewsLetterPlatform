@@ -5,8 +5,9 @@
   - 법정 공휴일: holidays 패키지 KR 달력 (대체휴일 포함)
   - 추가 휴일: settings.extra_holidays (YYYY-MM-DD 콤마 구분, 회사 지정 휴무일)
 
-판정 결과는 스케줄러가 관리자 테스트 발송 모드(send_mode='weekend_test' /
-'holiday_test') 분기에 사용한다. 발송 파이프라인을 막지 않도록 fail-safe:
+판정 결과는 스케줄러가 휴일 자동 발송 스킵(기본) 또는 관리자 테스트 발송 모드
+(HOLIDAY_ADMIN_TEST_ENABLED=true, send_mode='weekend_test'/'holiday_test')
+분기에 사용한다. 발송 파이프라인을 막지 않도록 fail-safe:
 holidays 패키지 미설치·오류 시 주말 판정만 수행하고 경고 로그를 남긴다.
 """
 
