@@ -235,6 +235,12 @@
         <h3>스케줄러 (<code>/admin/scheduler</code>)</h3>
         <p>일일, 주간, 월간 뉴스레터 발송 스케줄 구성과 현재 동작 상태를 모니터링합니다.</p>
 
+        <h3>콘텐츠 헬스 &amp; 운영 경보</h3>
+        <p><code>/api/health/content</code>가 테넌트별 <strong>콘텐츠 지표</strong>(수집 경과 시간, 마지막 정식 발송일, 최근 발송 중복 지문, dedup 풀 크기)를 JSON으로 노출합니다. 프로세스 생존만 보는 <code>/api/health</code>와 달리 "내용이 맞는가"를 감시합니다. 환경변수 <code>OPS_SLACK_WEBHOOK_URL</code>을 설정하면 stale-cache/duplicate-content 경보와 수집 실패가 <strong>Slack으로 즉시 통지</strong>됩니다 (Gmail과 독립된 경보 채널).</p>
+
+        <h3>구독자 참여(Engagement) 추적</h3>
+        <p>발송 메일에 <strong>오픈 픽셀과 👍/👎 피드백 버튼</strong>이 포함됩니다 (HMAC 서명 링크, 이메일 주소 등 개인정보는 URL에 포함되지 않음). 수집된 이벤트는 매일 04:50 AllergyInsight 백엔드로 릴레이됩니다(페르소나 키 설정 시). 클릭 링크 추적은 <code>ENGAGEMENT_CLICK_TRACKING_ENABLED=true</code>로 별도 활성화하며, 전체 기능은 <code>ENGAGEMENT_ENABLED=false</code>로 끌 수 있습니다 (<code>SESSION_SECRET</code> 필수).</p>
+
         <h3>휴일 발송 정책 (주말·공휴일 발송 스킵)</h3>
         <p>주말(토·일)과 한국 법정 공휴일(대체휴일 포함)에는 <strong>자동 발송을 전체 스킵</strong>합니다 (기본 정책). 환경변수 <code>HOLIDAY_ADMIN_TEST_ENABLED=true</code>로 설정하면 스킵 대신 <strong>SUPER_ADMIN_EMAILS에만 early 슬롯 1회 테스트 발송</strong>하는 관리자 테스트 모드로 동작합니다.</p>
         <table>
@@ -252,6 +258,10 @@
                 <tr>
                     <td>기본 동작</td>
                     <td>휴일에는 daily/weekly/monthly 자동 발송을 모든 슬롯에서 스킵 (<code>HOLIDAY_ADMIN_TEST_ENABLED=false</code>)</td>
+                </tr>
+                <tr>
+                    <td>다음 영업일 catch-up</td>
+                    <td>휴일 스킵 후 첫 영업일에는 수집 lookback이 자동 확장되어 휴일 기간 소식이 포함되고, 메일 상단에 <strong>"📬 휴일 소식 포함"</strong> 배지가 표시됩니다 (AllergyInsight daily)</td>
                 </tr>
                 <tr>
                     <td>발송 이력 구분 (테스트 모드 시)</td>

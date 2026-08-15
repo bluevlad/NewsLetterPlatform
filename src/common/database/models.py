@@ -203,6 +203,10 @@ class SentArticle(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     tenant_id = Column(String(50), nullable=False)
     article_id = Column(Integer, nullable=False)
+    # 테넌트 중립 문자열 키 (P2) — article_id INTEGER 가 AllergyInsight PK
+    # 체계의 누수라는 진단(ADR-003 한계)에 따라 도입. int-ID 테넌트는
+    # str(article_id) 백필, string-ID 테넌트는 원본 키를 그대로 기록한다.
+    article_key = Column(String(64), index=True)
     article_url = Column(String(1000))
     section = Column(String(30), nullable=False)
     sent_date = Column(Date, nullable=False)
@@ -318,3 +322,39 @@ class BounceLog(Base):
 
     def __repr__(self):
         return f"<BounceLog(email='{self.email}', type={self.bounce_type}, code={self.smtp_code})>"
+
+
+class EngagementEvent(Base):
+    """구독자 참여 이벤트 — open / click / feedback 단일 스키마 (P2).
+
+    Freshness 플랜 트랙 L(피드백·클릭 추적)과 페르소나 스펙 N4(engagement
+    릴레이)가 각자 설계했던 것을 하나의 이벤트 테이블로 통합한다.
+    - 수집: 웹 엔드포인트 /e/* (HMAC 서명 링크, 이메일에 PII 미포함)
+    - 소비 1: 트랙 E(다이제스트 윈도 A/B)의 오픈/클릭 데이터
+    - 소비 2: N4 — persona_code 스냅샷과 함께 AllergyInsight /engagement 로
+      일 배치 릴레이 (relayed_at 마킹)
+    """
+    __tablename__ = "engagement_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(50), nullable=False)
+    subscriber_id = Column(Integer, nullable=False)
+    event_type = Column(String(16), nullable=False)   # 'open' | 'click' | 'feedback'
+    newsletter_type = Column(String(20), default="daily", nullable=False)
+    target_url = Column(String(1000))                  # click 전용
+    section = Column(String(30))                       # 딥링크 섹션 (선택)
+    feedback_value = Column(String(10))                # 'up' | 'down'
+    persona_code = Column(String(40))                  # 이벤트 시점 스냅샷 (N4)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    relayed_at = Column(DateTime)                      # 릴레이 완료 시각 (NULL=미릴레이)
+
+    __table_args__ = (
+        Index("idx_engagement_tenant_created", "tenant_id", "created_at"),
+        Index("idx_engagement_relay", "tenant_id", "relayed_at"),
+    )
+
+    def __repr__(self):
+        return (
+            f"<EngagementEvent(tenant='{self.tenant_id}', sub={self.subscriber_id}, "
+            f"type={self.event_type})>"
+        )

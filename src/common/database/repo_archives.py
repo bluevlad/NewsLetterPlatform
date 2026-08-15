@@ -70,6 +70,21 @@ class NewsletterArchiveRepository:
         )
 
     @staticmethod
+    def get_recent(session: Session, tenant_id: str, newsletter_type: str,
+                   limit: int = 2) -> list[NewsletterArchive]:
+        """특정 타입 최근 N건 (콘텐츠 헬스의 중복 지문 비교용)"""
+        return (
+            session.query(NewsletterArchive)
+            .filter(
+                NewsletterArchive.tenant_id == tenant_id,
+                NewsletterArchive.newsletter_type == newsletter_type,
+            )
+            .order_by(NewsletterArchive.sent_date.desc())
+            .limit(limit)
+            .all()
+        )
+
+    @staticmethod
     def get_by_id(session: Session, archive_id: int) -> Optional[NewsletterArchive]:
         """ID로 아카이브 조회"""
         return session.query(NewsletterArchive).filter(

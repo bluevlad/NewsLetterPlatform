@@ -159,6 +159,10 @@ async def intro_page():
 # Admin 라우터 등록 (/{tenant_id} 보다 먼저)
 app.include_router(admin_router)
 
+# Engagement 수집 라우터 (P2) — /e/o|c|f/* (open pixel·클릭·피드백)
+from .routes_engagement import router as engagement_router
+app.include_router(engagement_router)
+
 # 페르소나 콘텐츠 선택·변형 라우터 (N2) — /{tenant_id}/persona/* 가
 # 일반 /{tenant_id}/* 라우트보다 먼저 매칭되도록 여기서 등록.
 app.include_router(persona_router)
@@ -190,6 +194,26 @@ async def api_health():
         return JSONResponse(
             content={"status": "unhealthy", "error": str(e)},
             status_code=503,
+        )
+
+
+@app.get("/api/health/content", response_class=JSONResponse)
+async def api_health_content():
+    """콘텐츠 헬스 — 수집 신선도·중복 지문·dedup 풀 등 "내용" 지표 (P2).
+
+    /api/health(liveness)와 분리 — QA Agent 의 200/503 계약을 건드리지 않고,
+    무음 실패(성공 로그 + 잘못된 내용) 계열을 외부에서 관측 가능하게 한다.
+    warn 이 있어도 200 을 반환하고 status 필드로 구분한다 (플래핑 방지).
+    """
+    from ..common.monitoring import collect_content_health
+    try:
+        with get_session() as session:
+            report = collect_content_health(session)
+        return JSONResponse(content=report)
+    except Exception as e:
+        logger.error(f"Content health check failed: {e}")
+        return JSONResponse(
+            content={"status": "error", "error": str(e)}, status_code=503
         )
 
 

@@ -11,6 +11,23 @@ from .models import SentArticle
 logger = logging.getLogger(__name__)
 
 
+def _insert_ignore(session: Session, payload: list[dict]):
+    """UNIQUE 충돌 무시 INSERT — 방언별 분기 (PG 마이그레이션 준비, P2).
+
+    기존에는 sqlite 방언 하드코딩이라 PostgreSQL 전환의 차단 지점이었다.
+    두 방언 모두 on_conflict_do_nothing 을 지원하므로 런타임 분기로 중립화.
+    """
+    dialect = session.get_bind().dialect.name
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as _insert
+    else:
+        from sqlalchemy.dialects.sqlite import insert as _insert
+    stmt = _insert(SentArticle).values(payload)
+    return stmt.on_conflict_do_nothing(
+        index_elements=["tenant_id", "article_id", "section", "sent_date"]
+    )
+
+
 class SentArticleRepository:
     """발송 기사 이력 저장소 (교차일 dedup 용)
 
@@ -85,7 +102,6 @@ class SentArticleRepository:
         if not entries:
             return 0
 
-        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
         payload = []
         for entry in entries:
             if len(entry) == 4:
@@ -100,6 +116,8 @@ class SentArticleRepository:
             payload.append({
                 "tenant_id": tenant_id,
                 "article_id": aid,
+                # 테넌트 중립 문자열 키 (P2) — string-ID 테넌트 대비
+                "article_key": str(aid)[:64],
                 "article_url": url,
                 "section": section,
                 "sent_date": sent_date,
@@ -107,12 +125,33 @@ class SentArticleRepository:
             })
         if not payload:
             return 0
-        stmt = sqlite_insert(SentArticle).values(payload)
-        stmt = stmt.on_conflict_do_nothing(
-            index_elements=["tenant_id", "article_id", "section", "sent_date"]
-        )
+        stmt = _insert_ignore(session, payload)
         result = session.execute(stmt)
         return result.rowcount or 0
+
+    @staticmethod
+    def list_recent_article_keys(session: Session, tenant_id: str,
+                                 days: int = 7) -> list[str]:
+        """최근 N일 내 발송 기사의 테넌트 중립 문자열 키 목록 (P2).
+
+        string-ID 테넌트가 dedup 을 채택할 때 사용. int-ID 테넌트의
+        기존 이력은 마이그레이션이 str(article_id) 로 백필한다.
+        """
+        cutoff = _today_start_utc() - timedelta(days=days)
+        rows = (
+            session.query(SentArticle.article_key)
+            .filter(
+                and_(
+                    SentArticle.tenant_id == tenant_id,
+                    SentArticle.sent_at >= cutoff,
+                    SentArticle.article_key.isnot(None),
+                )
+            )
+            .order_by(SentArticle.sent_at.desc())
+            .distinct()
+            .all()
+        )
+        return [row[0] for row in rows]
 
     @staticmethod
     def purge_older_than(session: Session, days: int = 90) -> int:

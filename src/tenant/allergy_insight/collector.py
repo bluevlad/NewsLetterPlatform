@@ -218,20 +218,34 @@ class AllergyInsightCollector:
     # GET URL 대략 안전선 — 1800 bytes 초과 예상 시 POST alias 로 전환.
     _GET_EXCLUDE_IDS_BUDGET = 1800
 
+    # 휴일 catch-up 시 fallback 윈도 상한 (과도한 과거 재노출 방지)
+    _CATCHUP_MAX_WINDOW_DAYS = 7
+    _CATCHUP_HEADLINE_LIMIT = 8  # 기본 5 → catch-up 시 상향
+
     async def _collect_headlines_today(
         self,
         limit: int = 5,
         exclude_ids: Optional[list[int]] = None,
+        fallback_window_days: Optional[int] = None,
     ) -> Dict[str, Any]:
         """오늘의 핵심 헤드라인 Top-N 수집 (1기업 1헤드라인).
 
         exclude_ids: 최근 발송 이력. 풀에서 원천 제외하여 반복 발송 차단.
         대량(약 200+) 전달 시 GET URL 길이 한계 대응으로 POST alias 로 자동 전환.
+        fallback_window_days: 휴일 catch-up (P2) — 기본 [1,2]일 lookback 을
+            [1..N]일로 확장해 휴일 기간 기사를 풀에 포함. 이미 발송된 기사는
+            exclude_ids(sent_articles)가 걸러낸다.
 
         Returns:
             {"headlines": [...], "excluded_ids": [int, ...]}
             백엔드 미구현/오류 시 모두 빈 리스트.
         """
+        window = min(
+            fallback_window_days or 2, self._CATCHUP_MAX_WINDOW_DAYS
+        )
+        fallback_days = list(range(1, max(window, 2) + 1))
+        if fallback_window_days and fallback_window_days > 2:
+            limit = max(limit, self._CATCHUP_HEADLINE_LIMIT)
         exclude_ids = [int(i) for i in (exclude_ids or [])]
         exclude_csv = ",".join(str(i) for i in exclude_ids)
         with self._track(
@@ -252,7 +266,7 @@ class AllergyInsightCollector:
                         json_body={
                             "limit": limit,
                             "one_per_company": True,
-                            "fallback_days": [1, 2],
+                            "fallback_days": fallback_days,
                             "exclude_ids": exclude_ids,
                         },
                     )
@@ -260,7 +274,7 @@ class AllergyInsightCollector:
                     params: Dict[str, Any] = {
                         "limit": limit,
                         "one_per_company": "true",
-                        "fallback_days": "1,2",
+                        "fallback_days": ",".join(str(d) for d in fallback_days),
                     }
                     if exclude_csv:
                         params["exclude_ids"] = exclude_csv
@@ -946,6 +960,7 @@ class AllergyInsightCollector:
         self,
         exclude_ids: Optional[list[int]] = None,
         exclude_companies: Optional[list[str]] = None,
+        catchup_days: Optional[int] = None,
     ) -> Dict:
         """일일 리포트 수집.
 
@@ -962,8 +977,10 @@ class AllergyInsightCollector:
         recent_companies = list(exclude_companies or [])
         try:
             # 1. 핵심 헤드라인 수집 (공개 API, 1기업 1헤드라인)
+            # catchup_days: 휴일 스킵 다음 영업일에 lookback 확장 (P2)
             headlines_payload = await self._collect_headlines_today(
-                limit=5, exclude_ids=recent_excl
+                limit=5, exclude_ids=recent_excl,
+                fallback_window_days=catchup_days,
             )
             top_headlines = headlines_payload.get("headlines", [])
             excluded_ids = headlines_payload.get("excluded_ids", [])
@@ -1027,9 +1044,22 @@ class AllergyInsightCollector:
 
             now = datetime.now(timezone.utc).isoformat()
 
+            # 휴일 catch-up 메타 — 템플릿 "휴일 소식 포함" 배지용 (P2)
+            catchup_meta = None
+            if catchup_days and catchup_days > 2:
+                cover_from = date.today() - timedelta(days=min(
+                    catchup_days, self._CATCHUP_MAX_WINDOW_DAYS
+                ))
+                catchup_meta = {
+                    "days": catchup_days,
+                    "date_from": cover_from.isoformat(),
+                    "date_to": date.today().isoformat(),
+                }
+
             report = {
                 "report_date": now,
                 "generated_at": now,
+                "catchup": catchup_meta,
                 "top_headlines": top_headlines,
                 "company_digest": company_digest,
                 "papers": paper_items[:20],
@@ -1078,18 +1108,21 @@ class AllergyInsightCollector:
         self,
         exclude_ids: Optional[list[int]] = None,
         exclude_companies: Optional[list[str]] = None,
+        catchup_days: Optional[int] = None,
     ) -> Dict[str, Any]:
         """전체 데이터 수집.
 
         Args:
             exclude_ids: 최근 발송 기사 ID — daily 리포트 수집에 전달.
             exclude_companies: 최근 발송 기업명 — company_digest dedup 에 전달.
+            catchup_days: 휴일 catch-up lookback 확장 (P2).
         """
         result = {}
 
         daily_report = await self.collect_daily_report(
             exclude_ids=exclude_ids,
             exclude_companies=exclude_companies,
+            catchup_days=catchup_days,
         )
         if daily_report:
             result["daily_report"] = daily_report

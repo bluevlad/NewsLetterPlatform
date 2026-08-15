@@ -78,6 +78,19 @@ class Settings(BaseSettings):
     subscribe_rate_limit_email_minutes: int = Field(default=5, env="SUBSCRIBE_RATE_LIMIT_EMAIL_MINUTES")
     subscribe_rate_limit_email_per_day: int = Field(default=3, env="SUBSCRIBE_RATE_LIMIT_EMAIL_PER_DAY")
 
+    # Engagement 추적 (P2) — open pixel·피드백 링크. SESSION_SECRET 필수
+    # (HMAC 서명 기반). 마스터 스위치 off 면 링크 생성·기록 모두 비활성.
+    engagement_enabled: bool = Field(default=True, env="ENGAGEMENT_ENABLED")
+    # 클릭 리다이렉트 링크 재작성 — 이메일 본문 href 치환은 렌더 리스크가
+    # 있어 기본 off. 인프라(/e/c 엔드포인트)는 준비됨 — 운영 검증 후 활성화.
+    engagement_click_tracking_enabled: bool = Field(
+        default=False, env="ENGAGEMENT_CLICK_TRACKING_ENABLED"
+    )
+
+    # 운영 경보 — Slack Incoming Webhook (P2). 빈 값이면 경보 비활성.
+    # Gmail(발송 인프라)과 독립된 경보 경로 — stale/duplicate/수집 실패 통지.
+    ops_slack_webhook_url: str = Field(default="", env="OPS_SLACK_WEBHOOK_URL")
+
     # 휴일 발송 정책 — 공휴일(대체휴일 포함)은 holidays 패키지 KR 달력 기준.
     # extra_holidays: 회사 지정 휴무일 등 추가 휴일 (YYYY-MM-DD 콤마 구분).
     # 잘못된 형식 항목은 로그 경고 후 무시. 빈 값이면 법정 공휴일만 적용.

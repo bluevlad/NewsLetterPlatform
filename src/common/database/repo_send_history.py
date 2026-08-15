@@ -83,6 +83,26 @@ class SendHistoryRepository:
         return {row[0] for row in rows}
 
     @staticmethod
+    def get_last_normal_send_at(
+        session: Session, tenant_id: str, newsletter_type: str = "daily"
+    ):
+        """마지막 정식 발송(send_mode='normal', 성공) 시각 (naive UTC).
+
+        휴일 catch-up 갭 판정과 콘텐츠 헬스에 사용. 없으면 None.
+        """
+        row = (
+            session.query(func.max(SendHistory.sent_at))
+            .filter(
+                SendHistory.tenant_id == tenant_id,
+                SendHistory.newsletter_type == newsletter_type,
+                SendHistory.send_mode == "normal",
+                SendHistory.is_success == True,
+            )
+            .first()
+        )
+        return row[0] if row else None
+
+    @staticmethod
     def get_today_stats(session: Session, tenant_id: str) -> dict:
         """오늘 발송 통계: {total, success, failed}"""
         today_start = _today_start_utc()
