@@ -38,3 +38,34 @@ BRAND_CONFIG = BrandConfig(
         ),
     ],
 )
+
+
+# ─────────────────────────────────────────────────────────────
+# 테넌트 환경 설정 (P1b, 2026-08-15) — 전역 config.py 에서 이관.
+# env 변수명은 필드명 대문자화로 매칭 (기존 변수명 그대로 유지).
+# ─────────────────────────────────────────────────────────────
+
+from pathlib import Path
+
+from pydantic_settings import BaseSettings
+
+
+class StandUpSettings(BaseSettings):
+    """StandUp 테넌트 환경 설정 (.env 공유 로드)"""
+
+    # Weekly (매주 월요일 — StandUp 합성 결과 기준)
+    standup_weekly_day_of_week: str = "mon"
+    standup_weekly_collect_hour: int = 8
+    standup_weekly_collect_minute: int = 0
+    standup_weekly_send_hour: int = 9
+    standup_weekly_send_minute: int = 30
+
+    standup_api_url: str = "http://host.docker.internal:9060"
+
+    class Config:
+        env_file = Path(__file__).resolve().parents[3] / ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"
+
+
+tenant_settings = StandUpSettings()

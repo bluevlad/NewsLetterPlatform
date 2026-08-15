@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from ...common.llmops_client import build_stage_content, report_batch_run
 from ...config import settings
+from .config import tenant_settings
 from .ollama_client import chat, parse_json_response
 from .prompts import ANALYZE_SYSTEM, render_user_prompt
 
@@ -62,11 +63,11 @@ def analyze_headlines(items: List[Dict[str, Any]]) -> int:
 
     Returns: 분석 성공한 아이템 수.
     """
-    if not settings.tech_briefing_llm_enabled:
+    if not tenant_settings.tech_briefing_llm_enabled:
         logger.info("TechBriefing LLM 비활성 — analyzer skip")
         return 0
 
-    top_n = settings.tech_briefing_llm_top_n
+    top_n = tenant_settings.tech_briefing_llm_top_n
     candidates = items[:top_n]
     success = 0
 
@@ -86,7 +87,7 @@ def analyze_headlines(items: List[Dict[str, Any]]) -> int:
                 "tokens_out": result.eval_count or None,
                 "duration_ms": result.eval_duration_ms or None,
                 "params": {
-                    "temperature": settings.tech_briefing_llm_temperature,
+                    "temperature": tenant_settings.tech_briefing_llm_temperature,
                     "max_tokens": 900,
                 },
             }
@@ -170,7 +171,7 @@ def _report_to_llmops(
     else:
         run_status = "partial"
     payload = {
-        "consumer_id": settings.tech_briefing_consumer_id,
+        "consumer_id": tenant_settings.tech_briefing_consumer_id,
         "run_id": f"{started_at.isoformat()}-{uuid.uuid4().hex[:8]}",
         "started_at": started_at.isoformat(),
         "ended_at": datetime.now(timezone.utc).isoformat(),
@@ -180,5 +181,5 @@ def _report_to_llmops(
     }
     report_batch_run(
         settings.llmops_url, settings.llmops_api_key,
-        settings.tech_briefing_consumer_id, payload,
+        tenant_settings.tech_briefing_consumer_id, payload,
     )

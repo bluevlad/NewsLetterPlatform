@@ -22,7 +22,7 @@ from .config import (
     TENANT_ID,
 )
 from .formatter import TechBriefingFormatter
-from ...config import settings
+from .config import tenant_settings as settings
 
 
 class TechBriefingTenant(BaseTenant):

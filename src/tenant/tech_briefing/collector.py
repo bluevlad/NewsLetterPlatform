@@ -23,7 +23,7 @@ import httpx
 
 from .config import RECRUITING_HINTS, SEMINAR_HINTS
 from ...common.utils import retry_async
-from ...config import settings
+from .config import tenant_settings as settings
 
 logger = logging.getLogger(__name__)
 

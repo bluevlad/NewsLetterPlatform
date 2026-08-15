@@ -194,10 +194,13 @@ _CB_KEY = "test-newsletter-key"
 
 @pytest.fixture
 def callback_auth(monkeypatch):
-    """콜백 인증 — P0 하드닝으로 X-Newsletter-Key 필수. 키 설정 + 헤더 반환."""
-    from src.config import settings as app_settings
+    """콜백 인증 — P0 하드닝으로 X-Newsletter-Key 필수. 키 설정 + 헤더 반환.
+
+    P1b: 키가 전역 Settings 에서 allergy 테넌트 설정으로 이관됨.
+    """
+    from src.tenant.allergy_insight.config import tenant_settings
     monkeypatch.setattr(
-        app_settings, "allergy_insight_newsletter_api_key", _CB_KEY
+        tenant_settings, "allergy_insight_newsletter_api_key", _CB_KEY
     )
     return {"X-Newsletter-Key": _CB_KEY}
 

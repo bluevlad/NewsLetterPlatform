@@ -64,3 +64,62 @@ BRAND_CONFIG = BrandConfig(
         ),
     ],
 )
+
+
+# ─────────────────────────────────────────────────────────────
+# 테넌트 환경 설정 (P1b, 2026-08-15)
+# 전역 src/config.py 에 흩어져 있던 AllergyInsight 필드를 이관 —
+# 테넌트 추가/제거 시 플랫폼 전역 설정을 건드리지 않기 위함.
+# env 변수명은 필드명 대문자화로 매칭 (기존 변수명 그대로 유지).
+# ─────────────────────────────────────────────────────────────
+
+from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+
+class AllergyInsightSettings(BaseSettings):
+    """AllergyInsight 테넌트 환경 설정 (.env 공유 로드)"""
+
+    # Daily 스케줄 — 발송은 슬롯(early/mid/late)이 결정, SEND_HOUR/MINUTE 는
+    # deprecated 이지만 schedule_config 계약 호환을 위해 유지.
+    allergy_collect_hour: int = 5
+    allergy_collect_minute: int = 0
+    allergy_send_hour: int = 8
+    allergy_send_minute: int = 30
+
+    # Weekly (매주 금요일)
+    allergy_weekly_day_of_week: str = "fri"
+    allergy_weekly_collect_hour: int = 5
+    allergy_weekly_collect_minute: int = 0
+    allergy_weekly_send_hour: int = 9
+    allergy_weekly_send_minute: int = 30
+
+    # Monthly (매월 말일)
+    allergy_monthly_day_of_month: str = "last"
+    allergy_monthly_collect_hour: int = 5
+    allergy_monthly_collect_minute: int = 0
+    allergy_monthly_send_hour: int = 10
+    allergy_monthly_send_minute: int = 0
+
+    # Backend API
+    allergy_insight_api_url: str = "http://localhost:9040"
+    # 페르소나 적응형 뉴스레터 인증 키 — AllergyInsight 측 NEWSLETTER_API_KEY 와
+    # 동일 값. 빈 값이면 페르소나 기능 graceful degrade.
+    # 필드명(_api_key)과 env 명(_KEY)이 달라 validation_alias 필수.
+    allergy_insight_newsletter_api_key: str = Field(
+        default="", validation_alias="ALLERGY_INSIGHT_NEWSLETTER_KEY"
+    )
+    # v2 API 관리자 인증 (ADR-002)
+    allergy_insight_admin_name: str = ""
+    allergy_insight_admin_phone: str = ""
+    allergy_insight_admin_pin: str = ""
+
+    class Config:
+        env_file = Path(__file__).resolve().parents[3] / ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"
+
+
+tenant_settings = AllergyInsightSettings()

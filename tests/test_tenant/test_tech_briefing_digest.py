@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.config import settings
+from src.tenant.tech_briefing.config import tenant_settings as settings
 from src.tenant.tech_briefing.collector import _classify_course, _is_recruiting
 from src.tenant.tech_briefing.formatter import TechBriefingFormatter
 from src.tenant.tech_briefing.scorer import score_item
