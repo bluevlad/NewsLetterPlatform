@@ -198,6 +198,8 @@
             <li>
                 <strong>관리자 로그인</strong><br>
                 <code>/admin/login</code> 페이지에서 관리자 비밀번호 또는 Google Sign-In으로 로그인합니다.
+                Google Sign-In은 <code>SUPER_ADMIN_EMAILS</code> 허용목록에 등록된 계정만 통과합니다.
+                허용목록이 비어 있으면 <strong>모든 로그인이 거부</strong>됩니다(fail-close) — 반드시 환경변수를 설정하세요.
             </li>
             <li>
                 <strong>세션 유지</strong><br>

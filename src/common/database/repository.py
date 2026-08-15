@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, and_, func, or_, text, Integer
+from sqlalchemy import create_engine, and_, event, func, or_, text, Integer
 from sqlalchemy.orm import sessionmaker, Session
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,19 @@ def init_db(database_url: str = "sqlite:///./data/newsletterplatform.db") -> Non
         echo=False,
         connect_args={"check_same_thread": False} if "sqlite" in database_url else {}
     )
+
+    if "sqlite" in database_url:
+        # web·scheduler 두 프로세스가 같은 파일에 동시 쓰기하므로
+        # WAL(reader-writer 비차단) + busy_timeout(락 대기) 필수.
+        # 미설정 시 발송 트랜잭션과 겹친 쓰기가 'database is locked'로 즉사한다.
+        @event.listens_for(_engine, "connect")
+        def _set_sqlite_pragma(dbapi_conn, _connection_record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=15000")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.close()
+
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
     Base.metadata.create_all(bind=_engine)
@@ -629,19 +642,27 @@ class SendHistoryRepository:
 
     @staticmethod
     def get_sent_today_subscriber_ids(session: Session, tenant_id: str,
-                                      newsletter_type: str = "daily") -> set[int]:
-        """당일 발송 완료된 구독자 ID 일괄 조회 (N+1 방지, newsletter_type별 분리)"""
+                                      newsletter_type: str = "daily",
+                                      subject: Optional[str] = None) -> set[int]:
+        """당일 발송 완료된 구독자 ID 일괄 조회 (N+1 방지, newsletter_type별 분리)
+
+        Args:
+            subject: 지정 시 해당 제목의 발송만 조회. adhoc 은 같은 날 서로 다른
+                     뉴스레터를 여러 번 보낼 수 있으므로 제목까지 매칭해야
+                     두 번째 adhoc 이 첫 발송 수신자를 잘못 스킵하지 않는다.
+        """
         today_start = _today_start_utc()
+        conditions = [
+            SendHistory.tenant_id == tenant_id,
+            SendHistory.newsletter_type == newsletter_type,
+            SendHistory.sent_at >= today_start,
+            SendHistory.is_success == True,
+        ]
+        if subject is not None:
+            conditions.append(SendHistory.subject == subject)
         rows = (
             session.query(SendHistory.subscriber_id)
-            .filter(
-                and_(
-                    SendHistory.tenant_id == tenant_id,
-                    SendHistory.newsletter_type == newsletter_type,
-                    SendHistory.sent_at >= today_start,
-                    SendHistory.is_success == True
-                )
-            )
+            .filter(and_(*conditions))
             .distinct()
             .all()
         )

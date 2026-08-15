@@ -12,6 +12,8 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./config:/app/config
+      # .env 는 .dockerignore 로 이미지에서 제외됨 — 볼륨으로만 공급 (비밀 이미지 베이크 금지)
+      - ./.env:/app/.env:ro
     environment:
       - TZ=Asia/Seoul
       - PYTHONUNBUFFERED=1
@@ -23,11 +25,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
-      interval: 30s
+      # 스케줄러 heartbeat(10분 주기) 기반 생존 판정 — 항상 성공하는 no-op 금지
+      test: ["CMD", "python", "-c", "from src.common.scheduler.health import check_heartbeat; import sys; sys.exit(0 if check_heartbeat() else 1)"]
+      interval: 60s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -49,6 +52,8 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./config:/app/config
+      # .env 는 .dockerignore 로 이미지에서 제외됨 — 볼륨으로만 공급 (비밀 이미지 베이크 금지)
+      - ./.env:/app/.env:ro
     environment:
       - TZ=Asia/Seoul
       - PYTHONUNBUFFERED=1

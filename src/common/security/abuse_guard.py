@@ -42,6 +42,22 @@ class AbuseCheckResult:
     silent: bool = False  # True 이면 봇에게 차단 사실 노출 금지 (사용자 응답은 200)
 
 
+# RFC 완전 구현이 아닌 실용 검증: local@domain.tld 형태 + 길이 상한.
+# 목적은 임의 문자열이 SMTP 발송 경로에 도달해 Gmail 쿼터를 태우고
+# bounce 를 유발하는 것을 차단하는 것.
+# $ 는 문자열 끝의 개행 직전에도 매칭되므로 \Z 사용 ("a@b.com\n" 차단)
+_EMAIL_RE = re.compile(
+    r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)+\Z"
+)
+
+
+def is_valid_email(email: str) -> bool:
+    """이메일 형식 검증 (구독·관리자 추가 공통)."""
+    if not email or len(email) > 254:
+        return False
+    return bool(_EMAIL_RE.match(email))
+
+
 def is_role_account(email: str) -> bool:
     """role-account 메일함 여부"""
     return bool(_ROLE_ACCOUNT_RE.match(email or ""))

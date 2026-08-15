@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from ...common.database.repository import get_session_factory, SubscriberRepository
+from ...common.security import is_valid_email
 from ...common.scheduler.slots import (
     DAILY_SLOTS, DEFAULT_SLOT, SLOT_KEYS, normalize_slot, get_slots_for_template,
 )
@@ -278,6 +279,12 @@ async def subscriber_add(
         return redirect
 
     get_tenant_or_404(tenant_id)
+
+    if not is_valid_email(email.strip().lower()):
+        return templates.TemplateResponse("admin/_toast.html", {
+            "request": request, "level": "error",
+            "message": f"올바른 이메일 형식이 아닙니다: {email}",
+        })
 
     SessionLocal = get_session_factory()
     db = SessionLocal()

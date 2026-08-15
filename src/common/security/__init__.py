@@ -1,6 +1,7 @@
 """구독 폼 어뷰즈 방어 모듈"""
 
 from .abuse_guard import (
+    is_valid_email,
     is_role_account,
     is_bot_name_pattern,
     is_honeypot_filled,
@@ -10,6 +11,7 @@ from .abuse_guard import (
 )
 
 __all__ = [
+    "is_valid_email",
     "is_role_account",
     "is_bot_name_pattern",
     "is_honeypot_filled",

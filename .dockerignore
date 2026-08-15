@@ -1,0 +1,25 @@
+# 운영 데이터·비밀 — 이미지 레이어에 절대 포함 금지
+# (data/ 에는 구독자 이메일이 담긴 SQLite DB가 있다. 볼륨 마운트로만 접근)
+data/
+logs/
+.env
+.env.*
+
+# VCS / 로컬 환경
+.git/
+.github/
+.gitignore
+.dockerignore
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# 개발 전용
+tests/
+CLAUDE.md
+CLAUDE.local.md
+docker-compose*.yml
+Dockerfile

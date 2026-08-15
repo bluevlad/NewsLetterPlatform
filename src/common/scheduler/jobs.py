@@ -444,9 +444,10 @@ def run_send_job(
                     session, tenant_id, newsletter_type, period_start
                 )
 
-        # 발송 대상 메시지 리스트 구성
+        # 발송 대상 메시지 리스트 구성.
+        # ORM 객체는 세션 종료 후 만료되므로 (id, email) 튜플로만 보관한다.
         messages = []
-        target_subscribers = []
+        target_recipients: list[tuple[int, str]] = []
         for subscriber in subscribers:
             if subscriber.id in sent_ids:
                 logger.debug(f"{log_prefix} 이미 발송됨: {subscriber.email}")
@@ -474,78 +475,88 @@ def run_send_job(
                 "html_content": subscriber_html,
                 "sender_name": tenant.display_name,
             })
-            target_subscribers.append(subscriber)
+            target_recipients.append((subscriber.id, subscriber.email))
 
         if not messages:
             logger.info(f"{log_prefix} 발송 대상이 없습니다 (모두 발송 완료).")
             update_health("send")
             return
+        # ── 준비 트랜잭션 종료(아카이브 커밋). 이후 SMTP 발송은 세션 밖에서
+        # 수행한다: 발송(비가역)이 트랜잭션(가역) 안에 있으면 이력 기록 실패 시
+        # 배달 완료 메일의 이력까지 롤백되어 다음 슬롯에서 전원 재발송된다.
+        # 또한 SMTP 대화 내내 SQLite 쓰기 락을 쥐어 웹 프로세스 쓰기가 죽는다.
 
-        # 1차 배치 발송
-        results = sender.send_batch_efficient(messages)
+    # 1차 배치 발송 (DB 세션 없이)
+    results = sender.send_batch_efficient(messages)
 
-        # 1차 결과 기록 (history_type / send_mode 로 자동·수동·주말테스트 분리)
-        failed_items = []
-        sent_count = 0
-        for subscriber, msg, result in zip(target_subscribers, messages, results):
+    # 1차 결과 기록 — 행 단위 commit 으로 배달된 메일부터 즉시 영속화.
+    # (기록 도중 오류가 나도 이미 커밋된 행은 유지 → 재발송 경로 차단)
+    failed_items: list[tuple[int, str, dict]] = []
+    sent_count = 0
+    with get_session() as session:
+        for (sub_id, email), msg, result in zip(target_recipients, messages, results):
             SendHistoryRepository.create(
-                session, tenant_id, subscriber.id,
+                session, tenant_id, sub_id,
                 subject, result.success, result.error_message,
                 newsletter_type=history_type,
                 send_mode=send_mode,
             )
+            session.commit()
             if result.success:
                 sent_count += 1
             else:
-                failed_items.append((subscriber, msg))
-                logger.error(f"{log_prefix} 발송 실패: {subscriber.email} - {result.error_message}")
+                failed_items.append((sub_id, email, msg))
+                logger.error(f"{log_prefix} 발송 실패: {email} - {result.error_message}")
 
-        # 2차 재시도 (실패 건)
-        if failed_items:
-            logger.info(f"{log_prefix} {len(failed_items)}건 재시도 (5초 후)")
-            time.sleep(5)
+    # 2차 재시도 (실패 건) — sleep·SMTP 모두 세션 밖
+    if failed_items:
+        logger.info(f"{log_prefix} {len(failed_items)}건 재시도 (5초 후)")
+        time.sleep(5)
 
-            retry_messages = [msg for _, msg in failed_items]
-            retry_results = sender.send_batch_efficient(retry_messages)
+        retry_messages = [msg for _, _, msg in failed_items]
+        retry_results = sender.send_batch_efficient(retry_messages)
 
-            for (subscriber, _), retry_result in zip(failed_items, retry_results):
+        with get_session() as session:
+            for (sub_id, email, _), retry_result in zip(failed_items, retry_results):
                 if retry_result.success:
                     SendHistoryRepository.create(
-                        session, tenant_id, subscriber.id,
+                        session, tenant_id, sub_id,
                         subject, True, None,
                         newsletter_type=history_type,
                         send_mode=send_mode,
                     )
+                    session.commit()
                     sent_count += 1
-                    logger.info(f"{log_prefix} 재시도 발송 성공: {subscriber.email}")
+                    logger.info(f"{log_prefix} 재시도 발송 성공: {email}")
                 else:
                     logger.error(
-                        f"{log_prefix} 재시도 발송 실패: {subscriber.email} - {retry_result.error_message}"
+                        f"{log_prefix} 재시도 발송 실패: {email} - {retry_result.error_message}"
                     )
 
-        # dedup: 발송 성공 기사 이력 기록 (자동 daily 정식 발송만, 수동·주말테스트·stale·duplicate alert 제외)
-        # stale_alert / duplicate_alert 는 캐시된 과거 기사를 admin 에게 재발송한 것이므로
-        # sent_articles 풀을 오염시키면 안 됨 (다음날 정상 발송 시 잘못 dedup 될 위험).
-        if (
-            sent_count >= 1
-            and not manual
-            and not holiday_test
-            and not stale_alert
-            and not duplicate_alert
-            and newsletter_type == "daily"
-            and tenant.dedup_recent_days
-        ):
-            try:
-                entries = tenant.extract_sent_article_entries(context)
-                if entries:
+    # dedup: 발송 성공 기사 이력 기록 (자동 daily 정식 발송만, 수동·주말테스트·stale·duplicate alert 제외)
+    # stale_alert / duplicate_alert 는 캐시된 과거 기사를 admin 에게 재발송한 것이므로
+    # sent_articles 풀을 오염시키면 안 됨 (다음날 정상 발송 시 잘못 dedup 될 위험).
+    if (
+        sent_count >= 1
+        and not manual
+        and not holiday_test
+        and not stale_alert
+        and not duplicate_alert
+        and newsletter_type == "daily"
+        and tenant.dedup_recent_days
+    ):
+        try:
+            entries = tenant.extract_sent_article_entries(context)
+            if entries:
+                with get_session() as session:
                     inserted = SentArticleRepository.record_sent_articles(
                         session, tenant_id, date.today(), entries
                     )
-                    logger.info(
-                        f"{log_prefix} sent_articles 기록: {inserted}/{len(entries)}건"
-                    )
-            except Exception as e:
-                logger.warning(f"{log_prefix} sent_articles 기록 실패: {e}")
+                logger.info(
+                    f"{log_prefix} sent_articles 기록: {inserted}/{len(entries)}건"
+                )
+        except Exception as e:
+            logger.warning(f"{log_prefix} sent_articles 기록 실패: {e}")
 
     logger.info(f"{log_prefix} 뉴스레터 발송 완료: {sent_count}/{len(messages)}건")
     update_health("send")
@@ -782,9 +793,10 @@ def run_adhoc_send(
 
         result["total"] = len(subscribers)
 
-        # adhoc 중복 방지: 오늘 같은 adhoc 타입으로 이미 발송된 구독자
+        # adhoc 중복 방지: 오늘 같은 제목의 adhoc 으로 이미 발송된 구독자만 스킵.
+        # (제목 미포함 시 같은 날 두 번째 adhoc 이 첫 발송 수신자 전원을 잘못 스킵)
         sent_ids = SendHistoryRepository.get_sent_today_subscriber_ids(
-            session, tenant_id, newsletter_type="adhoc"
+            session, tenant_id, newsletter_type="adhoc", subject=subject
         )
 
         registry = get_registry()
@@ -1154,3 +1166,15 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
         name="Bounce Feedback Loop (NDR 처리)",
     )
     logger.info("bounce_processor 등록: 30분 주기")
+
+    # === Heartbeat (10분 주기) ===
+    # Docker healthcheck(check_heartbeat)가 스케줄러 루프 생존을 판정하는 근거.
+    # 등록 시점에 1회 즉시 기록해 기동 직후 stale 판정을 방지한다.
+    update_health("heartbeat")
+    scheduler.add_job(
+        lambda: update_health("heartbeat"),
+        trigger=CronTrigger(minute="*/10"),
+        id="scheduler_heartbeat",
+        name="Scheduler Heartbeat",
+    )
+    logger.info("scheduler_heartbeat 등록: 10분 주기")
