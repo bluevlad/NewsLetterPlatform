@@ -92,6 +92,26 @@ def _get_admin_recipients(session, tenant_id: str) -> list:
     return recipients
 
 
+def _unsubscribe_url(tenant_id: str, unsubscribe_token: str) -> str:
+    return (
+        f"{settings.web_base_url}/{tenant_id}"
+        f"/unsubscribe/token/{unsubscribe_token}"
+    )
+
+
+def _unsubscribe_headers(tenant_id: str, unsubscribe_token: str) -> dict:
+    """RFC 8058 원클릭 해지 헤더 — 모든 뉴스레터 발송 경로가 공유.
+
+    메일 제공자(Gmail/Yahoo 등)는 이 URL 에 `List-Unsubscribe=One-Click`
+    body 를 POST 한다 (본문 링크 GET 은 확인 페이지만 렌더 — SEC-02).
+    """
+    url = _unsubscribe_url(tenant_id, unsubscribe_token)
+    return {
+        "List-Unsubscribe": f"<{url}>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
+
+
 def _personalize_html(
     html: str, tenant_id: str, unsubscribe_token: str,
     subscriber_id: int = None,
@@ -110,10 +130,7 @@ def _personalize_html(
         make_feedback_url, make_open_pixel, rewrite_click_links,
     )
 
-    unsubscribe_url = (
-        f"{settings.web_base_url}/{tenant_id}"
-        f"/unsubscribe/token/{unsubscribe_token}"
-    )
+    unsubscribe_url = _unsubscribe_url(tenant_id, unsubscribe_token)
     persona_request_url = (
         f"{settings.web_base_url}/{tenant_id}"
         f"/persona/request?token={unsubscribe_token}"
@@ -629,6 +646,7 @@ def run_send_job(
                     subscriber_id=subscriber.id,
                 ),
                 "sender_name": tenant.display_name,
+                "headers": _unsubscribe_headers(tenant_id, subscriber.unsubscribe_token),
             })
             target_recipients.append((subscriber.id, subscriber.email))
 
@@ -840,7 +858,8 @@ def send_welcome_newsletter(tenant_id: str, email: str) -> bool:
                 recipient=subscriber.email,
                 subject=subject,
                 html_content=html_content,
-                sender_name=tenant.display_name
+                sender_name=tenant.display_name,
+                headers=_unsubscribe_headers(tenant_id, subscriber.unsubscribe_token),
             )
 
             SendHistoryRepository.create(
@@ -937,6 +956,7 @@ def run_adhoc_send(
                     subscriber_id=subscriber.id,
                 ),
                 "sender_name": display_name,
+                "headers": _unsubscribe_headers(tenant_id, subscriber.unsubscribe_token),
             })
             target_recipients.append((subscriber.id, subscriber.email))
 

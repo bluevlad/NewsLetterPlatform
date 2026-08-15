@@ -47,7 +47,10 @@ services:
     env_file:
       - .env.production
     ports:
-      - "4050:4050"
+      # 호스트 loopback 전용 바인딩 — 외부 직접 접근 차단 (SEC-04).
+      # 게이트웨이(nginx)는 unmong-network 로 컨테이너에 직접 도달하므로 publish 불필요.
+      # 직접 접근이 가능하면 X-Forwarded-For 위조로 rate limit 우회가 가능해진다.
+      - "127.0.0.1:4050:4050"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
