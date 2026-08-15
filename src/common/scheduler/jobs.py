@@ -21,6 +21,7 @@ from ..database.repository import (
     CollectionMetricRepository,
 )
 from ..database.models import CollectionMetric
+from ..alerts import send_ops_alert
 from ..delivery.gmail_sender import get_sender
 from ..delivery.bounce_processor import run_bounce_processor
 from ..holiday import KST, holiday_name, non_business_day_reason
@@ -91,14 +92,24 @@ def _get_admin_recipients(session, tenant_id: str) -> list:
     return recipients
 
 
-def _personalize_html(html: str, tenant_id: str, unsubscribe_token: str) -> str:
+def _personalize_html(
+    html: str, tenant_id: str, unsubscribe_token: str,
+    subscriber_id: int = None,
+) -> str:
     """수신자별 placeholder 치환 — 모든 발송 경로(정규·adhoc·웰컴)가 공유.
 
-    __UNSUBSCRIBE_URL__ / __PERSONA_REQUEST_URL__ 을 치환한다.
+    __UNSUBSCRIBE_URL__ / __PERSONA_REQUEST_URL__ /
+    __FEEDBACK_UP_URL__ / __FEEDBACK_DOWN_URL__ 을 치환하고,
+    subscriber_id 가 있으면 open pixel 주입 + (env 활성 시) 클릭 링크
+    재작성을 수행한다 (P2 engagement).
     템플릿에 placeholder 가 없으면 replace 는 무해한 no-op.
-    경로별로 치환 목록이 어긋나는 드리프트(웰컴에서 persona URL 누락 등)를
-    막기 위해 반드시 이 함수를 통해 치환한다.
+    경로별로 치환 목록이 어긋나는 드리프트를 막기 위해 반드시 이 함수를
+    통해 치환한다.
     """
+    from ..engagement import (
+        make_feedback_url, make_open_pixel, rewrite_click_links,
+    )
+
     unsubscribe_url = (
         f"{settings.web_base_url}/{tenant_id}"
         f"/unsubscribe/token/{unsubscribe_token}"
@@ -107,10 +118,38 @@ def _personalize_html(html: str, tenant_id: str, unsubscribe_token: str) -> str:
         f"{settings.web_base_url}/{tenant_id}"
         f"/persona/request?token={unsubscribe_token}"
     )
-    return (
+    html = (
         html.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
         .replace("__PERSONA_REQUEST_URL__", persona_request_url)
     )
+
+    if subscriber_id:
+        html = (
+            html.replace(
+                "__FEEDBACK_UP_URL__",
+                make_feedback_url(tenant_id, subscriber_id, "up"),
+            )
+            .replace(
+                "__FEEDBACK_DOWN_URL__",
+                make_feedback_url(tenant_id, subscriber_id, "down"),
+            )
+        )
+        # 클릭 추적 (env 게이트, 기본 off) — pixel 주입 전에 수행해
+        # 추적 픽셀 URL 자체는 재작성 대상에서 제외
+        html = rewrite_click_links(html, tenant_id, subscriber_id)
+        pixel = make_open_pixel(tenant_id, subscriber_id)
+        if pixel:
+            if "</body>" in html:
+                html = html.replace("</body>", pixel + "</body>", 1)
+            else:
+                html += pixel
+    else:
+        # 미리보기·구독자 미상 경로 — 피드백 placeholder 를 무해 처리
+        html = (
+            html.replace("__FEEDBACK_UP_URL__", "#")
+            .replace("__FEEDBACK_DOWN_URL__", "#")
+        )
+    return html
 
 
 def _deliver_and_record(
@@ -231,6 +270,29 @@ def _get_period_start_for_dedup(newsletter_type: str) -> datetime:
     return start_kst.astimezone(timezone.utc).replace(tzinfo=None)
 
 
+def _compute_catchup_days(session, tenant_id: str) -> Optional[int]:
+    """휴일 catch-up 갭 판정 (P2 — HOLIDAY_SEND_POLICY Phase 2).
+
+    오늘이 영업일이고 마지막 정식 daily 발송(send_mode='normal')과의 갭이
+    2일 이상이면(=휴일 스킵으로 하루 이상 미발송) 갭 일수를 반환.
+    수집기가 lookback 윈도를 그만큼 확장해 휴일 기간 소식을 포함한다.
+    갭 없음·비영업일·발송 이력 없음이면 None.
+    """
+    today = datetime.now(KST).date()
+    if non_business_day_reason(today) is not None:
+        return None  # 오늘도 휴일 — catch-up 아님 (자동 발송 자체가 스킵됨)
+    last_send_at = SendHistoryRepository.get_last_normal_send_at(
+        session, tenant_id, newsletter_type="daily"
+    )
+    if not last_send_at:
+        return None
+    last_kst = (
+        last_send_at.replace(tzinfo=timezone.utc).astimezone(KST).date()
+    )
+    gap = (today - last_kst).days
+    return gap if gap >= 2 else None
+
+
 def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
     """데이터 수집 작업"""
     type_label = f"[{newsletter_type}]" if newsletter_type != "daily" else ""
@@ -248,8 +310,9 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
             # 로 전달하여 수집/선정 단계에서 원천 제외.
             recent_ids: list[int] = []
             recent_companies: list[str] = []
-            if tenant.dedup_recent_days:
-                with get_session() as session:
+            catchup_days = None
+            with get_session() as session:
+                if tenant.dedup_recent_days:
                     recent_ids = SentArticleRepository.list_recent_article_ids(
                         session, tenant_id, days=tenant.dedup_recent_days
                     )
@@ -258,16 +321,23 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
                             session, tenant_id, days=tenant.dedup_recent_days
                         )
                     )
-                if recent_ids or recent_companies:
-                    logger.info(
-                        f"[{tenant_id}] dedup: 최근 {tenant.dedup_recent_days}일 "
-                        f"발송 기사 {len(recent_ids)}건 / 기업 {len(recent_companies)}건 "
-                        "제외 대상"
-                    )
+                catchup_days = _compute_catchup_days(session, tenant_id)
+            if recent_ids or recent_companies:
+                logger.info(
+                    f"[{tenant_id}] dedup: 최근 {tenant.dedup_recent_days}일 "
+                    f"발송 기사 {len(recent_ids)}건 / 기업 {len(recent_companies)}건 "
+                    "제외 대상"
+                )
+            if catchup_days:
+                logger.info(
+                    f"[{tenant_id}] 휴일 catch-up: 마지막 정식 발송 후 "
+                    f"{catchup_days}일 경과 — 수집 윈도 확장"
+                )
             collected = asyncio.run(
                 tenant.collect_data(
                     exclude_ids=recent_ids or None,
                     exclude_companies=recent_companies or None,
+                    catchup_days=catchup_days,
                 )
             )
         else:
@@ -306,6 +376,12 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
         logger.exception(
             f"[{tenant_id}]{type_label} 데이터 수집 중 오류: {e}. "
             "이전 캐시 데이터로 발송됩니다."
+        )
+        # 무음 실패 방지 — 수집 실패는 stale 재발송의 전조이므로 즉시 경보 (P2)
+        send_ops_alert(
+            f"{newsletter_type} 데이터 수집 실패",
+            f"{str(e)[:300]}\n이전 캐시로 발송이 진행될 수 있습니다.",
+            tenant_id=tenant_id,
         )
 
     # 수집 메트릭 영속화 — 성공/실패 무관(부분 수집도 가시화).
@@ -421,6 +497,12 @@ def run_send_job(
                     f"{log_prefix} 캐시 {hours}h 초과 — 일반 구독자 발송 중단, "
                     f"SUPER_ADMIN_EMAILS 에만 STALE 배너 발송"
                 )
+                # 외부 경보 — Gmail(경보 이메일)과 독립된 채널 (P2)
+                send_ops_alert(
+                    "stale-cache 경보 — 구독자 발송 중단",
+                    f"캐시 {hours}h 초과. 관리자에게만 STALE 배너 발송.",
+                    tenant_id=tenant_id,
+                )
                 # 템플릿용 stale 메타데이터 주입 (배너 렌더)
                 last_error = _latest_collection_error(session, tenant_id)
                 context["stale_alert"] = {
@@ -473,6 +555,11 @@ def run_send_job(
                 logger.warning(
                     f"{log_prefix} 직전 발송({prev_archive.sent_date})과 컨텐츠 동일 — "
                     f"일반 구독자 발송 중단, SUPER_ADMIN_EMAILS 에만 DUPLICATE 배너 발송"
+                )
+                send_ops_alert(
+                    "duplicate-content 경보 — 구독자 발송 중단",
+                    f"직전 발송({prev_archive.sent_date})과 콘텐츠 동일.",
+                    tenant_id=tenant_id,
                 )
                 context["duplicate_alert"] = {
                     "previous_sent_date": prev_archive.sent_date.isoformat(),
@@ -538,7 +625,8 @@ def run_send_job(
                 "recipient": subscriber.email,
                 "subject": subject,
                 "html_content": _personalize_html(
-                    html_content, tenant_id, subscriber.unsubscribe_token
+                    html_content, tenant_id, subscriber.unsubscribe_token,
+                    subscriber_id=subscriber.id,
                 ),
                 "sender_name": tenant.display_name,
             })
@@ -742,7 +830,8 @@ def send_welcome_newsletter(tenant_id: str, email: str) -> bool:
             context = tenant.format_report(collected_data)
             html_content = renderer.render(tenant.email_template, context)
             html_content = _personalize_html(
-                html_content, tenant_id, subscriber.unsubscribe_token
+                html_content, tenant_id, subscriber.unsubscribe_token,
+                subscriber_id=subscriber.id,
             )
 
             subject = tenant.generate_subject()
@@ -844,7 +933,8 @@ def run_adhoc_send(
                 "recipient": subscriber.email,
                 "subject": subject,
                 "html_content": _personalize_html(
-                    html_content, tenant_id, subscriber.unsubscribe_token
+                    html_content, tenant_id, subscriber.unsubscribe_token,
+                    subscriber_id=subscriber.id,
                 ),
                 "sender_name": display_name,
             })
@@ -1002,6 +1092,82 @@ def run_insight_brief_job(tenant_id: str) -> None:
     )
 
 
+def run_engagement_relay_job(tenant_id: str = "allergy-insight") -> None:
+    """Engagement 이벤트 일 배치 릴레이 + 보존 정책 (P2 — 페르소나 스펙 N4).
+
+    미릴레이(open/click/feedback) 이벤트를 persona_code 스냅샷과 함께
+    AllergyInsight `/api/newsletter/engagement` 로 배치 전송한다.
+    - 페르소나 키 미설정 → 릴레이 스킵 (로컬 수집은 계속 — 트랙 E 입력)
+    - 백엔드 미구현(404)·오류 → 미마킹 유지, 다음 실행에서 재시도
+    - 90일 초과 이벤트는 전 테넌트 purge (sent_articles 와 동일 정책)
+    """
+    import httpx
+
+    from ..database.repo_engagement import EngagementEventRepository
+    from ...tenant.allergy_insight.config import (
+        tenant_settings as allergy_settings,
+    )
+
+    with get_session() as session:
+        purged = EngagementEventRepository.purge_older_than(session, days=90)
+    if purged:
+        logger.info(f"engagement 이벤트 {purged}건 purge (90일 초과)")
+
+    key = allergy_settings.allergy_insight_newsletter_api_key
+    if not key:
+        logger.info(f"[{tenant_id}] engagement 릴레이 스킵 — 페르소나 키 미설정")
+        return
+
+    # 세션 종료 후 ORM 만료 대비 — payload/ids 를 세션 안에서 추출
+    with get_session() as session:
+        events = EngagementEventRepository.list_unrelayed(
+            session, tenant_id, limit=500
+        )
+        event_ids = [e.id for e in events]
+        payload = [
+            {
+                "subscriber_id": e.subscriber_id,
+                "event_type": e.event_type,
+                "newsletter_type": e.newsletter_type,
+                "persona_code": e.persona_code,
+                "target_url": e.target_url,
+                "section": e.section,
+                "feedback_value": e.feedback_value,
+                "occurred_at": e.created_at.isoformat() + "Z",
+            }
+            for e in events
+        ]
+
+    if not payload:
+        logger.info(f"[{tenant_id}] engagement 릴레이 — 신규 이벤트 없음")
+        return
+
+    url = (
+        allergy_settings.allergy_insight_api_url.rstrip("/")
+        + "/api/newsletter/engagement"
+    )
+    try:
+        resp = httpx.post(
+            url, json={"events": payload},
+            headers={"X-Newsletter-Key": key},
+            timeout=15.0, trust_env=False,
+        )
+        if resp.status_code == 200:
+            with get_session() as session:
+                EngagementEventRepository.mark_relayed(session, event_ids)
+            logger.info(
+                f"[{tenant_id}] engagement 릴레이 완료: {len(event_ids)}건"
+            )
+        else:
+            # 404 = AllergyInsight 측 N4 수신부 미구현 — 재시도 대기
+            logger.warning(
+                f"[{tenant_id}] engagement 릴레이 실패 (HTTP {resp.status_code}) "
+                f"— {len(event_ids)}건 유지, 다음 실행에서 재시도"
+            )
+    except Exception as e:
+        logger.warning(f"[{tenant_id}] engagement 릴레이 오류: {e}")
+
+
 def register_all_jobs(scheduler: BlockingScheduler) -> None:
     """TenantRegistry 순회하며 모든 작업 등록.
 
@@ -1135,6 +1301,17 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
         name="Bounce Feedback Loop (NDR 처리)",
     )
     logger.info("bounce_processor 등록: 30분 주기")
+
+    # === Engagement 릴레이 (일 1회 04:50 — 수집 시작 전) ===
+    # 로컬 수집된 open/click/feedback 을 AllergyInsight 로 배치 전송 (N4)
+    # + 90일 보존 purge. 페르소나 키 미설정 시 릴레이만 스킵.
+    scheduler.add_job(
+        run_engagement_relay_job,
+        trigger=CronTrigger(hour=4, minute=50),
+        id="engagement_relay",
+        name="Engagement 이벤트 릴레이 (N4)",
+    )
+    logger.info("engagement_relay 등록: 매일 04:50")
 
     # === Heartbeat (10분 주기) ===
     # Docker healthcheck(check_heartbeat)가 스케줄러 루프 생존을 판정하는 근거.

@@ -117,10 +117,12 @@ class AllergyInsightTenant(BaseTenant):
         self, *,
         exclude_ids: Optional[List[int]] = None,
         exclude_companies: Optional[List[str]] = None,
+        catchup_days: Optional[int] = None,
     ) -> Dict[str, Any]:
         return await self._collector.collect_all(
             exclude_ids=exclude_ids,
             exclude_companies=exclude_companies,
+            catchup_days=catchup_days,
         )
 
     def extract_collection_metrics(self) -> List[Dict[str, Any]]:

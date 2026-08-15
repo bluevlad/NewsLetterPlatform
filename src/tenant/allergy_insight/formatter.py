@@ -66,6 +66,8 @@ class AllergyInsightFormatter:
 
         return {
             "report_date": report_date,
+            # 휴일 catch-up 배지 메타 (P2) — None 이면 템플릿에서 미노출
+            "catchup": daily_report.get("catchup"),
             "top_headlines": daily_report.get("top_headlines", []),
             "company_digest": daily_report.get("company_digest", []),
             "papers": daily_report.get("papers", []),

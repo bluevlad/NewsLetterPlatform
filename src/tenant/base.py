@@ -160,6 +160,7 @@ class BaseTenant(ABC):
         self, *,
         exclude_ids: Optional[List[int]] = None,
         exclude_companies: Optional[List[str]] = None,
+        catchup_days: Optional[int] = None,
     ) -> Dict[str, Any]:
         """데이터 수집 (원본 서비스 API 호출).
 
@@ -168,6 +169,10 @@ class BaseTenant(ABC):
                 기사 ID 를 수집/선정 단계에서 원천 제외. 미활성 테넌트는 무시.
             exclude_companies: 최근 발송된 기업명 — company-digest 등에서
                 기업 단위 dedup 에 사용. 미활성 테넌트는 무시.
+            catchup_days: 휴일 catch-up (P2) — 마지막 정식 발송 이후 경과
+                일수. 휴일 스킵 다음 영업일에 스케줄러가 전달하며, 수집
+                lookback 윈도를 그만큼 확장해 휴일 기간 소식을 포함한다.
+                미지원 테넌트는 무시.
 
         Returns:
             수집된 데이터 딕셔너리 (data_type: data)

@@ -78,6 +78,7 @@ class StandUpTenant(BaseTenant):
         self, *,
         exclude_ids: Optional[List[int]] = None,
         exclude_companies: Optional[List[str]] = None,
+        catchup_days: Optional[int] = None,
     ) -> Dict[str, Any]:
         # daily 미지원 — 빈 dict 반환.
         return {}

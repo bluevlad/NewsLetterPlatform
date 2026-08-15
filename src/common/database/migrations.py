@@ -183,12 +183,41 @@ def _migrate_send_history_send_mode(engine) -> None:
         logger.warning(f"send_history send_mode 마이그레이션 실패 — 스키마가 불완전할 수 있음: {e}")
 
 
+def _migrate_sent_articles_article_key(engine) -> None:
+    """sent_articles 에 테넌트 중립 문자열 키 컬럼 추가 + 백필 (P2).
+
+    int-ID(AllergyInsight) 이력은 str(article_id) 로 백필한다.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(sent_articles)"))
+            columns = [row[1] for row in result]
+            if "article_key" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE sent_articles ADD COLUMN article_key VARCHAR(64)"
+                ))
+                conn.execute(text(
+                    "UPDATE sent_articles "
+                    "SET article_key = CAST(article_id AS TEXT) "
+                    "WHERE article_key IS NULL"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_sent_articles_article_key "
+                    "ON sent_articles (article_key)"
+                ))
+                conn.commit()
+                logger.info("sent_articles.article_key 마이그레이션 완료 (백필 포함)")
+    except Exception as e:
+        logger.warning(f"sent_articles article_key 마이그레이션 실패 — 스키마가 불완전할 수 있음: {e}")
+
+
 def run_all_migrations(engine) -> None:
     """init_db 에서 1회 호출 — 등록된 마이그레이션 전부 실행."""
     _migrate_send_history_newsletter_type(engine)
     _migrate_send_history_send_mode(engine)
     _migrate_subscriber_send_slot(engine)
     _migrate_sent_articles_company_name(engine)
+    _migrate_sent_articles_article_key(engine)
     _migrate_collection_metrics(engine)
     _migrate_subscriber_persona_columns(engine)
     _migrate_email_verification_signup_meta(engine)
