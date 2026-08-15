@@ -74,3 +74,51 @@ BRAND_CONFIG = BrandConfig(
         ),
     ],
 )
+
+
+# ─────────────────────────────────────────────────────────────
+# 테넌트 환경 설정 (P1b, 2026-08-15) — 전역 config.py 에서 이관.
+# env 변수명은 필드명 대문자화로 매칭 (기존 변수명 그대로 유지).
+# ollama_base_url / llmops_* 는 플랫폼 공유 인프라라 전역에 남김.
+# ─────────────────────────────────────────────────────────────
+
+from pathlib import Path
+
+from pydantic_settings import BaseSettings
+
+
+class TechBriefingSettings(BaseSettings):
+    """TechBriefing 테넌트 환경 설정 (.env 공유 로드)"""
+
+    # Daily 스케줄 — 발송은 슬롯이 결정, SEND_HOUR/MINUTE 는 deprecated 호환 유지
+    tech_collect_hour: int = 6
+    tech_collect_minute: int = 30
+    tech_send_hour: int = 8
+    tech_send_minute: int = 0
+
+    # Weekly (매주 금요일 — _get_period_range 가 월~오늘 집계라 금요일 발송)
+    tech_weekly_day_of_week: str = "fri"
+    tech_weekly_collect_hour: int = 6
+    tech_weekly_collect_minute: int = 0
+    tech_weekly_send_hour: int = 9
+    tech_weekly_send_minute: int = 30
+
+    # SkillRadar Backend — 뉴스레터 공급 API (X-Newsletter-Key)
+    skillradar_api_url: str = "http://host.docker.internal:9070"
+    skillradar_newsletter_key: str = ""  # 빈 값이면 수집 스킵
+
+    # Ollama LLM deep analyzer (모델·호출 파라미터. base URL 은 전역 공유)
+    tech_briefing_llm_enabled: bool = True
+    tech_briefing_llm_model: str = "exaone3.5:7.8b"
+    tech_briefing_llm_timeout_sec: int = 90
+    tech_briefing_llm_top_n: int = 5
+    tech_briefing_llm_temperature: float = 0.2
+    tech_briefing_consumer_id: str = "tech-briefing-newsletter"
+
+    class Config:
+        env_file = Path(__file__).resolve().parents[3] / ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"
+
+
+tenant_settings = TechBriefingSettings()

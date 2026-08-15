@@ -8,7 +8,7 @@ from ..base import BaseTenant, BrandConfig, NEWSLETTER_TYPE_LABELS
 from .config import TENANT_ID, DISPLAY_NAME, EMAIL_SUBJECT_PREFIX, EMAIL_TEMPLATE, BRAND_CONFIG
 from .collector import AllergyInsightCollector
 from .formatter import AllergyInsightFormatter
-from ...config import settings
+from .config import tenant_settings as settings
 
 
 class AllergyInsightTenant(BaseTenant):

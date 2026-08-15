@@ -90,7 +90,7 @@ def test_render_user_prompt_without_recruiting_block():
 
 def test_analyze_headlines_skips_when_disabled(monkeypatch):
     monkeypatch.setattr(
-        "src.tenant.tech_briefing.analyzer.settings.tech_briefing_llm_enabled",
+        "src.tenant.tech_briefing.analyzer.tenant_settings.tech_briefing_llm_enabled",
         False,
     )
     items = [{"title": "x", "category": "course"}]
@@ -101,11 +101,11 @@ def test_analyze_headlines_skips_when_disabled(monkeypatch):
 
 def test_analyze_headlines_with_mocked_ollama(monkeypatch):
     monkeypatch.setattr(
-        "src.tenant.tech_briefing.analyzer.settings.tech_briefing_llm_enabled",
+        "src.tenant.tech_briefing.analyzer.tenant_settings.tech_briefing_llm_enabled",
         True,
     )
     monkeypatch.setattr(
-        "src.tenant.tech_briefing.analyzer.settings.tech_briefing_llm_top_n", 3,
+        "src.tenant.tech_briefing.analyzer.tenant_settings.tech_briefing_llm_top_n", 3,
     )
     fake_json = (
         '{"what_it_is":"부트캠프 모집","who_benefits":"취준생",'
@@ -133,11 +133,11 @@ def test_analyze_headlines_with_mocked_ollama(monkeypatch):
 
 def test_analyze_headlines_respects_top_n(monkeypatch):
     monkeypatch.setattr(
-        "src.tenant.tech_briefing.analyzer.settings.tech_briefing_llm_enabled",
+        "src.tenant.tech_briefing.analyzer.tenant_settings.tech_briefing_llm_enabled",
         True,
     )
     monkeypatch.setattr(
-        "src.tenant.tech_briefing.analyzer.settings.tech_briefing_llm_top_n", 1,
+        "src.tenant.tech_briefing.analyzer.tenant_settings.tech_briefing_llm_top_n", 1,
     )
     fake_json = '{"what_it_is":"소식","recommendation":{"level":"PLAN"}}'
 
@@ -159,7 +159,7 @@ def test_analyze_headlines_respects_top_n(monkeypatch):
 
 def test_analyze_headlines_with_ollama_failure(monkeypatch):
     monkeypatch.setattr(
-        "src.tenant.tech_briefing.analyzer.settings.tech_briefing_llm_enabled",
+        "src.tenant.tech_briefing.analyzer.tenant_settings.tech_briefing_llm_enabled",
         True,
     )
 
@@ -177,7 +177,7 @@ def test_analyze_headlines_with_ollama_failure(monkeypatch):
 
 def test_analyze_headlines_with_garbage_response(monkeypatch):
     monkeypatch.setattr(
-        "src.tenant.tech_briefing.analyzer.settings.tech_briefing_llm_enabled",
+        "src.tenant.tech_briefing.analyzer.tenant_settings.tech_briefing_llm_enabled",
         True,
     )
 

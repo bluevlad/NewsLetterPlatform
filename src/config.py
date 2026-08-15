@@ -24,113 +24,15 @@ class Settings(BaseSettings):
         env="DATABASE_URL"
     )
 
-    # 스케줄러 - AllergyInsight (Daily)
-    # 발송은 슬롯(early 6:40 / mid 7:40 / late 8:40)별로 분기되며,
-    # SEND_HOUR/MINUTE는 deprecated이지만 호환성 위해 유지.
-    # COLLECT는 가장 빠른 슬롯(6:40)보다 충분히 일찍 5:00 단일 실행.
-    allergy_collect_hour: int = Field(default=5, env="ALLERGY_COLLECT_HOUR")
-    allergy_collect_minute: int = Field(default=0, env="ALLERGY_COLLECT_MINUTE")
-    allergy_send_hour: int = Field(default=8, env="ALLERGY_SEND_HOUR")
-    allergy_send_minute: int = Field(default=30, env="ALLERGY_SEND_MINUTE")
+    # 테넌트별 스케줄·API·인증 설정은 각 테넌트 패키지로 이관 (P1b, 2026-08-15):
+    #   src/tenant/{allergy_insight,standup,tech_briefing}/config.py 의
+    #   TenantSettings — env 변수명은 기존 그대로 유지.
+    # 여기에는 플랫폼 공유 인프라 설정만 남긴다.
 
-    # 스케줄러 - AllergyInsight (Weekly: 매주 금요일)
-    allergy_weekly_day_of_week: str = Field(default="fri", env="ALLERGY_WEEKLY_DAY_OF_WEEK")
-    allergy_weekly_collect_hour: int = Field(default=5, env="ALLERGY_WEEKLY_COLLECT_HOUR")
-    allergy_weekly_collect_minute: int = Field(default=0, env="ALLERGY_WEEKLY_COLLECT_MINUTE")
-    allergy_weekly_send_hour: int = Field(default=9, env="ALLERGY_WEEKLY_SEND_HOUR")
-    allergy_weekly_send_minute: int = Field(default=30, env="ALLERGY_WEEKLY_SEND_MINUTE")
-
-    # 스케줄러 - AllergyInsight (Monthly: 매월 말일)
-    allergy_monthly_day_of_month: str = Field(default="last", env="ALLERGY_MONTHLY_DAY_OF_MONTH")
-    allergy_monthly_collect_hour: int = Field(default=5, env="ALLERGY_MONTHLY_COLLECT_HOUR")
-    allergy_monthly_collect_minute: int = Field(default=0, env="ALLERGY_MONTHLY_COLLECT_MINUTE")
-    allergy_monthly_send_hour: int = Field(default=10, env="ALLERGY_MONTHLY_SEND_HOUR")
-    allergy_monthly_send_minute: int = Field(default=0, env="ALLERGY_MONTHLY_SEND_MINUTE")
-
-    # 스케줄러 - StandUp (Weekly: 매주 월요일 합성 결과 기준)
-    standup_weekly_day_of_week: str = Field(default="mon", env="STANDUP_WEEKLY_DAY_OF_WEEK")
-    standup_weekly_collect_hour: int = Field(default=8, env="STANDUP_WEEKLY_COLLECT_HOUR")
-    standup_weekly_collect_minute: int = Field(default=0, env="STANDUP_WEEKLY_COLLECT_MINUTE")
-    standup_weekly_send_hour: int = Field(default=9, env="STANDUP_WEEKLY_SEND_HOUR")
-    standup_weekly_send_minute: int = Field(default=30, env="STANDUP_WEEKLY_SEND_MINUTE")
-
-    # 테넌트 API URLs
-    allergy_insight_api_url: str = Field(
-        default="http://localhost:9040",
-        env="ALLERGY_INSIGHT_API_URL"
-    )
-    # 페르소나 적응형 뉴스레터 — AllergyInsight Newsletter API 인증 키.
-    # 빈 값이면 persona_client 가 호출하지 않고 기존 발송 경로로 graceful degrade.
-    # AllergyInsight 측 NEWSLETTER_API_KEY 와 동일 값으로 설정해야 인증이 통과한다.
-    # base URL 은 allergy_insight_api_url 재사용 (동일 백엔드 포트 9040).
-    # 필드명(_api_key)과 env 변수명(_KEY)이 달라 validation_alias 필수 —
-    # pydantic v2 는 Field(env=...) 를 무시하고 필드명 대문자화로 매칭하므로.
-    allergy_insight_newsletter_api_key: str = Field(
-        default="", validation_alias="ALLERGY_INSIGHT_NEWSLETTER_KEY"
-    )
-    standup_api_url: str = Field(
-        default="http://host.docker.internal:9060",
-        env="STANDUP_API_URL"
-    )
-    # SkillRadar Backend — TechBriefing 테넌트 데이터 소스 (뉴스레터 공급 API).
-    # localhost:9070 (개발/macOS 직접 실행) · host.docker.internal:9070 (Docker)
-    skillradar_api_url: str = Field(
-        default="http://host.docker.internal:9070",
-        env="SKILLRADAR_API_URL"
-    )
-    # SkillRadar 뉴스레터 공급 API 인증 키 (X-Newsletter-Key 헤더).
-    # SkillRadar 측 NEWSLETTER_API_KEY 와 동일 값. 빈 값이면 수집 스킵.
-    skillradar_newsletter_key: str = Field(
-        default="", env="SKILLRADAR_NEWSLETTER_KEY"
-    )
-
-    # 스케줄러 - TechBriefing (Daily, AI 학습·커리어 뉴스레터)
-    tech_collect_hour: int = Field(default=6, env="TECH_COLLECT_HOUR")
-    tech_collect_minute: int = Field(default=30, env="TECH_COLLECT_MINUTE")
-    tech_send_hour: int = Field(default=8, env="TECH_SEND_HOUR")
-    tech_send_minute: int = Field(default=0, env="TECH_SEND_MINUTE")
-
-    # 스케줄러 - TechBriefing (Weekly: 매주 금요일)
-    # _get_period_range("weekly") 가 "이번 주 월요일~오늘" 이라 금요일 발송 기준
-    # (AllergyInsight weekly 와 동일한 이유).
-    tech_weekly_day_of_week: str = Field(default="fri", env="TECH_WEEKLY_DAY_OF_WEEK")
-    tech_weekly_collect_hour: int = Field(default=6, env="TECH_WEEKLY_COLLECT_HOUR")
-    tech_weekly_collect_minute: int = Field(default=0, env="TECH_WEEKLY_COLLECT_MINUTE")
-    tech_weekly_send_hour: int = Field(default=9, env="TECH_WEEKLY_SEND_HOUR")
-    tech_weekly_send_minute: int = Field(default=30, env="TECH_WEEKLY_SEND_MINUTE")
-
-    # TechBriefing — Ollama 기반 LLM deep analyzer
+    # Ollama — StandUp 과 공유하는 로컬 LLM 인프라 (테넌트 공용)
     # localhost:11434 (개발/macOS) · host.docker.internal:11434 (Docker 컨테이너)
     ollama_base_url: str = Field(
         default="http://localhost:11434", env="OLLAMA_BASE_URL"
-    )
-    tech_briefing_llm_enabled: bool = Field(
-        default=True, env="TECH_BRIEFING_LLM_ENABLED"
-    )
-    # 한국어 교육·커리어 콘텐츠 분석 — 한국어 특화 exaone (SkillRadar compose 와 동일 모델)
-    tech_briefing_llm_model: str = Field(
-        default="exaone3.5:7.8b", env="TECH_BRIEFING_LLM_MODEL"
-    )
-    tech_briefing_llm_timeout_sec: int = Field(
-        default=90, env="TECH_BRIEFING_LLM_TIMEOUT_SEC"
-    )
-    tech_briefing_llm_top_n: int = Field(
-        default=5, env="TECH_BRIEFING_LLM_TOP_N"
-    )
-    tech_briefing_llm_temperature: float = Field(
-        default=0.2, env="TECH_BRIEFING_LLM_TEMPERATURE"
-    )
-    allergy_insight_admin_name: str = Field(
-        default="",
-        env="ALLERGY_INSIGHT_ADMIN_NAME"
-    )
-    allergy_insight_admin_phone: str = Field(
-        default="",
-        env="ALLERGY_INSIGHT_ADMIN_PHONE"
-    )
-    allergy_insight_admin_pin: str = Field(
-        default="",
-        env="ALLERGY_INSIGHT_ADMIN_PIN"
     )
 
     # 웹 서버
@@ -193,9 +95,6 @@ class Settings(BaseSettings):
         default="http://host.docker.internal:9110/api/batch-runs", env="LLMOPS_URL"
     )
     llmops_api_key: str = Field(default="", env="LLMOPS_API_KEY")
-    tech_briefing_consumer_id: str = Field(
-        default="tech-briefing-newsletter", env="TECH_BRIEFING_CONSUMER_ID"
-    )
 
     class Config:
         env_file = Path(__file__).parent.parent / ".env"

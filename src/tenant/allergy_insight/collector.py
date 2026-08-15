@@ -34,7 +34,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from ...common.utils import retry_async
-from ...config import settings
+from .config import tenant_settings as settings
 
 logger = logging.getLogger(__name__)
 

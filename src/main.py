@@ -17,10 +17,7 @@ from src.common.database import init_db
 from src.common.scheduler.jobs import (
     run_collect_job, run_send_job, register_all_jobs
 )
-from src.tenant.registry import get_registry
-from src.tenant.allergy_insight import AllergyInsightTenant
-from src.tenant.standup import StandUpTenant
-from src.tenant.tech_briefing import TechBriefingTenant
+from src.tenant.registry import get_registry, discover_and_register
 
 from src.common.json_logging import JsonFormatter, use_json_logging
 
@@ -45,12 +42,13 @@ logger = logging.getLogger(__name__)
 
 
 def register_tenants():
-    """테넌트 등록 - AllergyInsight + StandUp"""
-    registry = get_registry()
-    registry.register(AllergyInsightTenant())
-    registry.register(StandUpTenant())
-    registry.register(TechBriefingTenant())
-    logger.info(f"테넌트 등록 완료: {registry.get_active_ids()}")
+    """테넌트 등록 — src/tenant/ 하위 패키지 자동 발견 (P1b).
+
+    새 테넌트는 src/tenant/{name}/ 패키지에 BaseTenant 서브클래스를
+    정의하는 것만으로 등록된다 (이 파일 수정 불필요).
+    """
+    registered = discover_and_register()
+    logger.info(f"테넌트 자동 등록 완료: {registered}")
 
 
 def run_scheduler():

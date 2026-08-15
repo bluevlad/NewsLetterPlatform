@@ -17,6 +17,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from slowapi import Limiter
 
 from ..config import settings
+from ..tenant.allergy_insight.config import (
+    tenant_settings as allergy_settings,
+)
 from ..common.database.repository import (
     get_session_factory,
     SubscriberRepository,
@@ -94,7 +97,7 @@ async def expansion_callback(
     헤더 검증 실패 외에는 콜백 실패가 백엔드 job 을 막지 않도록 200 을 반환한다.
     (콜백이 거부되어도 구독자 폴링 경로가 결과를 복구하므로 기능 저하는 없다.)
     """
-    expected = settings.allergy_insight_newsletter_api_key
+    expected = allergy_settings.allergy_insight_newsletter_api_key
     if not expected or x_newsletter_key != expected:
         logger.warning(
             "expansion-callback 거부: X-Newsletter-Key %s",

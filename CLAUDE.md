@@ -99,9 +99,12 @@ NewsLetterPlatform/
 
 ## Tenant Architecture
 
-- 새 테넌트 추가 시: `src/tenant/{name}/` 디렉토리에 collector.py + formatter.py 구현
-- 테넌트 인터페이스: `src/tenant/base.py`의 `BaseTenant` ABC 상속
+- 새 테넌트 추가 시: `src/tenant/{name}/` 패키지에 config.py(브랜드 + `TenantSettings`) + collector.py + formatter.py 구현
+- 테넌트 인터페이스: `src/tenant/base.py`의 `BaseTenant` ABC 상속 — 패키지 `__init__.py` 에 서브클래스 정의
+- **등록은 자동**: `registry.discover_and_register()` 가 `src/tenant/` 하위 패키지를 스캔 — main.py 등 플랫폼 파일 수정 불필요 (P1b, 2026-08-15)
+- **테넌트 환경 설정은 테넌트 패키지 소유**: 각 `config.py` 의 `TenantSettings`(pydantic-settings, `.env` 공유 로드). 전역 `src/config.py` 에는 플랫폼 공유 설정만 둔다
 - 데이터 수집: 원본 서비스 REST API → httpx 비동기 호출 → collected_data 테이블 캐싱
+- DB 저장소: `src/common/database/` — `engine.py`(세션·PRAGMA) / `migrations.py`(idempotent ALTER) / `repo_*.py`(애그리게잇별). `repository.py` 는 하위 호환 facade
 
 ## Dependent Services
 

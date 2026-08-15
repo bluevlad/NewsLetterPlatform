@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from ...config import settings
+from .config import tenant_settings
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,9 @@ def chat(
     """단발 chat. 실패 시 ok=False."""
     base_url = settings.ollama_base_url.rstrip("/")
     url = f"{base_url}/api/chat"
-    use_model = model or settings.tech_briefing_llm_model
-    use_temp = settings.tech_briefing_llm_temperature if temperature is None else temperature
-    use_timeout = timeout or settings.tech_briefing_llm_timeout_sec
+    use_model = model or tenant_settings.tech_briefing_llm_model
+    use_temp = tenant_settings.tech_briefing_llm_temperature if temperature is None else temperature
+    use_timeout = timeout or tenant_settings.tech_briefing_llm_timeout_sec
 
     payload: Dict[str, Any] = {
         "model": use_model,
