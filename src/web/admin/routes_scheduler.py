@@ -46,11 +46,19 @@ async def scheduler_page(request: Request):
         # Build schedule info per tenant
         schedule_info = []
         for tenant in tenants:
-            config = tenant.schedule_config
             slot_counts = SubscriberRepository.count_by_slot(db, tenant.tenant_id)
+            # daily 미지원 테넌트(StandUp 등)는 placeholder schedule_config 의
+            # 허위 00:00 대신 미지원 표시
+            if "daily" in tenant.supported_frequencies:
+                config = tenant.schedule_config
+                collect_time = (
+                    f"{config['collect_hour']:02d}:{config['collect_minute']:02d}"
+                )
+            else:
+                collect_time = "—"
             info = {
                 "tenant": tenant,
-                "collect_time": f"{config['collect_hour']:02d}:{config['collect_minute']:02d}",
+                "collect_time": collect_time,
                 "last_collect": health_data.get("collect", "N/A"),
                 "last_send": health_data.get("send", "N/A"),
                 "supported_frequencies": tenant.supported_frequencies,

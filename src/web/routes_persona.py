@@ -12,7 +12,7 @@
 import json
 import logging
 
-from fastapi import APIRouter, Request, Form, Header
+from fastapi import APIRouter, HTTPException, Request, Form, Header
 from fastapi.responses import HTMLResponse, JSONResponse
 from slowapi import Limiter
 
@@ -53,6 +53,18 @@ _SECTION_LABELS = {
     "industry": "산업·기업 동향",
     "key_papers": "주요 논문",
 }
+
+
+def _persona_tenant_or_404(tenant_id: str):
+    """페르소나 지원 테넌트만 통과 — 미지원 테넌트 경로는 404.
+
+    라우터가 /{tenant_id}/persona/* 로 모든 테넌트에 마운트되므로,
+    여기서 게이트하지 않으면 타 테넌트 토큰으로도 접근 가능하다.
+    """
+    tenant = get_tenant_or_404(tenant_id)
+    if not getattr(tenant, "persona_enabled", False):
+        raise HTTPException(status_code=404)
+    return tenant
 
 
 def _callback_url() -> str:
@@ -159,7 +171,7 @@ async def persona_request_landing(
     **부작용 없음** — 메일 보안 스캐너가 링크를 자동 GET 해도 안전하다.
     실제 요청은 이 페이지의 폼 → POST /persona/topic-request 로만 일어난다.
     """
-    tenant = get_tenant_or_404(tenant_id)
+    tenant = _persona_tenant_or_404(tenant_id)
     section = section if section in _SECTION_LABELS else ""
 
     db = get_session_factory()()
@@ -200,7 +212,7 @@ async def persona_topic_request(
     select   — 내 페르소나 맞춤 콘텐츠 전체 받기 (topic 불필요).
     transform — 자유 입력 주제 요청 (topic 필수). 미보유 시 expandable.
     """
-    tenant = get_tenant_or_404(tenant_id)
+    tenant = _persona_tenant_or_404(tenant_id)
     topic = (topic or "").strip()
     if request_type not in ("select", "transform"):
         request_type = "transform"
@@ -286,7 +298,7 @@ async def persona_job_poll(
     인증: token(구독자) 이 job 의 소유자와 일치해야 한다 — job_id 만으로
     타인의 요청 주제·생성 콘텐츠가 열람되는 것을 차단.
     """
-    tenant = get_tenant_or_404(tenant_id)
+    tenant = _persona_tenant_or_404(tenant_id)
 
     db = get_session_factory()()
     try:

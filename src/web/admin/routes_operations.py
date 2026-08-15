@@ -24,6 +24,29 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# 수동 수집/발송 작업 상호배제 — 더블클릭·중복 트리거로 같은 작업이 두 번
+# 돌면 manual 발송은 dedup 이 없어 전 구독자가 2회 수신한다.
+_inflight_lock = threading.Lock()
+_inflight_jobs: set[str] = set()
+
+
+def _try_start_job(job_key: str, target, *args, **kwargs) -> bool:
+    """job_key 가 실행 중이 아니면 데몬 스레드로 시작. 이미 실행 중이면 False."""
+    with _inflight_lock:
+        if job_key in _inflight_jobs:
+            return False
+        _inflight_jobs.add(job_key)
+
+    def _runner():
+        try:
+            target(*args, **kwargs)
+        finally:
+            with _inflight_lock:
+                _inflight_jobs.discard(job_key)
+
+    threading.Thread(target=_runner, daemon=True).start()
+    return True
+
 
 @router.get("/admin/{tenant_id}/send", response_class=HTMLResponse)
 async def operations_page(request: Request, tenant_id: str):
@@ -239,11 +262,14 @@ async def trigger_collect(request: Request, tenant_id: str,
 
     get_tenant_or_404(tenant_id)
 
-    threading.Thread(
-        target=run_collect_job,
-        args=(tenant_id, newsletter_type),
-        daemon=True,
-    ).start()
+    if not _try_start_job(
+        f"collect:{tenant_id}:{newsletter_type}",
+        run_collect_job, tenant_id, newsletter_type,
+    ):
+        return templates.TemplateResponse("admin/_toast.html", {
+            "request": request, "level": "error",
+            "message": f"{tenant_id} 수집({newsletter_type})이 이미 실행 중입니다.",
+        })
 
     return templates.TemplateResponse("admin/_toast.html", {
         "request": request, "level": "info",
@@ -261,12 +287,17 @@ async def trigger_send(request: Request, tenant_id: str,
 
     get_tenant_or_404(tenant_id)
 
-    threading.Thread(
-        target=run_send_job,
-        args=(tenant_id, newsletter_type),
-        kwargs={"manual": True},
-        daemon=True,
-    ).start()
+    if not _try_start_job(
+        f"send:{tenant_id}:{newsletter_type}",
+        run_send_job, tenant_id, newsletter_type, manual=True,
+    ):
+        return templates.TemplateResponse("admin/_toast.html", {
+            "request": request, "level": "error",
+            "message": (
+                f"{tenant_id} 수동 발송({newsletter_type})이 이미 실행 중입니다. "
+                "완료 후 다시 시도해주세요."
+            ),
+        })
 
     return templates.TemplateResponse("admin/_toast.html", {
         "request": request, "level": "info",
@@ -289,7 +320,11 @@ async def trigger_adhoc_send(request: Request, tenant_id: str,
         result = run_adhoc_send(tenant_id, subject, html_content)
         logger.info(f"[{tenant_id}][adhoc] 발송 결과: {result}")
 
-    threading.Thread(target=_run, daemon=True).start()
+    if not _try_start_job(f"adhoc:{tenant_id}", _run):
+        return templates.TemplateResponse("admin/_toast.html", {
+            "request": request, "level": "error",
+            "message": f"{tenant_id} adhoc 발송이 이미 실행 중입니다.",
+        })
 
     return templates.TemplateResponse("admin/_toast.html", {
         "request": request, "level": "info",

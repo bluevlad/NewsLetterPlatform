@@ -26,6 +26,9 @@ from ..delivery.bounce_processor import run_bounce_processor
 from ..holiday import KST, holiday_name, non_business_day_reason
 from ..template.renderer import get_renderer
 from .health import update_health
+from .send_plan import (
+    alert_plan, holiday_test_plan, manual_plan, normal_plan,
+)
 from .slots import DAILY_SLOTS, get_slot_time
 from ...config import settings
 from ...tenant.registry import get_registry
@@ -88,13 +91,103 @@ def _get_admin_recipients(session, tenant_id: str) -> list:
     return recipients
 
 
+def _personalize_html(html: str, tenant_id: str, unsubscribe_token: str) -> str:
+    """수신자별 placeholder 치환 — 모든 발송 경로(정규·adhoc·웰컴)가 공유.
+
+    __UNSUBSCRIBE_URL__ / __PERSONA_REQUEST_URL__ 을 치환한다.
+    템플릿에 placeholder 가 없으면 replace 는 무해한 no-op.
+    경로별로 치환 목록이 어긋나는 드리프트(웰컴에서 persona URL 누락 등)를
+    막기 위해 반드시 이 함수를 통해 치환한다.
+    """
+    unsubscribe_url = (
+        f"{settings.web_base_url}/{tenant_id}"
+        f"/unsubscribe/token/{unsubscribe_token}"
+    )
+    persona_request_url = (
+        f"{settings.web_base_url}/{tenant_id}"
+        f"/persona/request?token={unsubscribe_token}"
+    )
+    return (
+        html.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
+        .replace("__PERSONA_REQUEST_URL__", persona_request_url)
+    )
+
+
+def _deliver_and_record(
+    tenant_id: str, subject: str,
+    messages: list, recipients: list,
+    history_type: str, send_mode: str, log_prefix: str,
+) -> tuple[int, int]:
+    """SMTP 배치 발송 + 행 단위 이력 커밋 + 실패분 1회 재시도.
+
+    발송(비가역)은 DB 세션 밖에서 수행하고, 이력은 행 단위로 즉시 커밋한다
+    — 기록 도중 오류가 나도 이미 커밋된 행은 유지되어 재발송을 막는다.
+
+    Args:
+        recipients: messages 와 병렬인 (subscriber_id, email) 튜플 리스트.
+
+    Returns:
+        (sent_count, failed_count) — failed_count 는 재시도까지 실패한 건수.
+    """
+    sender = get_sender()
+    results = sender.send_batch_efficient(messages)
+
+    failed_items: list[tuple[int, str, dict]] = []
+    sent_count = 0
+    with get_session() as session:
+        for (sub_id, email), msg, result in zip(recipients, messages, results):
+            SendHistoryRepository.create(
+                session, tenant_id, sub_id,
+                subject, result.success, result.error_message,
+                newsletter_type=history_type,
+                send_mode=send_mode,
+            )
+            session.commit()
+            if result.success:
+                sent_count += 1
+            else:
+                failed_items.append((sub_id, email, msg))
+                logger.error(
+                    f"{log_prefix} 발송 실패: {email} - {result.error_message}"
+                )
+
+    failed_count = 0
+    if failed_items:
+        logger.info(f"{log_prefix} {len(failed_items)}건 재시도 (5초 후)")
+        time.sleep(5)
+
+        retry_messages = [msg for _, _, msg in failed_items]
+        retry_results = sender.send_batch_efficient(retry_messages)
+
+        with get_session() as session:
+            for (sub_id, email, _), retry_result in zip(failed_items, retry_results):
+                if retry_result.success:
+                    SendHistoryRepository.create(
+                        session, tenant_id, sub_id,
+                        subject, True, None,
+                        newsletter_type=history_type,
+                        send_mode=send_mode,
+                    )
+                    session.commit()
+                    sent_count += 1
+                    logger.info(f"{log_prefix} 재시도 발송 성공: {email}")
+                else:
+                    failed_count += 1
+                    logger.error(
+                        f"{log_prefix} 재시도 발송 실패: {email} - "
+                        f"{retry_result.error_message}"
+                    )
+    return sent_count, failed_count
+
+
 def _get_period_range(newsletter_type: str) -> tuple[date, date]:
     """뉴스레터 유형별 집계 기간 계산
 
     Returns:
         (date_from, date_to) - 집계 시작일, 종료일
     """
-    today = date.today()
+    # KST 명시 — 컨테이너 TZ 설정에 의존하지 않는다
+    today = datetime.now(KST).date()
     if newsletter_type == "weekly":
         # 이번 주 월요일~오늘 (금요일 발송 기준)
         date_from = today - timedelta(days=today.weekday())  # 월요일
@@ -121,9 +214,7 @@ def _get_period_start_for_dedup(newsletter_type: str) -> datetime:
     sent_at이 UTC로 저장되므로, KST 기준 기간 시작을 UTC로 환산하여 반환한다.
     """
     from datetime import timezone
-    KST = timezone(timedelta(hours=9))
-    now_kst = datetime.now(KST)
-    today = now_kst.date()
+    today = datetime.now(KST).date()
 
     if newsletter_type == "weekly":
         # 이번주 월요일 00:00 KST → UTC
@@ -250,8 +341,8 @@ def run_send_job(
         slot: 'early'/'mid'/'late' — 해당 슬롯 구독자만 발송. None이면 전체 활성 구독자.
               (수동 모드나 1회성 실행에 None 사용)
     """
-    # 이력 저장용 타입: manual이면 "manual", 아니면 원래 newsletter_type
-    history_type = "manual" if manual else newsletter_type
+    # 발송 정책은 SendPlan 하나로 결정 — 이후 코드는 plan 필드만 읽는다.
+    plan = manual_plan(newsletter_type) if manual else normal_plan(newsletter_type)
     mode_label = "[manual]" if manual else ""
     slot_label = f"[slot={slot}]" if slot else ""
     type_label = f"[{newsletter_type}]" if newsletter_type != "daily" else ""
@@ -264,7 +355,7 @@ def run_send_job(
         logger.error(f"[{tenant_id}] 테넌트를 찾을 수 없습니다.")
         return
 
-    # 휴일(주말·공휴일) 테스트 모드 판정 — 자동 스케줄(=manual=False)에만 적용.
+    # 휴일(주말·공휴일) 판정 — 자동 스케줄(=manual=False)에만 적용.
     # 주말=토/일, 공휴일=법정 공휴일(대체휴일 포함)+EXTRA_HOLIDAYS 지정일.
     today_kst = datetime.now(KST).date()
     nonbiz_reason = (
@@ -272,9 +363,7 @@ def run_send_job(
         if not manual and getattr(tenant, "weekend_test_mode", True)
         else None
     )
-    holiday_test = nonbiz_reason is not None
-    send_mode = "normal"
-    if holiday_test:
+    if nonbiz_reason is not None:
         # 기본 정책: 휴일(토·일·공휴일)엔 자동 발송 전체 스킵 (관리자 테스트 포함).
         if not settings.holiday_admin_test_enabled:
             h_name = (
@@ -294,16 +383,13 @@ def run_send_job(
                 f"{slot} 슬롯 스킵"
             )
             return
-        # 통계 축 분리: 주말은 기존 weekend_test 유지, 평일 공휴일은 holiday_test
-        send_mode = "weekend_test" if nonbiz_reason == "weekend" else "holiday_test"
-        log_prefix = f"{log_prefix}[{send_mode}]"
+        plan = holiday_test_plan(newsletter_type, nonbiz_reason)
+        log_prefix = f"{log_prefix}[{plan.send_mode}]"
         h_name = holiday_name(today_kst) if nonbiz_reason == "holiday" else None
         logger.info(
             f"{log_prefix} 휴일 관리자 테스트 모드로 발송"
             + (f" (공휴일: {h_name})" if h_name else "")
         )
-    stale_alert = False  # P6 stale-cache 가드 (daily 만 평가, 아래에서 결정)
-    duplicate_alert = False  # AC-9 duplicate-content 가드 (daily 자동 발송만 평가)
 
     sender = get_sender()
     if not sender.is_configured:
@@ -320,17 +406,15 @@ def run_send_job(
                 session, tenant_id, tenant, type_label
             )
 
-            # P6: 캐시 24h 초과 + 자동 발송이면 stale alert 모드 진입.
-            # 수동(manual)·주말테스트(weekend_test)는 그대로 진행 — 운영자 의도.
+            # P6: 캐시 24h 초과 + 자동 정식 발송이면 stale alert 모드 진입.
+            # 수동(manual)·휴일 테스트는 그대로 진행 — 운영자 의도.
             if (
                 context is not None
-                and not manual
-                and not holiday_test
+                and plan.mode == "normal"
                 and max_cache_age is not None
                 and max_cache_age > STALE_CACHE_THRESHOLD_SECONDS
             ):
-                stale_alert = True
-                send_mode = "stale_admin_alert"
+                plan = alert_plan(plan, "stale_admin_alert")
                 hours = int(max_cache_age // 3600)
                 log_prefix = f"{log_prefix}[stale_alert]"
                 logger.warning(
@@ -373,21 +457,18 @@ def run_send_job(
         # AC-9 duplicate-content 가드: daily 자동 발송에서 직전 archive 와 html 이
         # 동일하면 (백엔드 신규 유입 0건으로 어제와 같은 내용을 또 보내는 케이스)
         # 일반 구독자 발송 차단 + SUPER_ADMIN_EMAILS 에만 DUPLICATE 배너로 통지.
-        # stale_alert 가 우선 발동했다면 본 가드는 건너뜀 (alert 중복 방지).
+        # stale_alert 가 우선 발동했다면 plan.mode 가 이미 바뀌어 자동 스킵된다.
         # pre-rendered HTML (Summary 등) 은 archive html 과 비교 의미가 없어 스킵.
         if (
             newsletter_type == "daily"
-            and not manual
-            and not holiday_test
-            and not stale_alert
+            and plan.mode == "normal"
             and "prerendered_html" not in context
         ):
             prev_archive = NewsletterArchiveRepository.get_latest_before(
                 session, tenant_id, newsletter_type, date.today()
             )
             if prev_archive and _html_fingerprint(prev_archive.html_content) == _html_fingerprint(html_content):
-                duplicate_alert = True
-                send_mode = "duplicate_content_alert"
+                plan = alert_plan(plan, "duplicate_content_alert")
                 log_prefix = f"{log_prefix}[duplicate_alert]"
                 logger.warning(
                     f"{log_prefix} 직전 발송({prev_archive.sent_date})과 컨텐츠 동일 — "
@@ -404,8 +485,8 @@ def run_send_job(
                     logger.error(f"{log_prefix} 템플릿 재렌더링 실패: {e}")
                     return
 
-        # 아카이브 저장 (수동/주말 테스트/stale·duplicate alert 는 아카이브 생략)
-        if not manual and not holiday_test and not stale_alert and not duplicate_alert:
+        # 아카이브 저장 — plan 이 허용하는 경우만 (정식 발송)
+        if plan.archive:
             try:
                 NewsletterArchiveRepository.save(
                     session, tenant_id, newsletter_type, subject, html_content
@@ -414,8 +495,8 @@ def run_send_job(
             except Exception as e:
                 logger.warning(f"{log_prefix} 아카이브 저장 실패 (발송은 계속): {e}")
 
-        # 구독자 조회 — 주말 테스트·stale·duplicate alert 는 SUPER_ADMIN_EMAILS 만, 평일은 슬롯 필터링
-        if holiday_test or stale_alert or duplicate_alert:
+        # 구독자 조회 — admin_only(휴일 테스트·경보)는 SUPER_ADMIN_EMAILS 만
+        if plan.admin_only:
             subscribers = _get_admin_recipients(session, tenant_id)
             if not subscribers:
                 logger.warning(
@@ -431,9 +512,9 @@ def run_send_job(
             logger.warning(f"[{tenant_id}] 등록된 구독자가 없습니다.")
             return
 
-        # 중복 방지: 수동/주말 테스트/stale·duplicate alert 발송은 dedup 스킵
+        # 중복 방지 — plan 이 dedup 을 요구하는 경우만 (정식 발송)
         sent_ids: set[int] = set()
-        if not manual and not holiday_test and not stale_alert and not duplicate_alert:
+        if plan.dedup:
             if newsletter_type == "daily":
                 sent_ids = SendHistoryRepository.get_sent_today_subscriber_ids(
                     session, tenant_id, newsletter_type="daily"
@@ -453,26 +534,12 @@ def run_send_job(
                 logger.debug(f"{log_prefix} 이미 발송됨: {subscriber.email}")
                 continue
 
-            unsubscribe_url = (
-                f"{settings.web_base_url}/{tenant_id}"
-                f"/unsubscribe/token/{subscriber.unsubscribe_token}"
-            )
-            # 페르소나 콘텐츠 요청 딥링크 (E1·E2) — 수신자별 토큰 주입.
-            # daily_report.html 의 CTA 가 persona_enabled 일 때만 placeholder 를
-            # 렌더하므로, 미노출 시 아래 replace 는 무해한 no-op.
-            persona_request_url = (
-                f"{settings.web_base_url}/{tenant_id}"
-                f"/persona/request?token={subscriber.unsubscribe_token}"
-            )
-            subscriber_html = html_content.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
-            subscriber_html = subscriber_html.replace(
-                "__PERSONA_REQUEST_URL__", persona_request_url
-            )
-
             messages.append({
                 "recipient": subscriber.email,
                 "subject": subject,
-                "html_content": subscriber_html,
+                "html_content": _personalize_html(
+                    html_content, tenant_id, subscriber.unsubscribe_token
+                ),
                 "sender_name": tenant.display_name,
             })
             target_recipients.append((subscriber.id, subscriber.email))
@@ -481,67 +548,22 @@ def run_send_job(
             logger.info(f"{log_prefix} 발송 대상이 없습니다 (모두 발송 완료).")
             update_health("send")
             return
-        # ── 준비 트랜잭션 종료(아카이브 커밋). 이후 SMTP 발송은 세션 밖에서
-        # 수행한다: 발송(비가역)이 트랜잭션(가역) 안에 있으면 이력 기록 실패 시
-        # 배달 완료 메일의 이력까지 롤백되어 다음 슬롯에서 전원 재발송된다.
-        # 또한 SMTP 대화 내내 SQLite 쓰기 락을 쥐어 웹 프로세스 쓰기가 죽는다.
+        # ── 준비 트랜잭션 종료(아카이브 커밋). 이후 SMTP 발송은 세션 밖
+        # (_deliver_and_record 참조 — 비가역 발송을 가역 트랜잭션에 넣지 않는다).
 
-    # 1차 배치 발송 (DB 세션 없이)
-    results = sender.send_batch_efficient(messages)
+    # 배치 발송 + 행 단위 이력 커밋 + 1회 재시도 (모든 발송 경로 공통 헬퍼)
+    sent_count, _failed = _deliver_and_record(
+        tenant_id, subject, messages, target_recipients,
+        history_type=plan.history_type, send_mode=plan.send_mode,
+        log_prefix=log_prefix,
+    )
 
-    # 1차 결과 기록 — 행 단위 commit 으로 배달된 메일부터 즉시 영속화.
-    # (기록 도중 오류가 나도 이미 커밋된 행은 유지 → 재발송 경로 차단)
-    failed_items: list[tuple[int, str, dict]] = []
-    sent_count = 0
-    with get_session() as session:
-        for (sub_id, email), msg, result in zip(target_recipients, messages, results):
-            SendHistoryRepository.create(
-                session, tenant_id, sub_id,
-                subject, result.success, result.error_message,
-                newsletter_type=history_type,
-                send_mode=send_mode,
-            )
-            session.commit()
-            if result.success:
-                sent_count += 1
-            else:
-                failed_items.append((sub_id, email, msg))
-                logger.error(f"{log_prefix} 발송 실패: {email} - {result.error_message}")
-
-    # 2차 재시도 (실패 건) — sleep·SMTP 모두 세션 밖
-    if failed_items:
-        logger.info(f"{log_prefix} {len(failed_items)}건 재시도 (5초 후)")
-        time.sleep(5)
-
-        retry_messages = [msg for _, _, msg in failed_items]
-        retry_results = sender.send_batch_efficient(retry_messages)
-
-        with get_session() as session:
-            for (sub_id, email, _), retry_result in zip(failed_items, retry_results):
-                if retry_result.success:
-                    SendHistoryRepository.create(
-                        session, tenant_id, sub_id,
-                        subject, True, None,
-                        newsletter_type=history_type,
-                        send_mode=send_mode,
-                    )
-                    session.commit()
-                    sent_count += 1
-                    logger.info(f"{log_prefix} 재시도 발송 성공: {email}")
-                else:
-                    logger.error(
-                        f"{log_prefix} 재시도 발송 실패: {email} - {retry_result.error_message}"
-                    )
-
-    # dedup: 발송 성공 기사 이력 기록 (자동 daily 정식 발송만, 수동·주말테스트·stale·duplicate alert 제외)
-    # stale_alert / duplicate_alert 는 캐시된 과거 기사를 admin 에게 재발송한 것이므로
+    # dedup: 발송 성공 기사 이력 기록 — plan 이 허용하는 정식 daily 발송만.
+    # 경보/테스트 발송은 캐시된 과거 기사를 admin 에게 재발송한 것이므로
     # sent_articles 풀을 오염시키면 안 됨 (다음날 정상 발송 시 잘못 dedup 될 위험).
     if (
         sent_count >= 1
-        and not manual
-        and not holiday_test
-        and not stale_alert
-        and not duplicate_alert
+        and plan.record_articles
         and newsletter_type == "daily"
         and tenant.dedup_recent_days
     ):
@@ -703,19 +725,25 @@ def send_welcome_newsletter(tenant_id: str, email: str) -> bool:
                 logger.info(f"[{tenant_id}] 이미 오늘 발송됨, 웰컴 건너뜀: {email}")
                 return True
 
-            collected_data = CollectedDataRepository.get_all_latest(session, tenant_id)
+            # daily 발송 경로(_prepare_daily_send)와 동일하게 weekly/monthly
+            # prefixed 캐시는 제외 — 웰컴이 daily 포매터에 요약 데이터를
+            # 잘못 주입하던 드리프트 수정.
+            collected_data = {
+                data_type: data
+                for data_type, data in CollectedDataRepository.get_all_latest(
+                    session, tenant_id
+                ).items()
+                if not data_type.startswith(("weekly_", "monthly_"))
+            }
             if not collected_data:
                 logger.info(f"[{tenant_id}] 수집 데이터 없음, 웰컴 발송 건너뜀: {email}")
                 return False
 
             context = tenant.format_report(collected_data)
             html_content = renderer.render(tenant.email_template, context)
-
-            unsubscribe_url = (
-                f"{settings.web_base_url}/{tenant_id}"
-                f"/unsubscribe/token/{subscriber.unsubscribe_token}"
+            html_content = _personalize_html(
+                html_content, tenant_id, subscriber.unsubscribe_token
             )
-            html_content = html_content.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
 
             subject = tenant.generate_subject()
 
@@ -803,58 +831,37 @@ def run_adhoc_send(
         tenant = registry.get(tenant_id)
         display_name = tenant.display_name if tenant else tenant_id
 
+        # ORM 객체는 세션 종료 후 만료되므로 (id, email) 튜플로만 보관
         messages = []
-        target_subscribers = []
+        target_recipients: list[tuple[int, str]] = []
         for subscriber in subscribers:
             if subscriber.id in sent_ids:
                 logger.debug(f"[{tenant_id}][adhoc] 이미 발송됨: {subscriber.email}")
                 result["skipped"] += 1
                 continue
 
-            unsubscribe_url = (
-                f"{settings.web_base_url}/{tenant_id}"
-                f"/unsubscribe/token/{subscriber.unsubscribe_token}"
-            )
-            # 페르소나 콘텐츠 요청 딥링크 (E1·E2) — 수신자별 토큰 주입.
-            # daily_report.html 의 CTA 가 persona_enabled 일 때만 placeholder 를
-            # 렌더하므로, 미노출 시 아래 replace 는 무해한 no-op.
-            persona_request_url = (
-                f"{settings.web_base_url}/{tenant_id}"
-                f"/persona/request?token={subscriber.unsubscribe_token}"
-            )
-            subscriber_html = html_content.replace("__UNSUBSCRIBE_URL__", unsubscribe_url)
-            subscriber_html = subscriber_html.replace(
-                "__PERSONA_REQUEST_URL__", persona_request_url
-            )
-
             messages.append({
                 "recipient": subscriber.email,
                 "subject": subject,
-                "html_content": subscriber_html,
+                "html_content": _personalize_html(
+                    html_content, tenant_id, subscriber.unsubscribe_token
+                ),
                 "sender_name": display_name,
             })
-            target_subscribers.append(subscriber)
+            target_recipients.append((subscriber.id, subscriber.email))
 
         if not messages:
             logger.info(f"[{tenant_id}][adhoc] 발송 대상이 없습니다 (모두 발송 완료).")
             return result
+        # ── 준비 트랜잭션 종료(아카이브 커밋). SMTP 는 세션 밖 공통 헬퍼에서.
 
-        # 배치 발송
-        send_results = sender.send_batch_efficient(messages)
-
-        for subscriber, send_result in zip(target_subscribers, send_results):
-            SendHistoryRepository.create(
-                session, tenant_id, subscriber.id,
-                subject, send_result.success, send_result.error_message,
-                newsletter_type="adhoc"
-            )
-            if send_result.success:
-                result["success"] += 1
-            else:
-                result["failed"] += 1
-                logger.error(
-                    f"[{tenant_id}][adhoc] 발송 실패: {subscriber.email} - {send_result.error_message}"
-                )
+    sent_count, failed_count = _deliver_and_record(
+        tenant_id, subject, messages, target_recipients,
+        history_type="adhoc", send_mode="normal",
+        log_prefix=f"[{tenant_id}][adhoc]",
+    )
+    result["success"] = sent_count
+    result["failed"] = failed_count
 
     logger.info(
         f"[{tenant_id}][adhoc] 발송 완료: "
@@ -1006,121 +1013,83 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
     registry = get_registry()
 
     for tenant in registry.get_all():
-        config = tenant.schedule_config
         tid = tenant.tenant_id
 
-        # === Daily 수집 (1회) ===
-        scheduler.add_job(
-            run_collect_job,
-            trigger=CronTrigger(
-                hour=config["collect_hour"],
-                minute=config["collect_minute"]
-            ),
-            args=[tid, "daily"],
-            id=f"collect_{tid}",
-            name=f"Collect {tenant.display_name}",
-        )
-        logger.info(
-            f"[{tid}] daily 수집 등록: "
-            f"{config['collect_hour']:02d}:{config['collect_minute']:02d}"
-        )
+        # 주기별 스펙: (freq, collect 트리거 kwargs, send 트리거 추가 kwargs, 로그용 day prefix)
+        # 세 주기 모두 동일한 "수집 1회 + 슬롯별 발송" 패턴이므로 하나의 루프로 등록.
+        # daily 도 weekly/monthly 처럼 supported_frequencies 로 게이트 —
+        # weekly 전용 테넌트(StandUp)에 영구 no-op daily 잡 4개가 등록되던 문제 수정.
+        freq_specs: list[tuple[str, dict, dict, str]] = []
 
-        # === Daily 발송 (슬롯별) ===
-        for s in DAILY_SLOTS:
-            s_hour, s_minute = get_slot_time(s["key"], "daily")
-            scheduler.add_job(
-                run_send_job,
-                trigger=CronTrigger(hour=s_hour, minute=s_minute),
-                kwargs={"tenant_id": tid, "newsletter_type": "daily",
-                        "manual": False, "slot": s["key"]},
-                id=f"send_{tid}_{s['key']}",
-                name=f"Send {tenant.display_name} [{s['label']}]",
-            )
-            logger.info(
-                f"[{tid}] daily 발송 등록 [{s['key']}]: {s_hour:02d}:{s_minute:02d}"
-            )
+        if "daily" in tenant.supported_frequencies:
+            dc = tenant.schedule_config
+            freq_specs.append((
+                "daily",
+                {"hour": dc["collect_hour"], "minute": dc["collect_minute"]},
+                {},
+                "",
+            ))
 
-        # === Weekly 스케줄 (수집 1회 + 슬롯별 발송) ===
         if "weekly" in tenant.supported_frequencies:
             wc = tenant.weekly_schedule_config
             if wc:
-                day_of_week = wc.get("day_of_week", "mon")
-                scheduler.add_job(
-                    run_collect_job,
-                    trigger=CronTrigger(
-                        day_of_week=day_of_week,
-                        hour=wc.get("collect_hour", 5),
-                        minute=wc.get("collect_minute", 0),
-                    ),
-                    args=[tid, "weekly"],
-                    id=f"collect_weekly_{tid}",
-                    name=f"Collect Weekly {tenant.display_name}",
-                )
-                logger.info(
-                    f"[{tid}] weekly 수집 등록: {day_of_week} "
-                    f"{wc.get('collect_hour', 5):02d}:{wc.get('collect_minute', 0):02d}"
-                )
+                dow = wc.get("day_of_week", "mon")
+                freq_specs.append((
+                    "weekly",
+                    {"day_of_week": dow,
+                     "hour": wc.get("collect_hour", 5),
+                     "minute": wc.get("collect_minute", 0)},
+                    {"day_of_week": dow},
+                    f"{dow} ",
+                ))
 
-                for s in DAILY_SLOTS:
-                    s_hour, s_minute = get_slot_time(s["key"], "weekly")
-                    scheduler.add_job(
-                        run_send_job,
-                        trigger=CronTrigger(
-                            day_of_week=day_of_week,
-                            hour=s_hour,
-                            minute=s_minute,
-                        ),
-                        kwargs={"tenant_id": tid, "newsletter_type": "weekly",
-                                "manual": False, "slot": s["key"]},
-                        id=f"send_weekly_{tid}_{s['key']}",
-                        name=f"Send Weekly {tenant.display_name} [{s['label']}]",
-                    )
-                    logger.info(
-                        f"[{tid}] weekly 발송 등록 [{s['key']}]: "
-                        f"{day_of_week} {s_hour:02d}:{s_minute:02d}"
-                    )
-
-        # === Monthly 스케줄 (수집 1회 + 슬롯별 발송) ===
         if "monthly" in tenant.supported_frequencies:
             mc = tenant.monthly_schedule_config
             if mc:
-                day_of_month = mc.get("day_of_month", 1)
-                day_display = "말일" if str(day_of_month) == "last" else f"{day_of_month}일"
+                dom = mc.get("day_of_month", 1)
+                day_display = "말일" if str(dom) == "last" else f"{dom}일"
+                freq_specs.append((
+                    "monthly",
+                    {"day": dom,
+                     "hour": mc.get("collect_hour", 5),
+                     "minute": mc.get("collect_minute", 0)},
+                    {"day": dom},
+                    f"매월 {day_display} ",
+                ))
 
+        for freq, collect_trigger, send_extra, day_prefix in freq_specs:
+            # 기존 job id 체계 유지: daily 는 무접미, weekly/monthly 는 _{freq}
+            suffix = "" if freq == "daily" else f"_{freq}"
+            name_prefix = "" if freq == "daily" else f"{freq.capitalize()} "
+
+            scheduler.add_job(
+                run_collect_job,
+                trigger=CronTrigger(**collect_trigger),
+                args=[tid, freq],
+                id=f"collect{suffix}_{tid}",
+                name=f"Collect {name_prefix}{tenant.display_name}",
+            )
+            logger.info(
+                f"[{tid}] {freq} 수집 등록: {day_prefix}"
+                f"{collect_trigger['hour']:02d}:{collect_trigger['minute']:02d}"
+            )
+
+            for s in DAILY_SLOTS:
+                s_hour, s_minute = get_slot_time(s["key"], freq)
                 scheduler.add_job(
-                    run_collect_job,
+                    run_send_job,
                     trigger=CronTrigger(
-                        day=day_of_month,
-                        hour=mc.get("collect_hour", 5),
-                        minute=mc.get("collect_minute", 0),
+                        hour=s_hour, minute=s_minute, **send_extra
                     ),
-                    args=[tid, "monthly"],
-                    id=f"collect_monthly_{tid}",
-                    name=f"Collect Monthly {tenant.display_name}",
+                    kwargs={"tenant_id": tid, "newsletter_type": freq,
+                            "manual": False, "slot": s["key"]},
+                    id=f"send{suffix}_{tid}_{s['key']}",
+                    name=f"Send {name_prefix}{tenant.display_name} [{s['label']}]",
                 )
                 logger.info(
-                    f"[{tid}] monthly 수집 등록: 매월 {day_display} "
-                    f"{mc.get('collect_hour', 5):02d}:{mc.get('collect_minute', 0):02d}"
+                    f"[{tid}] {freq} 발송 등록 [{s['key']}]: "
+                    f"{day_prefix}{s_hour:02d}:{s_minute:02d}"
                 )
-
-                for s in DAILY_SLOTS:
-                    s_hour, s_minute = get_slot_time(s["key"], "monthly")
-                    scheduler.add_job(
-                        run_send_job,
-                        trigger=CronTrigger(
-                            day=day_of_month,
-                            hour=s_hour,
-                            minute=s_minute,
-                        ),
-                        kwargs={"tenant_id": tid, "newsletter_type": "monthly",
-                                "manual": False, "slot": s["key"]},
-                        id=f"send_monthly_{tid}_{s['key']}",
-                        name=f"Send Monthly {tenant.display_name} [{s['label']}]",
-                    )
-                    logger.info(
-                        f"[{tid}] monthly 발송 등록 [{s['key']}]: "
-                        f"매월 {day_display} {s_hour:02d}:{s_minute:02d}"
-                    )
 
     # === AllergyInsight 진단키트 부서 인사이트 브리프 (Phase 6) ===
     # config/tenants.yaml 의 insight_brief.enabled=true 일 때만 cron 등록.

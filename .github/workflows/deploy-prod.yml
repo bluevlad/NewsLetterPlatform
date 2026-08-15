@@ -80,12 +80,20 @@ jobs:
         run: |
           cd ${{ env.DEPLOY_PATH }}
 
+          echo "Building containers..."
+          docker compose -f docker-compose.prod.yml build
+
+          # 테스트 게이트: 새 이미지에서 전체 pytest 통과 전에는 기존 컨테이너를
+          # 내리지 않는다 (실패 시 무중단 롤백 = 기존 버전 유지).
+          # tests/ 는 .dockerignore 로 이미지에서 제외되므로 볼륨으로 주입.
+          echo "Running test gate..."
+          docker compose -f docker-compose.prod.yml run --rm --no-deps \
+            -v "$(pwd)/tests:/app/tests:ro" \
+            newsletterplatform-web python -m pytest tests -q
+
           echo "Stopping existing containers..."
           docker compose -f docker-compose.prod.yml down --remove-orphans || true
           docker rm -f newsletterplatform-web newsletterplatform-scheduler 2>/dev/null || true
-
-          echo "Building containers..."
-          docker compose -f docker-compose.prod.yml build
 
           echo "Starting containers..."
           docker compose -f docker-compose.prod.yml up -d

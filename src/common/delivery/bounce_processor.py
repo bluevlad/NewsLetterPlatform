@@ -292,7 +292,9 @@ class BounceProcessor:
     def _archive(self, imap: imaplib.IMAP4_SSL, uid: bytes) -> None:
         """Gmail archive — INBOX 라벨만 제거 (메시지는 All Mail에 남음)"""
         try:
-            imap.uid("STORE", uid, "-X-GM-LABELS", r"\\Inbox")
+            # Gmail 라벨 atom 은 백슬래시 1개(\Inbox). raw string r"\\Inbox" 는
+            # 리터럴 백슬래시 2개가 전송되어 아카이브가 무효화된다 (NDR 무한 재처리).
+            imap.uid("STORE", uid, "-X-GM-LABELS", "\\Inbox")
         except Exception as e:
             logger.warning("BounceProcessor: UID %s archive 실패: %s", uid, e)
 
