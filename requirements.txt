@@ -8,8 +8,10 @@ python-multipart>=0.0.32
 sqlalchemy>=2.0.51
 psycopg2-binary>=2.9.9  # SQLite→PostgreSQL 마이그레이션
 
-# Email
-aiosmtplib>=5.1.2
+# Email — 발송은 동기 smtplib(stdlib) 사용. aiosmtplib 는 미사용으로 제거(2026-08-15)
+
+# Test (배포 게이트: deploy-prod.yml 이 새 이미지에서 pytest 실행)
+pytest>=8.0.0
 
 # Scheduler
 apscheduler>=3.11.3

@@ -12,15 +12,14 @@ holidays 패키지 미설치·오류 시 주말 판정만 수행하고 경고 �
 """
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 from functools import lru_cache
 from typing import Optional
 
 from ..config import settings
+from .timeutil import KST  # noqa: F401 — 하위 호환 재노출 (단일 출처: timeutil)
 
 logger = logging.getLogger(__name__)
-
-KST = timezone(timedelta(hours=9))
 
 try:
     import holidays as _holidays_lib

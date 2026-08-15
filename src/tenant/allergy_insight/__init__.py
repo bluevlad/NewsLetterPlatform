@@ -76,6 +76,11 @@ class AllergyInsightTenant(BaseTenant):
         """AllergyInsight 는 최근 7일 발송 기사 재노출 차단."""
         return 7
 
+    @property
+    def persona_enabled(self) -> bool:
+        """페르소나 적응형 뉴스레터 지원 테넌트 (NLP N1·N2)."""
+        return True
+
     def extract_sent_article_entries(
         self, context: Dict[str, Any]
     ) -> List[tuple]:

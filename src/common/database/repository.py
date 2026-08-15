@@ -12,24 +12,13 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine, and_, event, func, or_, text, Integer
 from sqlalchemy.orm import sessionmaker, Session
 
+from ..timeutil import (  # noqa: F401 — 하위 호환 재노출 (KST/경계의 단일 출처는 timeutil)
+    KST as _KST,
+    KST_DATE_MODIFIER as _KST_DATE_MODIFIER,
+    today_start_utc as _today_start_utc,
+)
+
 logger = logging.getLogger(__name__)
-
-# KST (UTC+9)
-_KST = timezone(timedelta(hours=9))
-
-
-def _today_start_utc() -> datetime:
-    """KST 기준 오늘 자정을 naive UTC datetime으로 반환
-
-    컨테이너 TZ=Asia/Seoul 환경에서 datetime.utcnow()를 사용하면
-    UTC 자정(=KST 09:00)이 경계가 되어 전일 09:00~당일 08:59 KST가
-    같은 "오늘"로 묶이는 문제가 있다.
-    KST 자정을 UTC로 환산(전일 15:00 UTC)하여 올바른 경계를 사용한다.
-    """
-    now_kst = datetime.now(_KST)
-    midnight_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
-    midnight_utc = midnight_kst.astimezone(timezone.utc)
-    return midnight_utc.replace(tzinfo=None)
 
 from .models import (
     Base, Subscriber, SendHistory, CollectedData,
@@ -657,6 +646,9 @@ class SendHistoryRepository:
             SendHistory.newsletter_type == newsletter_type,
             SendHistory.sent_at >= today_start,
             SendHistory.is_success == True,
+            # 정식 발송만 dedup 대상 — stale/duplicate alert 나 휴일 테스트가
+            # newsletter_type='daily' 로 기록돼도 이후 정상 발송을 막지 않는다.
+            SendHistory.send_mode == "normal",
         ]
         if subject is not None:
             conditions.append(SendHistory.subject == subject)
@@ -737,11 +729,16 @@ class SendHistoryRepository:
 
     @staticmethod
     def get_daily_summary(session: Session, tenant_id: str, days: int = 7) -> list[dict]:
-        """최근 N일 일별 발송 요약"""
-        since = datetime.utcnow() - timedelta(days=days)
+        """최근 N일 일별 발송 요약 (KST 날짜 기준).
+
+        발송은 KST 06:40~09:30 = UTC 전날 밤이므로, UTC 로 날짜를 자르면
+        모든 발송이 전날로 귀속된다. KST 보정 후 그룹핑한다.
+        """
+        kst_date = func.date(SendHistory.sent_at, _KST_DATE_MODIFIER)
+        since = _today_start_utc() - timedelta(days=days)
         rows = (
             session.query(
-                func.date(SendHistory.sent_at).label("date"),
+                kst_date.label("date"),
                 func.count(SendHistory.id).label("total"),
                 func.sum(func.cast(SendHistory.is_success, Integer)).label("success"),
             )
@@ -751,8 +748,8 @@ class SendHistoryRepository:
                     SendHistory.sent_at >= since,
                 )
             )
-            .group_by(func.date(SendHistory.sent_at))
-            .order_by(func.date(SendHistory.sent_at).desc())
+            .group_by(kst_date)
+            .order_by(kst_date.desc())
             .all()
         )
         return [
@@ -789,17 +786,18 @@ class SendHistoryRepository:
 
     @staticmethod
     def get_daily_summary_all(session: Session, days: int = 7) -> list[dict]:
-        """전체 테넌트 최근 N일 일별 발송 요약"""
-        since = datetime.utcnow() - timedelta(days=days)
+        """전체 테넌트 최근 N일 일별 발송 요약 (KST 날짜 기준)"""
+        kst_date = func.date(SendHistory.sent_at, _KST_DATE_MODIFIER)
+        since = _today_start_utc() - timedelta(days=days)
         rows = (
             session.query(
-                func.date(SendHistory.sent_at).label("date"),
+                kst_date.label("date"),
                 func.count(SendHistory.id).label("total"),
                 func.sum(func.cast(SendHistory.is_success, Integer)).label("success"),
             )
             .filter(SendHistory.sent_at >= since)
-            .group_by(func.date(SendHistory.sent_at))
-            .order_by(func.date(SendHistory.sent_at).desc())
+            .group_by(kst_date)
+            .order_by(kst_date.desc())
             .all()
         )
         return [
@@ -821,7 +819,8 @@ class SendHistoryRepository:
                     SendHistory.tenant_id == tenant_id,
                     SendHistory.newsletter_type == newsletter_type,
                     SendHistory.sent_at >= period_start,
-                    SendHistory.is_success == True
+                    SendHistory.is_success == True,
+                    SendHistory.send_mode == "normal",  # 정식 발송만 dedup 대상
                 )
             )
             .distinct()
@@ -1417,7 +1416,9 @@ class CollectionMetricRepository:
         since = _today_start_utc() - timedelta(days=days)
         rows = (
             session.query(
-                func.date(CollectionMetric.collected_at).label("date"),
+                func.date(
+                    CollectionMetric.collected_at, _KST_DATE_MODIFIER
+                ).label("date"),
                 CollectionMetric.data_type,
                 func.count(CollectionMetric.id).label("n"),
                 func.sum(CollectionMetric.raw_count).label("sum_raw"),
@@ -1439,11 +1440,13 @@ class CollectionMetricRepository:
                 )
             )
             .group_by(
-                func.date(CollectionMetric.collected_at),
+                func.date(CollectionMetric.collected_at, _KST_DATE_MODIFIER),
                 CollectionMetric.data_type,
             )
             .order_by(
-                func.date(CollectionMetric.collected_at).desc(),
+                func.date(
+                    CollectionMetric.collected_at, _KST_DATE_MODIFIER
+                ).desc(),
                 CollectionMetric.data_type.asc(),
             )
             .all()

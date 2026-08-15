@@ -195,25 +195,6 @@ class GmailSender:
         logger.info(f"배치 발송 완료: {success_count}/{len(messages)} 성공")
         return results
 
-    def send_batch(
-        self,
-        recipients: List[str],
-        subject: str,
-        html_content: str,
-        sender_name: str = "NewsLetterPlatform"
-    ) -> List[SendResult]:
-        """다수 수신자에게 일괄 발송"""
-        results = []
-        for recipient in recipients:
-            result = self.send(recipient, subject, html_content, sender_name)
-            results.append(result)
-
-        success_count = sum(1 for r in results if r.success)
-        logger.info(f"일괄 발송 완료: {success_count}/{len(recipients)} 성공")
-
-        return results
-
-
 _sender: Optional[GmailSender] = None
 
 

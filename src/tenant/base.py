@@ -94,6 +94,18 @@ class BaseTenant(ABC):
         return None
 
     @property
+    def persona_enabled(self) -> bool:
+        """페르소나 적응형 뉴스레터 기능 지원 여부.
+
+        True 인 테넌트만: 구독/설정 폼에 페르소나 선택 UI 렌더,
+        /{tenant_id}/persona/* 라우트 활성, 이메일에 페르소나 요청 CTA 노출.
+        False(기본)면 위 요소가 모두 비활성 — 타 테넌트 구독 페이지에
+        AllergyInsight 전용 UI 가 새어 나가는 것을 막는다.
+        (실제 동작은 ALLERGY_INSIGHT_NEWSLETTER_KEY 설정 여부와 AND 조건)
+        """
+        return False
+
+    @property
     def weekend_test_mode(self) -> bool:
         """휴일(주말·공휴일) 발송을 일반 구독자가 아닌 SUPER_ADMIN_EMAILS 로만 보낼지 여부.
 

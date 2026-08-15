@@ -130,6 +130,17 @@ subscription_manager = SubscriptionManager()
 # 페르소나 적응형 뉴스레터 클라이언트 (api_key 미설정 시 enabled=False — 폼에서 자동 숨김)
 persona_client = PersonaNewsletterClient()
 
+
+async def _personas_for(tenant) -> list:
+    """테넌트가 페르소나 기능을 지원할 때만 카탈로그 조회.
+
+    게이트 없으면 AllergyInsight 전용 페르소나·알러젠 UI 가 모든 테넌트의
+    구독/설정 페이지에 렌더링된다 (tenant.persona_enabled 는 BaseTenant 기본 False).
+    """
+    if not getattr(tenant, "persona_enabled", False):
+        return []
+    return await persona_client.get_personas()
+
 # 정적 파일 서빙
 _static_dir = _Path(__file__).parent / "static"
 if _static_dir.is_dir():
@@ -230,7 +241,7 @@ async def home(request: Request):
 async def subscribe_form(request: Request, tenant_id: str):
     """구독 신청 폼"""
     tenant = get_tenant_or_404(tenant_id)
-    personas = await persona_client.get_personas()
+    personas = await _personas_for(tenant)
     return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
         "request": request,
         "tenant": tenant,
@@ -255,7 +266,7 @@ async def subscribe_submit(
 ):
     """구독 신청 처리 - 인증코드 발송"""
     tenant = get_tenant_or_404(tenant_id)
-    personas = await persona_client.get_personas()
+    personas = await _personas_for(tenant)
 
     def _render_form(error_msg: str):
         return templates.TemplateResponse(resolve_template(tenant_id, "subscribe.html"), {
@@ -720,7 +731,7 @@ async def unsubscribe_by_token(request: Request, tenant_id: str, token: str):
 async def preferences_form(request: Request, tenant_id: str, token: str):
     """구독 설정 페이지 — 페르소나·관심 알러젠 변경 (구독 해지 토큰으로 식별)"""
     tenant = get_tenant_or_404(tenant_id)
-    personas = await persona_client.get_personas()
+    personas = await _personas_for(tenant)
 
     SessionLocal = get_session_factory()
     db = SessionLocal()
@@ -769,7 +780,7 @@ async def preferences_submit(
 ):
     """구독 설정 저장 — 페르소나·관심 알러젠"""
     tenant = get_tenant_or_404(tenant_id)
-    personas = await persona_client.get_personas()
+    personas = await _personas_for(tenant)
 
     SessionLocal = get_session_factory()
     db = SessionLocal()

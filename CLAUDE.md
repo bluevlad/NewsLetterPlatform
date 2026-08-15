@@ -36,7 +36,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Database | SQLite |
 | Scheduler | APScheduler |
 | Template | Jinja2 |
-| Email | Gmail SMTP (aiosmtplib) |
+| Email | Gmail SMTP (smtplib, 동기) |
 | HTTP Client | httpx |
 | Config | Pydantic + python-dotenv |
 | Package Manager | pip |
