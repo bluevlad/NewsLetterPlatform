@@ -988,9 +988,15 @@ class AllergyInsightCollector:
                 target_count=5,
             )
 
-            # 3. 논문 수집 (공개 API)
-            raw_papers = await self._collect_papers(page_size=20)
-            paper_items = self._transform_papers(raw_papers)
+            # 3. 논문 수집 (공개 API) — fail-safe: papers 엔드포인트 장애가
+            #    헤드라인·다이제스트 등 정상 수집분까지 무산시키지 않도록
+            #    실패 시 해당 섹션만 비운다 (템플릿이 빈 섹션 자동 숨김).
+            paper_items: list = []
+            try:
+                raw_papers = await self._collect_papers(page_size=20)
+                paper_items = self._transform_papers(raw_papers)
+            except Exception as e:
+                logger.warning(f"논문 수집 실패 (papers 섹션 제외하고 진행): {e}")
 
             # 4. 통계 수집 (인증 필요 — 실패 시 기본값 사용)
             raw_stats = {}

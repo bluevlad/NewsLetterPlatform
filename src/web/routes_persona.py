@@ -76,15 +76,19 @@ async def expansion_callback(
 ):
     """AllergyInsight expandable job 완료 역호출 (정본 계약 §3.2.4).
 
-    인증: `X-Newsletter-Key` 헤더가 오면 검증한다. 정본 webhook 발신부가 커스텀
-    헤더를 싣지 않을 수 있어(설계 Q3), 헤더 부재는 거부하지 않고 job_id 매칭으로
-    방어한다 — 매칭 미러 행이 없으면 200 + 무시(멱등, 정보 누출 방지).
-
-    콜백 실패가 백엔드 job 을 막지 않도록 어떤 경우에도 빠르게 200 을 반환한다.
+    인증: `X-Newsletter-Key` 헤더 **필수**. 과거에는 헤더 부재를 허용했으나
+    (설계 Q3), job_id 를 아는 외부인이 위조 result_json 을 주입해 구독자에게
+    렌더링시킬 수 있어 필수로 강화했다. 키 미설정(페르소나 비활성) 시에도 거부.
+    헤더 검증 실패 외에는 콜백 실패가 백엔드 job 을 막지 않도록 200 을 반환한다.
+    (콜백이 거부되어도 구독자 폴링 경로가 결과를 복구하므로 기능 저하는 없다.)
     """
     expected = settings.allergy_insight_newsletter_api_key
-    if x_newsletter_key and expected and x_newsletter_key != expected:
-        logger.warning("expansion-callback: X-Newsletter-Key 불일치 — 거부")
+    if not expected or x_newsletter_key != expected:
+        logger.warning(
+            "expansion-callback 거부: X-Newsletter-Key %s",
+            "미설정(페르소나 비활성)" if not expected
+            else ("누락" if not x_newsletter_key else "불일치"),
+        )
         return JSONResponse({"status": "rejected"}, status_code=403)
 
     try:
@@ -273,10 +277,15 @@ async def persona_topic_request(
 
 
 @router.get("/{tenant_id}/persona/job/{job_id}", response_class=HTMLResponse)
+@limiter.limit("30/hour")
 async def persona_job_poll(
     request: Request, tenant_id: str, job_id: str, token: str = "",
 ):
-    """비동기 수집 job 결과 조회 (콜백 누락 대비 수동 폴링)."""
+    """비동기 수집 job 결과 조회 (콜백 누락 대비 수동 폴링).
+
+    인증: token(구독자) 이 job 의 소유자와 일치해야 한다 — job_id 만으로
+    타인의 요청 주제·생성 콘텐츠가 열람되는 것을 차단.
+    """
     tenant = get_tenant_or_404(tenant_id)
 
     db = get_session_factory()()
@@ -287,9 +296,30 @@ async def persona_job_poll(
                 request, tenant, token, "요청 내역을 찾을 수 없습니다.",
             )
 
+        # 소유 검증 — token 의 구독자가 이 job 의 요청자인지 확인.
+        subscriber = SubscriberRepository.get_by_unsubscribe_token(db, token)
+        if (
+            not subscriber
+            or subscriber.tenant_id != tenant_id
+            or subscriber.id != row.subscriber_id
+        ):
+            return _error_page(
+                request, tenant, token, "요청 내역을 찾을 수 없습니다.",
+            )
+
         # 콜백으로 이미 종료된 경우 — 저장된 결과를 그대로 렌더.
         if row.coverage in _TERMINAL_COVERAGE and row.result_json:
-            stored = json.loads(row.result_json)
+            try:
+                stored = json.loads(row.result_json)
+            except (ValueError, TypeError):
+                logger.error(
+                    "persona_job_poll: result_json 손상 (request_id=%s)",
+                    row.request_id,
+                )
+                return _error_page(
+                    request, tenant, token,
+                    "저장된 결과를 읽을 수 없습니다. 다시 요청해주세요.",
+                )
             result = _formatter.format_topic_response(
                 stored if "coverage" in stored
                 else {"coverage": "covered",

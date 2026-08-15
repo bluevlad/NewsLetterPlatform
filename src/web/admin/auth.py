@@ -215,8 +215,19 @@ async def google_verify(request: Request):
     if not email:
         return JSONResponse({"error": "이메일 정보를 가져올 수 없습니다."}, status_code=400)
 
+    # fail-close: 허용목록이 비어 있으면 어떤 Google 계정도 거부한다.
+    # (과거 fail-open 이었음 — SUPER_ADMIN_EMAILS 미설정 배포 시 전면 개방되는 취약점)
     admin_emails = _get_super_admin_emails()
-    if admin_emails and email not in admin_emails:
+    if not admin_emails:
+        logger.error(
+            "Google Sign-In 로그인 거부: SUPER_ADMIN_EMAILS 미설정 — "
+            "관리자 허용목록이 비어 있어 모든 로그인을 거부합니다."
+        )
+        return JSONResponse(
+            {"error": "관리자 허용목록이 설정되지 않았습니다. 운영자에게 문의하세요."},
+            status_code=403,
+        )
+    if email not in admin_emails:
         logger.warning("Google Sign-In 로그인 거부: %s (관리자 아님)", email)
         return JSONResponse({"error": "관리자 권한이 없는 계정입니다."}, status_code=403)
 

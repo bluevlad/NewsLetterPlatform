@@ -4,7 +4,6 @@
 """
 
 import json
-import random
 import string
 import hashlib
 import secrets
@@ -19,14 +18,17 @@ from ..database.models import Subscriber, EmailVerification, VerificationType
 from ..database.repository import (
     SubscriberRepository, EmailVerificationRepository, BounceLogRepository
 )
-from ..security import is_role_account, is_bot_name_pattern
+from ..security import is_role_account, is_bot_name_pattern, is_valid_email
 
 logger = logging.getLogger(__name__)
 
 
 def generate_verification_code() -> str:
-    """6자리 인증코드 생성"""
-    return "".join(random.choices(string.digits, k=settings.verification_code_length))
+    """6자리 인증코드 생성 (CSPRNG)"""
+    return "".join(
+        secrets.choice(string.digits)
+        for _ in range(settings.verification_code_length)
+    )
 
 
 def generate_unsubscribe_token(email: str) -> str:
@@ -52,6 +54,11 @@ class SubscriptionManager:
         """
         email = email.strip().lower()
         name = name.strip()
+
+        # 형식 검증: 잘못된 주소가 SMTP 발송 경로에 도달하는 것 차단
+        if not is_valid_email(email):
+            logger.warning("이메일 형식 오류 차단: tenant=%s, email=%r", tenant_id, email)
+            return False, "올바른 이메일 주소를 입력해주세요.", None
 
         # 어뷰즈 방어: role-account 메일함 차단
         if is_role_account(email):

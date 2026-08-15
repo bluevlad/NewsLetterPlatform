@@ -189,7 +189,20 @@ def _coverage_of(job_id):
         sess.close()
 
 
-def test_t5_callback_ready_updates_coverage(client):
+_CB_KEY = "test-newsletter-key"
+
+
+@pytest.fixture
+def callback_auth(monkeypatch):
+    """콜백 인증 — P0 하드닝으로 X-Newsletter-Key 필수. 키 설정 + 헤더 반환."""
+    from src.config import settings as app_settings
+    monkeypatch.setattr(
+        app_settings, "allergy_insight_newsletter_api_key", _CB_KEY
+    )
+    return {"X-Newsletter-Key": _CB_KEY}
+
+
+def test_t5_callback_ready_updates_coverage(client, callback_auth):
     """N2-T5: status=ready 콜백 → 미러 행 coverage covered 로 갱신."""
     _seed_request(job_id="job-t5", coverage="expandable")
 
@@ -197,44 +210,66 @@ def test_t5_callback_ready_updates_coverage(client):
         "/api/newsletter/expansion-callback",
         json={"job_id": "job-t5", "status": "ready",
               "data": {"sections": []}},
+        headers=callback_auth,
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
     assert _coverage_of("job-t5") == "covered"
 
 
-def test_t6_callback_duplicate_noop(client):
+def test_t6_callback_duplicate_noop(client, callback_auth):
     """N2-T6: 이미 종료된 행에 중복 콜백 → no-op (dedup), coverage 불변."""
     _seed_request(job_id="job-t6", coverage="covered")  # 이미 종료 상태
 
     resp = client.post(
         "/api/newsletter/expansion-callback",
         json={"job_id": "job-t6", "status": "failed"},  # 뒤집기 시도
+        headers=callback_auth,
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "duplicate"
     assert _coverage_of("job-t6") == "covered"  # 변경 안 됨
 
 
-def test_t8_callback_unknown_job_ignored(client):
+def test_t8_callback_unknown_job_ignored(client, callback_auth):
     """N2-T8: 미러 행 없는 job_id 콜백 → 멱등 무시 (200)."""
     resp = client.post(
         "/api/newsletter/expansion-callback",
         json={"job_id": "job-does-not-exist", "status": "ready"},
+        headers=callback_auth,
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ignored"
 
 
-def test_t8b_callback_failed_to_unsupported(client):
+def test_t8b_callback_failed_to_unsupported(client, callback_auth):
     """N2-T8b: status=failed 콜백 → coverage unsupported."""
     _seed_request(job_id="job-fail", coverage="expandable")
     resp = client.post(
         "/api/newsletter/expansion-callback",
         json={"job_id": "job-fail", "status": "failed", "error": "no source"},
+        headers=callback_auth,
     )
     assert resp.status_code == 200
     assert _coverage_of("job-fail") == "unsupported"
+
+
+def test_t8c_callback_missing_or_wrong_key_rejected(client, callback_auth):
+    """P0 하드닝: 헤더 누락/불일치 콜백 → 403 + 상태 불변."""
+    _seed_request(job_id="job-sec", coverage="expandable")
+
+    no_header = client.post(
+        "/api/newsletter/expansion-callback",
+        json={"job_id": "job-sec", "status": "ready", "data": {}},
+    )
+    wrong_key = client.post(
+        "/api/newsletter/expansion-callback",
+        json={"job_id": "job-sec", "status": "ready", "data": {}},
+        headers={"X-Newsletter-Key": "wrong"},
+    )
+    assert no_header.status_code == 403
+    assert wrong_key.status_code == 403
+    assert _coverage_of("job-sec") == "expandable"  # 위조 반영 안 됨
 
 
 # --------------------------------------------------------------------------
