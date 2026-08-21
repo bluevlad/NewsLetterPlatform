@@ -761,6 +761,8 @@ def _prepare_summary_send(session, tenant_id, tenant, newsletter_type, type_labe
     # → formatter 가 Week-over-Week Δ + 자동 코멘트 계산에 사용
     if newsletter_type == "weekly":
         period_days = (date_to - date_from).days + 1
+        # formatter 가 결측일(수집 실패) 판정을 창 길이에 상대화할 수 있게 전달
+        summary_data["_window_days"] = period_days
         prev_date_to = date_from - timedelta(days=1)
         prev_date_from = prev_date_to - timedelta(days=period_days - 1)
         prev_history = CollectedDataRepository.get_history_range(

@@ -375,6 +375,22 @@ class AllergyInsightFormatter:
             period_end = today - timedelta(days=1)
             period_start = today - timedelta(days=7)
 
+        # 집계 창 길이 (일): 발송 잡이 _window_days 로 명시 전달.
+        # 미전달 시(직전 주 재귀 호출 등) 실제 데이터 기간 스팬으로 추정.
+        def _as_date(v):
+            if isinstance(v, str):
+                try:
+                    return date.fromisoformat(v[:10])
+                except ValueError:
+                    return None
+            return v if isinstance(v, date) else None
+
+        window_days = (collected_data or {}).get("_window_days")
+        if not window_days:
+            ps, pe = _as_date(period_start), _as_date(period_end)
+            span = (pe - ps).days + 1 if ps and pe else None
+            window_days = max(span or 0, days_with_data, 1)
+
         # Phase 1: weekly_metrics 패스스루 (collected_data에 있으면)
         weekly_metrics = (collected_data or {}).get("weekly_metrics") or {}
 
@@ -385,6 +401,10 @@ class AllergyInsightFormatter:
             "generated_at": datetime.now(),
             "summary": {
                 "days_with_data": days_with_data,
+                "window_days": window_days,
+                # 실측 유입 합 (일별 news_count 합계) — Δ 계산 기준.
+                # total_news(중복 제거된 헤드라인 수)와 구분된다.
+                "total_news_inflow": total_news_count,
                 "total_news": total_unique_news,
                 "total_papers": total_unique_papers,
                 "total_companies": total_companies,
@@ -433,7 +453,14 @@ class AllergyInsightFormatter:
         new_keywords = sorted(curr_kws - prev_kws)
         dropped_keywords = sorted(prev_kws - curr_kws)
 
-        news_abs = c_sum.get("total_news", 0) - p_sum.get("total_news", 0)
+        # 뉴스 Δ 는 실측 유입 합(total_news_inflow) 기준.
+        # 과거 히스토리(폴백 news_count=헤드라인 수)와도 합산 방식이 같아 호환.
+        news_curr = c_sum.get("total_news_inflow")
+        news_prev = p_sum.get("total_news_inflow")
+        if news_curr is None or news_prev is None:
+            news_curr = c_sum.get("total_news", 0)
+            news_prev = p_sum.get("total_news", 0)
+        news_abs = news_curr - news_prev
         papers_abs = c_sum.get("total_papers", 0) - p_sum.get("total_papers", 0)
         comp_abs = c_sum.get("total_companies", 0) - p_sum.get("total_companies", 0)
         avg_imp_pp = round(
@@ -445,7 +472,9 @@ class AllergyInsightFormatter:
 
         return {
             "news_abs": news_abs,
-            "news_pct": _pct(c_sum.get("total_news", 0), p_sum.get("total_news", 0)),
+            "news_pct": _pct(news_curr, news_prev),
+            "news_curr_total": news_curr,
+            "news_prev_total": news_prev,
             "news_arrow": _arrow(news_abs),
             "papers_abs": papers_abs,
             "papers_pct": _pct(c_sum.get("total_papers", 0), p_sum.get("total_papers", 0)),
@@ -510,13 +539,25 @@ class AllergyInsightFormatter:
                 "severity": "info",
             })
 
-        # 규칙 4: News Δ ≤ -30% & days_with_data < 6 → 수집 실패 의심
-        days_with_data = c_sum.get("days_with_data", 7)
-        if news_pct is not None and news_pct <= -30 and days_with_data < 6:
+        # 규칙 4: 수집 실패 의심 — News Δ ≤ -30% 이고
+        #   (a) 집계 창 대비 실제 결측일이 있을 때만 (days_with_data 는 창 길이에 상대화;
+        #       주간 창이 5일이면 5일 수집도 정상 — 과거 상습 오탐 원인)
+        #   (b) 전주 유입 표본이 유의미할 때만 (한 자릿수 표본의 % 비교는 노이즈)
+        window_days = c_sum.get("window_days") or 7
+        days_with_data = c_sum.get("days_with_data", window_days)
+        missing_days = max(window_days - days_with_data, 0)
+        prev_total = deltas.get("news_prev_total") or 0
+        if (
+            news_pct is not None
+            and news_pct <= -30
+            and missing_days >= 1
+            and prev_total >= 30
+        ):
             comments.append({
                 "text": (
                     f"⚠️ 수집 실패 가능성 — 뉴스 유입이 전주 대비 {news_pct}% 감소, "
-                    f"수집 성공일 {days_with_data}일. 수집 시스템 점검 필요."
+                    f"수집 성공일 {days_with_data}/{window_days}일. "
+                    f"수집 시스템 점검 필요."
                 ),
                 "severity": "warning",
             })
