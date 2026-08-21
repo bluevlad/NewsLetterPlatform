@@ -3,9 +3,8 @@ AllergyInsight 데이터 수집기
 AllergyInsight Backend API v2.0.0 호출
 
 API Endpoints:
-  - POST /api/auth/simple/login → JWT 토큰 획득
-  - GET  /api/admin/news → 뉴스 전체 목록 (Bearer 인증, 주간/월간용)
-  - GET  /api/admin/news/stats → 뉴스 통계 (Bearer 인증)
+  - GET  /api/public/newsletter/news-stats → 뉴스 수집 통계 (X-Newsletter-Key 인증)
+        레거시 simple/login(410 Gone)+admin stats 경로 대체 — 2026-08-21
   - GET  /api/papers → 논문 목록 (공개, allergen_links/keywords 포함)
 
 Redesign Phase 1 endpoints (NEWSLETTER_REDESIGN_SPEC §3.2):
@@ -122,10 +121,11 @@ class AllergyInsightCollector:
         path: str,
         auth_required: bool = True,
         params: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> Any:
         """API GET 요청 (3회 재시도)"""
         url = f"{self.api_base_url}{path}"
-        headers = {}
+        headers = dict(extra_headers or {})
         if auth_required and self._token:
             headers["Authorization"] = f"Bearer {self._token}"
 
@@ -181,12 +181,26 @@ class AllergyInsightCollector:
                 raise
 
     async def _collect_news_stats(self) -> dict:
-        """뉴스 통계 수집 - GET /api/admin/news/stats"""
+        """뉴스 수집 통계 - GET /api/public/newsletter/news-stats
+
+        X-Newsletter-Key 인증 (레거시 simple/login+admin stats 대체).
+        yesterday_new(완결된 KST 하루의 신규 유입)·daily_series 를 포함해
+        주간 브리핑 Δ 계산이 실측 유입량 기반이 되게 한다.
+        """
         with self._track(
-            data_type="news_stats", api_path="/api/admin/news/stats"
+            data_type="news_stats", api_path="/api/public/newsletter/news-stats"
         ) as m:
             try:
-                data = await self._get("/api/admin/news/stats")
+                api_key = settings.allergy_insight_newsletter_api_key
+                if not api_key:
+                    raise RuntimeError(
+                        "ALLERGY_INSIGHT_NEWSLETTER_KEY 미설정 — 뉴스 통계 수집 불가"
+                    )
+                data = await self._get(
+                    "/api/public/newsletter/news-stats",
+                    auth_required=False,
+                    extra_headers={"X-Newsletter-Key": api_key},
+                )
                 m["raw_count"] = 1
                 m["final_count"] = 1
                 return data
@@ -1015,10 +1029,9 @@ class AllergyInsightCollector:
             except Exception as e:
                 logger.warning(f"논문 수집 실패 (papers 섹션 제외하고 진행): {e}")
 
-            # 4. 통계 수집 (인증 필요 — 실패 시 기본값 사용)
+            # 4. 통계 수집 (X-Newsletter-Key 인증 — 실패 시 기본값 사용)
             raw_stats = {}
             try:
-                await self._login()
                 raw_stats = await self._collect_news_stats()
             except Exception as e:
                 logger.warning(f"뉴스 통계 수집 실패 (기본값 사용): {e}")
@@ -1073,14 +1086,17 @@ class AllergyInsightCollector:
                 "trends_rising": trends_rising,
                 "trends_declining": trends_declining,
                 "stats": {
+                    # news_count = 어제(KST) 실측 신규 유입.
+                    # 통계 API 장애 시에만 헤드라인 수 폴백 (과거 동작 호환).
                     "news_count": raw_stats.get(
-                        "total_news", len(top_headlines)
+                        "yesterday_new", len(top_headlines)
                     ),
+                    "news_total": raw_stats.get("total_news"),
                     "paper_count": len(paper_items),
                     "company_count": len(company_digest),
                     "drug_count": drug_updates.get("total", 0),
                     "total_count": (
-                        raw_stats.get("total_news", len(top_headlines))
+                        raw_stats.get("yesterday_new", len(top_headlines))
                         + len(paper_items)
                         + len(company_digest)
                     ),
