@@ -141,6 +141,62 @@
         </tr>
         {% endif %}
 
+        <!-- Section 3: StandUp Ops Insight (주간 합성분 — 미게재 시에만) -->
+        {% if ops_insight %}
+        <tr>
+            <td style="padding: 18px 30px 0 30px;">
+                <h2 style="margin: 0 0 4px 0; padding-bottom: 8px; border-bottom: 3px solid #ef4444; color: #7f1d1d; font-size: 18px;">
+                    🧭 주간 Ops Insight
+                    <span style="color:#9ca3af; font-size:11px; font-weight:400; margin-left:6px;">StandUp · {{ ops_insight.period_display }}</span>
+                </h2>
+                <div style="color:#111827; font-size:15px; font-weight:700; line-height:1.5; margin:12px 0 10px 0;">
+                    {{ ops_insight.headline }}
+                </div>
+                {% if ops_insight.kpi_chips %}
+                <div style="margin-bottom:10px;">
+                    {% for chip in ops_insight.kpi_chips %}
+                    <span style="display:inline-block; background:#fef2f2; color:#7f1d1d; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700; margin-right:6px; margin-bottom:4px;">
+                        {{ chip.label }} {{ chip.value }}
+                    </span>
+                    {% endfor %}
+                    {% for svc in ops_insight.by_service %}
+                    <span style="display:inline-block; background:#f1f5f9; color:#334155; padding:4px 10px; border-radius:12px; font-size:11px; margin-right:6px; margin-bottom:4px;">
+                        {{ svc.name }} {{ svc.count }}건
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if ops_insight.top_events %}
+                <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin-bottom:10px;">
+                    {% for ev in ops_insight.top_events %}
+                    <tr>
+                        <td style="padding:5px 8px; border-bottom:1px solid #f3f4f6;">
+                            <span style="display:inline-block; background:{{ ev.severity_bg }}; color:{{ ev.severity_color }}; padding:1px 7px; border-radius:8px; font-size:10px; font-weight:700;">{{ ev.severity_label }}</span>
+                            <span style="color:#374151; font-size:12px; margin-left:6px;">{{ ev.title_safe[:80] }}{% if ev.title_safe|length > 80 %}…{% endif %}</span>
+                            <span style="color:#9ca3af; font-size:10px; margin-left:4px;">· {{ ev.source_label }} · {{ ev.occurred_display }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+                {% if ops_insight.verifications %}
+                <div style="margin-bottom:6px;">
+                    <div style="color:#7f1d1d; font-size:10px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px;">🔁 Fix 효과 검증</div>
+                    {% for v in ops_insight.verifications %}
+                    <div style="color:#374151; font-size:12px; line-height:1.7;">
+                        {{ v.icon }} {{ v.title[:70] }}{% if v.title|length > 70 %}…{% endif %}
+                        <span style="display:inline-block; background:{{ v.bg }}; color:{{ v.color }}; padding:1px 7px; border-radius:8px; font-size:10px; font-weight:700; margin-left:4px;">{{ v.label }}{% if v.status == 'recurred' and v.recurrence_count %} ×{{ v.recurrence_count }}{% endif %}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <div style="color:#9ca3af; font-size:10px; margin-top:6px;">
+                    출처: StandUp 주간 합성 (LogAnalyzer · GitHub QA · Auto-Tobe)
+                </div>
+            </td>
+        </tr>
+        {% endif %}
+
         <!-- Empty state -->
         {% if not headlines and not digest_groups %}
         <tr>
@@ -184,7 +240,8 @@
         <tr>
             <td style="padding: 22px 30px 26px 30px;">
                 <div style="border-top:1px solid #e5e7eb; padding-top:14px; color:#6b7280; font-size:10px; line-height:1.6;">
-                    데이터 소스: SkillRadar 백엔드 API — AI 교육·세미나·정책·뉴스 수집·큐레이션 (Google News · 정책브리핑 korea.kr 등).<br>
+                    데이터 소스: SkillRadar 백엔드 API — AI 교육·세미나·정책·뉴스 수집·큐레이션 (Google News · 정책브리핑 korea.kr 등)
+                    · StandUp 주간 Ops Insight (주 1회, 미게재분 이월).<br>
                     importance = 카테고리 + 모집신호 + 공식출처 − age. 분석 = exaone3.5 (Ollama, 로컬).<br>
                     생성: {{ generated_at.strftime('%Y-%m-%d %H:%M') }}
                 </div>

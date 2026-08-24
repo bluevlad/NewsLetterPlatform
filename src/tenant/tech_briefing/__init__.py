@@ -129,6 +129,11 @@ class TechBriefingTenant(BaseTenant):
             for it in group.get("entries") or []:
                 if it.get("dedup_id") is not None:
                     entries.append((int(it["dedup_id"]), it.get("url"), "digest", None))
+        # StandUp Ops Insight — 게재된 뉴스레터 id 기록 → 다음 수집에서
+        # exclude_ids 로 제외 (미게재분만 이월하는 carry-over 의 성립 지점).
+        ops = context.get("ops_insight") or {}
+        if ops.get("dedup_id") is not None:
+            entries.append((int(ops["dedup_id"]), None, "ops_insight", None))
         return entries
 
     def generate_subject(self, report_date=None, newsletter_type: str = "daily") -> str:

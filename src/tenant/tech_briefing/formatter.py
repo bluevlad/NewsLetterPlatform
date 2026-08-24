@@ -16,6 +16,7 @@ from typing import Any, Dict, List
 
 from .analyzer import analyze_headlines
 from .config import CATEGORY_META
+from .ops_insight import build_ops_context
 from .scorer import annotate_scores
 
 logger = logging.getLogger(__name__)
@@ -207,11 +208,17 @@ class TechBriefingFormatter:
             for tag in _service_tags(h):
                 service_summary[tag["service"]] = service_summary.get(tag["service"], 0) + 1
 
+        # StandUp Ops Insight 섹션 (Phase 2) — 미게재 주간 합성분이 있을 때만.
+        ops_context = build_ops_context(
+            (collected_data or {}).get("ops_insight")
+        )
+
         return {
             "report_date": report_date,
             "headlines": [_enrich(h) for h in headlines],
             "digest_groups":     digest_groups,           # [{label, entries[], color, bg}]
             "digest_total":      digest_total,
+            "ops_insight":       ops_context,             # None 이면 섹션 미노출
             "footer_extras": {
                 "recruiting":    [_enrich(x) for x in recruiting_items],
                 "keywords":      keywords_rising,
@@ -373,6 +380,7 @@ class TechBriefingFormatter:
             "headlines": [],
             "digest_groups": [],
             "digest_total": 0,
+            "ops_insight": None,
             "footer_extras": {"recruiting": [], "keywords": []},
             "service_summary": {},
             "stats": {
