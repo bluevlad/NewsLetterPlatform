@@ -55,6 +55,11 @@ TOP_EVENTS_LIMIT = 5
 BY_SERVICE_LIMIT = 3
 VERIFICATION_LIMIT = 6
 
+# top events 에서 제외 — KPI 메타 이벤트(개별 오류 아님)와 기술 뉴스
+# (기술 토픽 큐레이션은 TechBriefing 본 섹션 담당이라 ops 에선 노이즈).
+_EXCLUDED_EVENT_CATEGORIES = {"kpi_summary", "error_types"}
+_EXCLUDED_EVENT_SOURCES = {"tech_news_article", "medium_digest_report"}
+
 
 def _date_display(value: Any) -> str:
     if isinstance(value, (date, datetime)):
@@ -91,7 +96,12 @@ def _enrich_event(ev: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _top_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """심각도 우선 + 최신순 top N."""
+    """심각도 우선 + 최신순 top N. KPI 메타/기술 뉴스 이벤트 제외."""
+    events = [
+        e for e in events
+        if (e.get("category") or "") not in _EXCLUDED_EVENT_CATEGORIES
+        and (e.get("source_type") or "") not in _EXCLUDED_EVENT_SOURCES
+    ]
     sev_rank = {s: i for i, s in enumerate(_SEVERITY_ORDER)}
     ranked = sorted(events, key=lambda e: e.get("occurred_at") or "", reverse=True)
     ranked = sorted(

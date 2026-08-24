@@ -46,13 +46,25 @@ def _payload(**over):
         "events": [
             {"title": "AllergyInsight · exception (×1335)", "severity": "critical",
              "service_tag": "AllergyInsight", "source_type": "loganalyzer",
+             "category": "error_group",
              "occurred_at": "2026-08-23T10:00:00+00:00"},
             {"title": "Gateway · proxy_error", "severity": "high",
              "service_tag": "Gateway", "source_type": "loganalyzer",
+             "category": "error_group",
              "occurred_at": "2026-08-22T08:00:00+00:00"},
             {"title": "journal 수집", "severity": "info",
              "service_tag": "", "source_type": "auto_tobe_journal",
+             "category": "fix_journal",
              "occurred_at": "2026-08-21T02:00:00+00:00"},
+            # 아래 2건은 top events 노이즈 필터 대상
+            {"title": "LogAnalyzer 요약 (168h)", "severity": "info",
+             "service_tag": "", "source_type": "loganalyzer",
+             "category": "kpi_summary",
+             "occurred_at": "2026-08-24T00:00:00+00:00"},
+            {"title": "Postgres AI Summit 기사", "severity": "info",
+             "service_tag": "", "source_type": "tech_news_article",
+             "category": "tech_news",
+             "occurred_at": "2026-08-23T23:00:00+00:00"},
         ],
     }
     base.update(over)
@@ -84,6 +96,15 @@ def test_build_ops_context_top_events_severity_first():
     assert events[0]["severity_label"] == "Critical"
     assert events[1]["severity"] == "high"
     assert events[2]["source_label"] == "Auto-Tobe"
+
+
+def test_build_ops_context_top_events_filters_noise():
+    """KPI 메타(kpi_summary/error_types)와 기술 뉴스는 top events 제외."""
+    ctx = build_ops_context(_payload())
+    titles = [e["title_safe"] for e in ctx["top_events"]]
+    assert len(ctx["top_events"]) == 3
+    assert not any("요약" in t for t in titles)
+    assert not any("기사" in t for t in titles)
 
 
 def test_build_ops_context_verification_meta():
