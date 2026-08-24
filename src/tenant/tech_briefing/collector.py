@@ -181,6 +181,101 @@ class TechBriefingCollector:
 
             return await retry_async(_request, max_retries=2, base_delay=2.0)
 
+    # ── StandUp Ops Insight (Phase 2) ──────────────────────────────────
+    async def collect_ops_insight(
+        self,
+        exclude_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        """StandUp 주간 합성 결과 pull → {"ops_insight": {...}}.
+
+        - 항상 ops_insight 키를 반환(빈 dict 포함) — 빈 값 upsert 로 전일
+          캐시를 덮어써 이미 게재된 섹션의 stale 재노출 방지.
+        - carry-over: sent_articles 에 없는(=아직 미게재) 최신 뉴스레터만
+          채택. 월요일 발송이 휴일로 스킵되면 화요일판에 자동 이월.
+        - events 는 보조 데이터 — 실패해도 KPI 만으로 섹션 구성.
+        """
+        empty = {"ops_insight": {}}
+        if not settings.standup_api_url:
+            return empty
+        base = settings.standup_api_url.rstrip("/")
+
+        async def _get_json(path: str, params: Dict[str, Any]) -> Any:
+            async with httpx.AsyncClient(
+                timeout=API_TIMEOUT, trust_env=False
+            ) as client:
+                async def _request():
+                    response = await client.get(f"{base}{path}", params=params)
+                    response.raise_for_status()
+                    return response.json()
+                return await retry_async(_request, max_retries=2, base_delay=2.0)
+
+        with self._track(
+            data_type="standup_ops",
+            api_path="/api/v1/insight/newsletters",
+        ) as m:
+            try:
+                data = await _get_json(
+                    "/api/v1/insight/newsletters", params={"limit": 3}
+                )
+            except Exception as e:
+                logger.warning(f"StandUp /insight/newsletters 실패: {e}")
+                m["error"] = str(e)[:480]
+                return empty
+            items = data if isinstance(data, list) else []
+            m["raw_count"] = len(items)
+
+            excluded = set(exclude_ids or [])
+            latest: Optional[Dict[str, Any]] = None
+            for nl in items:  # API 가 최신순 반환
+                nl_id = nl.get("id")
+                if not nl_id:
+                    continue
+                dedup_id = dedup_id_for(f"standup:{nl_id}")
+                if dedup_id in excluded:
+                    m["excluded_by_ids"] += 1
+                    continue
+                latest = {**nl, "dedup_id": dedup_id}
+                break
+            if latest is None:
+                logger.info("StandUp ops: 미게재 뉴스레터 없음 — 섹션 생략")
+                return empty
+            m["final_count"] = 1
+
+        events: List[Dict[str, Any]] = []
+        with self._track(
+            data_type="standup_events",
+            api_path="/api/v1/insight/events",
+        ) as m2:
+            m2["effective_days"] = 7
+            try:
+                data = await _get_json(
+                    "/api/v1/insight/events", params={"days": 7, "limit": 100}
+                )
+                events = data if isinstance(data, list) else []
+                m2["raw_count"] = m2["final_count"] = len(events)
+            except Exception as e:
+                logger.warning(f"StandUp /insight/events 실패 (KPI 만 게재): {e}")
+                m2["error"] = str(e)[:480]
+
+        logger.info(
+            "StandUp ops 수집: newsletter=%s period=%s~%s events=%d",
+            latest.get("id"), latest.get("period_start"),
+            latest.get("period_end"), len(events),
+        )
+        return {
+            "ops_insight": {
+                "newsletter_id": latest.get("id"),
+                "dedup_id": latest["dedup_id"],
+                "period_start": latest.get("period_start"),
+                "period_end": latest.get("period_end"),
+                "headline": latest.get("headline"),
+                "subject": latest.get("subject"),
+                "kpis": latest.get("kpis") or {},
+                "events": events,
+                "collected_at": datetime.now(timezone.utc).isoformat(),
+            }
+        }
+
     async def collect_daily(
         self,
         exclude_ids: Optional[List[int]] = None,  # 최근 발송 dedup_id (7일)
@@ -260,7 +355,7 @@ class TechBriefingCollector:
             logger.warning("TechBriefing: SkillRadar 응답에 항목 없음")
             return {}
 
-        return {
+        result: Dict[str, Any] = {
             "tech_daily": {
                 "report_date": datetime.now(timezone.utc).isoformat(),
                 "news_items": news_items,
@@ -279,3 +374,14 @@ class TechBriefingCollector:
                 },
             }
         }
+
+        # StandUp Ops Insight — 실패해도 tech_daily 발송은 막지 않는다.
+        try:
+            result.update(
+                await self.collect_ops_insight(exclude_ids=exclude_ids)
+            )
+        except Exception as e:
+            logger.warning(f"StandUp ops 수집 실패 (섹션 생략): {e}")
+            result["ops_insight"] = {}
+
+        return result

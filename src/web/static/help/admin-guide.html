@@ -334,6 +334,40 @@
             <p>논문은 <code>/api/papers</code>(공개 API)에서 수집합니다. 뉴스 통계는 <code>/api/admin/news/stats</code>(인증 필요)에서 수집하며, 통계 API 실패 시에도 뉴스와 논문 수집 결과는 정상 발송됩니다.</p>
         </div>
 
+        <h3>TechBriefing - StandUp 주간 Ops Insight 섹션</h3>
+        <p>TechBriefing 일일 브리핑의 <strong>[주간 Ops Insight]</strong> 섹션은 StandUp(9065)의 주간 합성 결과(LogAnalyzer 오류 · GitHub QA · Auto-Tobe fix 효과 검증)를 게재합니다. StandUp 단독 뉴스레터 발송을 대체하는 흡수 통합 섹션입니다.</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>항목</th>
+                    <th>설명</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>수집 API</td>
+                    <td><code>GET /api/v1/insight/newsletters</code> + <code>/api/v1/insight/events</code> (StandUp)</td>
+                </tr>
+                <tr>
+                    <td>활성화</td>
+                    <td>환경변수 <code>STANDUP_API_URL</code> 설정 시에만 수집 (빈 값이면 섹션 미노출)</td>
+                </tr>
+                <tr>
+                    <td>게재 주기</td>
+                    <td>주 1회 — StandUp 주간 합성분 중 <strong>미게재분만</strong> 노출. 발송 후 <code>sent_articles</code>(section=<code>ops_insight</code>)에 기록되어 재노출 차단</td>
+                </tr>
+                <tr>
+                    <td>휴일 이월</td>
+                    <td>월요일 발송이 휴일로 스킵되면 다음 평일 일간판에 자동 이월(carry-over)</td>
+                </tr>
+                <tr>
+                    <td>Fix 효과 검증</td>
+                    <td>✅ 검증됨(재발 없음) / ❌ 재발 / ⏳ 검증 중 — StandUp이 fingerprint 재발 여부로 결정적 판정</td>
+                </tr>
+            </tbody>
+        </table>
+
         <!-- 6. 주의사항 -->
         <h2>6. 주의사항</h2>
 

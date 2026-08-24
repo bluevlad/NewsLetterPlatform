@@ -129,6 +129,7 @@ NewsLetterPlatform/
 | `ALLERGY_INSIGHT_NEWSLETTER_KEY` | 페르소나 적응형 뉴스레터 API 인증 키 (`X-Newsletter-Key`) | AllergyInsight 측 `NEWSLETTER_API_KEY`와 동일 값. 빈 값이면 페르소나 기능 자동 비활성화 |
 | `SKILLRADAR_API_URL` | SkillRadar Backend base URL (TechBriefing 데이터 소스) | 기본 `http://host.docker.internal:9070` |
 | `SKILLRADAR_NEWSLETTER_KEY` | SkillRadar 뉴스레터 공급 API 인증 키 (`X-Newsletter-Key`) | SkillRadar 측 `NEWSLETTER_API_KEY`와 동일 값. 빈 값이면 TechBriefing 수집 스킵 |
+| `STANDUP_API_URL` | StandUp base URL — TechBriefing daily `[주간 Ops Insight]` 섹션 소스 | 기본 빈 값(섹션 비활성). Docker 운영 `http://host.docker.internal:9065`. 미게재분만 이월 노출 |
 
 ## Help Page 관리
 

@@ -107,6 +107,11 @@ class TechBriefingSettings(BaseSettings):
     skillradar_api_url: str = "http://host.docker.internal:9070"
     skillradar_newsletter_key: str = ""  # 빈 값이면 수집 스킵
 
+    # StandUp Ops Insight (Phase 2) — 주간 합성 결과를 daily 섹션으로 게재.
+    # 빈 값이면 섹션 비활성. StandUp 은 발송을 멈춰도 합성·저장을 계속하므로
+    # /api/v1/insight/newsletters 를 pull 해 미게재분만 이월(carry-over) 노출.
+    standup_api_url: str = ""  # 예: http://host.docker.internal:9065
+
     # Ollama LLM deep analyzer (모델·호출 파라미터. base URL 은 전역 공유)
     tech_briefing_llm_enabled: bool = True
     tech_briefing_llm_model: str = "exaone3.5:7.8b"
