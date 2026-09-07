@@ -156,6 +156,23 @@
                     {% if skillradar_stats.last_ingest_at %} · 최근 수집 {{ skillradar_stats.last_ingest_at[:16] }}{% endif %}
                 </div>
                 {% endif %}
+                {% set learning = skillradar_stats.learning if skillradar_stats else None %}
+                {% if learning and learning.lessons_published %}
+                <div style="margin-top:12px; padding:10px 12px; background:#ecfdf5; border-left:4px solid #047857; border-radius:4px;">
+                    <div style="color:#047857; font-size:11px; font-weight:700; margin-bottom:4px;">📚 이번 주 학습 ({{ learning.week_from }} ~ {{ learning.week_to }})</div>
+                    <div style="color:#374151; font-size:12px; line-height:1.6;">
+                        발행 레슨 {{ learning.lessons_published }}개
+                        {% if learning.disclosed %}
+                        · 활동 학습자 {{ learning.active_learners }}명
+                        {% if learning.week_completion_rate is not none %} · 완료율 {{ (learning.week_completion_rate * 100)|round|int }}%{% endif %}
+                        {% if learning.quiz_avg is not none %} · 퀴즈 평균 {{ (learning.quiz_avg * 100)|round|int }}점{% endif %}
+                        {% endif %}
+                        {% if learning.popular_themes %}
+                        <br>인기 테마: {% for t in learning.popular_themes %}{{ t.theme_title }}{% if not loop.last %} · {% endif %}{% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </td>
         </tr>
         {% endif %}
