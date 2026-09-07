@@ -182,6 +182,20 @@ class TechBriefingCollector:
             return await retry_async(_request, max_retries=2, base_delay=2.0)
 
     # ── StandUp Ops Insight (Phase 2) ──────────────────────────────────
+    async def _fetch_curriculum(self) -> Optional[Dict[str, Any]]:
+        """SkillRadar /api/v1/newsletter/curriculum (오늘의 학습). 실패 시 예외."""
+        url = f"{self.api_base_url}/api/v1/newsletter/curriculum"
+        async with httpx.AsyncClient(timeout=API_TIMEOUT, trust_env=False) as client:
+            async def _request():
+                response = await client.get(
+                    url,
+                    headers={"X-Newsletter-Key": settings.skillradar_newsletter_key},
+                )
+                response.raise_for_status()
+                return response.json()
+
+            return await retry_async(_request, max_retries=1, base_delay=2.0)
+
     async def collect_ops_insight(
         self,
         exclude_ids: Optional[List[int]] = None,
@@ -374,6 +388,43 @@ class TechBriefingCollector:
                 },
             }
         }
+
+        # SkillRadar 오늘의 학습 (블렌디드 교육 Phase 1) — 실패·미생성 시 섹션 생략, 발송은 계속.
+
+        with self._track(
+
+            data_type="skillradar_curriculum",
+
+            api_path="/api/v1/newsletter/curriculum",
+
+        ) as cm:
+
+            try:
+
+                curriculum = await self._fetch_curriculum()
+
+            except Exception as e:  # noqa: BLE001
+
+                logger.warning(f"SkillRadar 커리큘럼 수집 실패 (섹션 생략): {e}")
+
+                cm["error"] = str(e)[:480]
+
+                curriculum = None
+
+            if curriculum:
+
+                cm["fallback_used"] = bool(curriculum.get("fallback"))
+
+                cm["raw_count"] = sum(len(t.get("lessons") or []) for t in curriculum.get("tracks") or [])
+
+                cm["final_count"] = cm["raw_count"]
+
+                result["tech_daily"]["curriculum"] = curriculum
+
+                logger.info("SkillRadar 커리큘럼: 트랙 %d · 레슨 %d (fallback=%s)",
+
+                            len(curriculum.get("tracks") or []), cm["raw_count"], cm["fallback_used"])
+
 
         # StandUp Ops Insight — 실패해도 tech_daily 발송은 막지 않는다.
         try:

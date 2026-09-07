@@ -108,6 +108,46 @@
         </tr>
         {% endif %}
 
+        <!-- Section 1.5: 오늘의 학습 (SkillRadar 커리큘럼, 본문은 웹) -->
+        {% if curriculum %}
+        <tr>
+            <td style="padding: 12px 30px 0 30px;">
+                <h2 style="margin: 0 0 12px 0; padding-bottom: 6px; border-bottom: 2px solid #e5e7eb; color: #4b5563; font-size: 14px;">
+                    📚 오늘의 학습
+                    <span style="color:#9ca3af; font-size:11px; font-weight:400; margin-left:6px;">SkillRadar · {{ curriculum.date }}</span>
+                </h2>
+                {% for t in curriculum.tracks %}
+                <div style="margin-bottom:14px; padding:14px 16px; background:{{ t.bg }}; border:1px solid #e5e7eb; border-left:5px solid {{ t.color }}; border-radius:5px;">
+                    <div style="margin-bottom:6px;">
+                        <span style="display:inline-block; background:{{ t.color }}; color:#ffffff; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.4px;">{{ t.label }}</span>
+                        {% if t.week %}<span style="color:#6b7280; font-size:11px; margin-left:6px;">{{ t.week }}주차</span>{% endif %}
+                        <span style="color:#6b7280; font-size:11px; margin-left:6px;">약 {{ t.total_min }}분</span>
+                        {% if t.partial %}<span style="color:#a16207; font-size:10px; font-weight:700; margin-left:6px;">일부 발행</span>{% endif %}
+                    </div>
+                    <div style="font-size:15px; font-weight:700; color:#111827; margin-bottom:2px;">
+                        <a href="{{ t.link }}" style="color:#111827; text-decoration:none;">{{ t.theme_title }}</a>
+                    </div>
+                    {% if t.focus %}<div style="color:#4b5563; font-size:12px; margin-bottom:8px;">오늘 포커스 · {{ t.focus }}</div>{% endif %}
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;">
+                        {% for l in t.lessons %}
+                        <tr>
+                            <td style="padding:3px 0; font-size:13px; color:#374151;">
+                                {{ l.icon }} <span style="color:{{ t.color }}; font-weight:700;">{{ l.kind_label }}</span>
+                                · <a href="{{ l.link }}" style="color:#374151; text-decoration:none;">{{ l.title }}</a>
+                                <span style="color:#9ca3af; font-size:11px;">{{ l.est_min }}분{% if l.extra %} · {{ l.extra }}{% endif %}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                    <div style="margin-top:8px;">
+                        <a href="{{ t.link }}" style="display:inline-block; background:{{ t.color }}; color:#ffffff; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:700; text-decoration:none;">오늘의 학습 시작하기 →</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </td>
+        </tr>
+        {% endif %}
+
         <!-- Section 2: 카테고리별 한 줄 다이제스트 -->
         {% if digest_groups %}
         <tr>

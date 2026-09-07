@@ -16,6 +16,7 @@ from typing import Any, Dict, List
 
 from .analyzer import analyze_headlines
 from .config import CATEGORY_META
+from .curriculum import build_curriculum_context
 from .ops_insight import build_ops_context
 from .scorer import annotate_scores
 
@@ -219,6 +220,7 @@ class TechBriefingFormatter:
             "digest_groups":     digest_groups,           # [{label, entries[], color, bg}]
             "digest_total":      digest_total,
             "ops_insight":       ops_context,             # None 이면 섹션 미노출
+            "curriculum":        build_curriculum_context(payload.get("curriculum")),  # None 이면 섹션 미노출
             "footer_extras": {
                 "recruiting":    [_enrich(x) for x in recruiting_items],
                 "keywords":      keywords_rising,
