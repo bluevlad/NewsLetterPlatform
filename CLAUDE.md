@@ -2,10 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> 도메인/URL/포트 규칙: [Claude-Opus-bluevlad/standards/infrastructure/DOMAIN_MANAGEMENT.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/infrastructure/DOMAIN_MANAGEMENT.md) — `https://도메인:포트` 사용 금지
-> 발송 유형 분리: [Claude-Opus-bluevlad/standards/newsletterplatform/SEND_TYPE_SEPARATION.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/newsletterplatform/SEND_TYPE_SEPARATION.md) — **메일 발송 관련 수정 시 반드시 참조**
-> 주말 관리자 테스트 발송: [Claude-Opus-bluevlad/standards/newsletterplatform/WEEKEND_ADMIN_TEST_MODE.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/newsletterplatform/WEEKEND_ADMIN_TEST_MODE.md) — 평일/주말 발송 분리, `send_mode` 축, dedup 풀 격리
-> 페르소나 적응형 뉴스레터: [Claude-Opus-bluevlad/services/newsletterplatform/allergy-insight/PERSONA_ADAPTIVE_NEWSLETTER_SPEC.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/services/newsletterplatform/allergy-insight/PERSONA_ADAPTIVE_NEWSLETTER_SPEC.md) — **수신자 역할·목적별 콘텐츠 선택/변형 기능 구현 시 반드시 참조** (정본 API 계약은 [AllergyInsight 플랜](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/services/allergyinsight/plans/persona-adaptive-newsletter-plan.md))
+> 도메인/URL/포트 규칙: [Ai-Legacy-bluevlad/standards/infrastructure/DOMAIN_MANAGEMENT.md](https://github.com/bluevlad/Ai-Legacy-bluevlad/blob/main/standards/infrastructure/DOMAIN_MANAGEMENT.md) — `https://도메인:포트` 사용 금지
+> 발송 유형 분리: [Ai-Legacy-bluevlad/standards/newsletterplatform/SEND_TYPE_SEPARATION.md](https://github.com/bluevlad/Ai-Legacy-bluevlad/blob/main/standards/newsletterplatform/SEND_TYPE_SEPARATION.md) — **메일 발송 관련 수정 시 반드시 참조**
+> 주말 관리자 테스트 발송: [Ai-Legacy-bluevlad/standards/newsletterplatform/WEEKEND_ADMIN_TEST_MODE.md](https://github.com/bluevlad/Ai-Legacy-bluevlad/blob/main/standards/newsletterplatform/WEEKEND_ADMIN_TEST_MODE.md) — 평일/주말 발송 분리, `send_mode` 축, dedup 풀 격리
+> 페르소나 적응형 뉴스레터: [Ai-Legacy-bluevlad/services/newsletterplatform/allergy-insight/PERSONA_ADAPTIVE_NEWSLETTER_SPEC.md](https://github.com/bluevlad/Ai-Legacy-bluevlad/blob/main/services/newsletterplatform/allergy-insight/PERSONA_ADAPTIVE_NEWSLETTER_SPEC.md) — **수신자 역할·목적별 콘텐츠 선택/변형 기능 구현 시 반드시 참조** (정본 API 계약은 [AllergyInsight 플랜](https://github.com/bluevlad/Ai-Legacy-bluevlad/blob/main/services/allergyinsight/plans/persona-adaptive-newsletter-plan.md))
 
 ## 실행 환경 감지 (SSH 재접속 금지)
 
@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Docker 명령은 현재 호스트에서 바로 실행 (별도 SSH 접속 불필요)
 - compose 파일 선택: Darwin → `docker-compose.yml` / Windows → `docker-compose.local.yml`
 
-> 3-머신 작업 환경(MacBook 편집·운영 / Desktop 터미널·AutoQA / Notebook TIPAIP2 격리) 규칙: [WORKSTATION_GUIDE.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/infrastructure/environments/WORKSTATION_GUIDE.md) — 개인 서비스 편집은 MacBook 에서만, Desktop 은 pull-only
+> 3-머신 작업 환경(MacBook 편집·운영 / Desktop 터미널·AutoQA / Notebook TIPAIP2 격리) 규칙: [WORKSTATION_GUIDE.md](https://github.com/bluevlad/Ai-Legacy-bluevlad/blob/main/infrastructure/environments/WORKSTATION_GUIDE.md) — 개인 서비스 편집은 MacBook 에서만, Desktop 은 pull-only
 
 ## Project Overview
 
@@ -133,8 +133,8 @@ NewsLetterPlatform/
 
 ## Help Page 관리
 
-> 작성 표준: [HELP_PAGE_GUIDE.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/documentation/HELP_PAGE_GUIDE.md)
-> HTML 템플릿: [help-page-template.html](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/documentation/templates/help-page-template.html)
+> 작성 표준: [HELP_PAGE_GUIDE.md](https://github.com/bluevlad/Ai-Legacy-bluevlad/blob/main/standards/documentation/HELP_PAGE_GUIDE.md)
+> HTML 템플릿: [help-page-template.html](https://github.com/bluevlad/Ai-Legacy-bluevlad/blob/main/standards/documentation/templates/help-page-template.html)
 
 - **기능 추가/변경/삭제 시 반드시 헬프 페이지도 함께 업데이트**
 - 헬프 파일 위치: `src/web/static/help/`
@@ -190,7 +190,7 @@ main이 prod와 다른 base 위에 있는 채로 작업했음을 발견하면:
 
 ## Fix 커밋 오류 추적
 
-> 상세: [FIX_COMMIT_TRACKING_GUIDE.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/git/FIX_COMMIT_TRACKING_GUIDE.md) | [ERROR_TAXONOMY.md](https://github.com/bluevlad/Claude-Opus-bluevlad/blob/main/standards/git/ERROR_TAXONOMY.md)
+> 상세: [FIX_COMMIT_TRACKING_GUIDE.md](https://github.com/bluevlad/Ai-Legacy-bluevlad/blob/main/standards/git/FIX_COMMIT_TRACKING_GUIDE.md) | [ERROR_TAXONOMY.md](https://github.com/bluevlad/Ai-Legacy-bluevlad/blob/main/standards/git/ERROR_TAXONOMY.md)
 
 `fix:` 커밋 시 footer에 오류 추적 메타데이터를 **필수** 포함합니다.
 

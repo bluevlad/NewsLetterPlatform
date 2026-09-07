@@ -1,4 +1,4 @@
-# 의존성 능동 감사 — 표준: Claude-Opus-bluevlad/standards/security/SUPPLY_CHAIN_HARDENING.md
+# 의존성 능동 감사 — 표준: Ai-Legacy-bluevlad/standards/security/SUPPLY_CHAIN_HARDENING.md
 # Trivy 미사용(공급망 침해 이력). Python=pip-audit(PyPA). report-only.
 name: Dependency Audit
 

@@ -79,8 +79,8 @@
 | SEC-01 Git 이력 재작성 | 보류 | 회전 완료 후 실효성 낮음(유출 간주 원칙). force push 금지 원칙과 충돌 — 별도 운영 결정(백업→재작성→재클론 공지)으로 진행 시에만 |
 | SEC-01 secret scanning/push protection | 미착수 | GitHub 저장소 설정 — 운영자 활성화 권장 |
 | SEC-05 Engagement 토큰 만료/캠페인 식별 | 보류 | 서명 payload 변경은 기발송 링크 호환·통계 스키마 영향 검토 필요 — 1주 내 별도 브랜치 권장 |
-| ARC-01 PG 표기 강등·migration 예외 처리 | 보류 | 설계 문서는 Claude-Opus-bluevlad 저장소 소관. migration warning 삼킴 수정은 후속 브랜치 권장 |
-| ARC-02 설계 문서 동기화 | 보류 | Claude-Opus-bluevlad 저장소 작업 — 본 저장소 범위 외 |
+| ARC-01 PG 표기 강등·migration 예외 처리 | 보류 | 설계 문서는 Ai-Legacy-bluevlad 저장소 소관. migration warning 삼킴 수정은 후속 브랜치 권장 |
+| ARC-02 설계 문서 동기화 | 보류 | Ai-Legacy-bluevlad 저장소 작업 — 본 저장소 범위 외 |
 | ARC-03 운영 설정 단일 정본·fail-fast | 보류 | 배포 파이프라인 계약 변경 — Secure 쿠키를 env 무의존으로 설계해 이번 변경이 드리프트를 추가하지 않도록 함 |
 | OPS-01 / QUAL-01 | 보류 | 지속 개선 트랙 (lock/hash, 경고 제거) |
 

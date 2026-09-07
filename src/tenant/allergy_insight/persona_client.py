@@ -1,7 +1,7 @@
 """AllergyInsight 페르소나 적응형 뉴스레터 API 클라이언트.
 
 엔드포인트: /api/public/newsletter/*  ·  인증 헤더: X-Newsletter-Key
-정본 계약: Claude-Opus-bluevlad
+정본 계약: Ai-Legacy-bluevlad
   services/allergyinsight/plans/persona-adaptive-newsletter-plan.md §3.2
 NLP 측 사양: PERSONA_ADAPTIVE_NEWSLETTER_SPEC.md / _N1_N2_DESIGN.md
 

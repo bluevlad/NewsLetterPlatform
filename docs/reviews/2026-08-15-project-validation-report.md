@@ -2,7 +2,7 @@
 
 - 검증일: 2026-08-15 (KST)
 - 구현 저장소: `bluevlad/NewsLetterPlatform`, `main` @ `4614402`
-- 설계 정본: 로컬 `Claude-Opus-bluevlad/main`의 `services/newsletterplatform`, `standards/newsletterplatform`, `services/allergyinsight/plans`
+- 설계 정본: 로컬 `Ai-Legacy-bluevlad/main`의 `services/newsletterplatform`, `standards/newsletterplatform`, `services/allergyinsight/plans`
 - 검증 방식: 코드/설정/Git 전체 도달 가능 이력 정적 검토, 설계-구현 추적, 전체 테스트와 컴파일 실행
 
 ## 1. 결론
@@ -198,7 +198,7 @@ git log -1 --oneline
 5. Engagement 토큰에 만료/발송 식별자/멱등성을 추가한다.
 6. 운영 필수 설정 fail-fast와 단일 설정 정본을 마련한다.
 7. PostgreSQL 실제 CI와 migration 전략을 추가하거나 “PG 준비” 표기를 낮춘다.
-8. Claude-Opus-bluevlad의 N2/L 트랙/온보딩/검증기준 문서를 현재 구현과 동기화한다.
+8. Ai-Legacy-bluevlad의 N2/L 트랙/온보딩/검증기준 문서를 현재 구현과 동기화한다.
 
 ### 지속 개선
 

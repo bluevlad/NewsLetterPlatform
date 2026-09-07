@@ -1,4 +1,4 @@
-# 공급망 하드닝 — 표준: Claude-Opus-bluevlad/standards/security/SUPPLY_CHAIN_HARDENING.md
+# 공급망 하드닝 — 표준: Ai-Legacy-bluevlad/standards/security/SUPPLY_CHAIN_HARDENING.md
 version: 2
 updates:
   - package-ecosystem: "pip"
