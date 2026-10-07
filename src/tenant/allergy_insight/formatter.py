@@ -29,8 +29,8 @@ def _empty_drug_updates() -> Dict[str, Any]:
     }
 
 
-# 「오늘의 뉴스」 단일 섹션 — 헤드라인 + 기업 동향을 합쳐 최대 3건 (A4 1~1.5장 목표)
-NEWS_ITEMS_LIMIT = 3
+# 「오늘의 뉴스」 단일 섹션 — 헤드라인 + 기업 동향을 합쳐 최대 2건 (A4 1~1.5장 목표)
+NEWS_ITEMS_LIMIT = 2
 
 
 def build_news_items(top_headlines: list, company_digest: list, limit: int = NEWS_ITEMS_LIMIT) -> list:

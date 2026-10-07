@@ -237,7 +237,7 @@ class AllergyInsightCollector:
     _CATCHUP_HEADLINE_LIMIT = 8  # 기본 5 → catch-up 시 상향
     # 신규 뉴스 0건일 때 "최근 주요 뉴스 다시 보기" (dedup 미적용, 발송 이력 미기록)
     _NEWS_RECAP_DAYS = 7
-    _NEWS_RECAP_LIMIT = 3
+    _NEWS_RECAP_LIMIT = 2
 
     async def _collect_headlines_today(
         self,

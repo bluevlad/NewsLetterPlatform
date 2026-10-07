@@ -1,6 +1,6 @@
 """알러지 뉴스 브리핑 압축형 구성 테스트 (A4 1~1.5장 목표).
 
-CB-T1  formatter — 헤드라인 + 기업 동향 → 「오늘의 뉴스」 단일 목록 (기업 중복 제거, 최대 3건)
+CB-T1  formatter — 헤드라인 + 기업 동향 → 「오늘의 뉴스」 단일 목록 (기업 중복 제거, 최대 2건)
 CB-T2  collector — 스폿라이트 응답의 journey 를 bundle 로 전달, email_html 없으면 None
 CB-T3  collector — 신규 뉴스 0건이면 최근 7일 주요 뉴스를 news_recap 으로 채움
 CB-T4  template — 여정 블록이 스폿라이트 위에 삽입, 뉴스가 맨 앞
@@ -60,15 +60,16 @@ def _render(**overrides):
 
 def test_cb_t1_news_items_merge_and_dedup():
     items = build_news_items(_HEADLINES, _DIGEST)
-    assert [i["title"] for i in items] == ["A사 신약 승인", "B사 임상 3상", "C사 투자"]
-    assert items[2]["label"] == "기업 동향"
+    assert [i["title"] for i in items] == ["A사 신약 승인", "B사 임상 3상"]
+    wide = build_news_items(_HEADLINES, _DIGEST, limit=3)
+    assert wide[2]["title"] == "C사 투자" and wide[2]["label"] == "기업 동향"
     assert build_news_items([], []) == []
 
     ctx = _FMT.format({"daily_report": {
         "report_date": "2026-10-07T00:00:00", "top_headlines": _HEADLINES,
         "company_digest": _DIGEST, "journey": _JOURNEY,
     }})
-    assert len(ctx["news_items"]) == 3
+    assert len(ctx["news_items"]) == 2
     assert ctx["journey"]["paper"]["paper_id"] == 8042
     assert ctx["is_weekly_edition"] is False
     # 발송 이력 기록용 원본 키는 그대로 유지
@@ -119,7 +120,7 @@ def test_cb_t3_news_recap_when_no_new_news():
 
     report = asyncio.run(_collector(handler).collect_daily_report())
     assert report["top_headlines"] == []
-    assert len(report["news_recap"]) == 3
+    assert len(report["news_recap"]) == 2
     assert report["journey"]["paper"]["paper_id"] == 8042
 
 
