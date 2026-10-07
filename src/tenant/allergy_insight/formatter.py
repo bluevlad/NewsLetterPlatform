@@ -29,6 +29,52 @@ def _empty_drug_updates() -> Dict[str, Any]:
     }
 
 
+# 「오늘의 뉴스」 단일 섹션 — 헤드라인 + 기업 동향을 합쳐 최대 3건 (A4 1~1.5장 목표)
+NEWS_ITEMS_LIMIT = 3
+
+
+def build_news_items(top_headlines: list, company_digest: list, limit: int = NEWS_ITEMS_LIMIT) -> list:
+    """헤드라인과 기업 동향 대표 기사를 한 목록으로 합친다.
+
+    헤드라인을 먼저 두고, 같은 기업이 이미 있으면 기업 동향 쪽은 건너뛴다.
+    발송 이력 기록은 원본 키(top_headlines/company_digest)를 그대로 쓰므로
+    여기서 잘린 항목도 기록 대상이다 — 이력은 "선정됨" 기준이다.
+    """
+    items: list = []
+    seen_companies: set = set()
+    for h in top_headlines or []:
+        company = (h.get("company_name") or "").strip()
+        items.append({
+            "title": h.get("title") or "",
+            "url": h.get("url") or h.get("link") or "",
+            "summary": h.get("summary") or "",
+            "label": h.get("category") or company,
+            "label_color": h.get("category_color") or "#2e7d32",
+            "company_name": company,
+            "source": h.get("source") or "",
+            "published_at": h.get("published_at") or "",
+        })
+        if company:
+            seen_companies.add(company)
+    for c in company_digest or []:
+        rep = c.get("representative") or {}
+        company = (c.get("company_name") or "").strip()
+        if not rep.get("title") or company in seen_companies:
+            continue
+        items.append({
+            "title": rep.get("title") or "",
+            "url": rep.get("url") or "",
+            "summary": rep.get("summary") or "",
+            "label": "기업 동향",
+            "label_color": "#546e7a",
+            "company_name": company,
+            "source": "",
+            "published_at": rep.get("published_at") or "",
+        })
+        seen_companies.add(company)
+    return items[:limit]
+
+
 class AllergyInsightFormatter:
     """AllergyInsight API 응답 → 템플릿 컨텍스트 변환"""
 
@@ -64,15 +110,27 @@ class AllergyInsightFormatter:
                 + len(drug_updates.get("recalls", []))
             )
 
+        top_headlines = daily_report.get("top_headlines", [])
+        company_digest = daily_report.get("company_digest", [])
+        weekly_metrics = daily_report.get("weekly_metrics") or {}
+
         return {
             "report_date": report_date,
             # 휴일 catch-up 배지 메타 (P2) — None 이면 템플릿에서 미노출
             "catchup": daily_report.get("catchup"),
-            "top_headlines": daily_report.get("top_headlines", []),
-            "company_digest": daily_report.get("company_digest", []),
+            "top_headlines": top_headlines,
+            "company_digest": company_digest,
+            # 「오늘의 뉴스」 단일 섹션 (헤드라인 + 기업 동향)
+            "news_items": build_news_items(top_headlines, company_digest),
+            # 신규 0건일 때 최근 주요 뉴스 다시 보기 (발송 이력 미기록)
+            "news_recap": build_news_items(daily_report.get("news_recap") or [], []),
+            # 「논문 한 편의 여정」 — AllergyInsight 가 렌더링한 email_html 포함
+            "journey": daily_report.get("journey"),
+            # 주간판(월요일): 신흥 치료법·약물 전체·주간 메트릭 노출
+            "is_weekly_edition": bool(weekly_metrics) or report_date.weekday() == 0,
             "papers": daily_report.get("papers", []),
             "drug_updates": drug_updates,
-            "weekly_metrics": daily_report.get("weekly_metrics") or {},
+            "weekly_metrics": weekly_metrics,
             # N2 신규 (collector 가 산출, formatter 는 패스스루)
             "spotlights": daily_report.get("spotlights") or [],
             # 구 템플릿 호환 — 단일 카드 키
@@ -582,6 +640,10 @@ class AllergyInsightFormatter:
             "report_date": now,
             "top_headlines": [],
             "company_digest": [],
+            "news_items": [],
+            "news_recap": [],
+            "journey": None,
+            "is_weekly_edition": now.weekday() == 0,
             "papers": [],
             "drug_updates": _empty_drug_updates(),
             "weekly_metrics": {},

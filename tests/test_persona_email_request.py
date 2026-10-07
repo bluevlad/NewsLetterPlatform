@@ -18,7 +18,7 @@ from src.common.database.repository import (
     SubscriberTopicRequestRepository,
 )
 from src.common.template.renderer import get_renderer
-from src.tenant.allergy_insight.formatter import AllergyInsightFormatter
+from src.tenant.allergy_insight.formatter import AllergyInsightFormatter, build_news_items
 
 
 @pytest.fixture
@@ -129,11 +129,13 @@ def test_et5_daily_report_persona_cta_guard():
     ctx["top_headlines"] = [{"title": "H", "url": "http://x"}]
     ctx["company_digest"] = [{"company_name": "C", "count_7d": 1}]
     ctx["papers"] = [{"title": "P", "link": "http://p"}]
+    # 헤드라인·기업 동향은 「오늘의 뉴스」 단일 섹션(news_items)으로 렌더된다
+    ctx["news_items"] = build_news_items(ctx["top_headlines"], ctx["company_digest"])
 
     ctx["persona_enabled"] = True
     on = renderer.render("allergy_insight/daily_report.html", ctx)
     assert "맞춤 콘텐츠 요청하기" in on
-    assert on.count("__PERSONA_REQUEST_URL__") == 4  # 푸터 CTA + 섹션 3
+    assert on.count("__PERSONA_REQUEST_URL__") == 3  # 푸터 CTA + 섹션 2(뉴스·논문)
 
     ctx["persona_enabled"] = False
     off = renderer.render("allergy_insight/daily_report.html", ctx)

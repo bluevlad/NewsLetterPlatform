@@ -235,6 +235,9 @@ class AllergyInsightCollector:
     # 휴일 catch-up 시 fallback 윈도 상한 (과도한 과거 재노출 방지)
     _CATCHUP_MAX_WINDOW_DAYS = 7
     _CATCHUP_HEADLINE_LIMIT = 8  # 기본 5 → catch-up 시 상향
+    # 신규 뉴스 0건일 때 "최근 주요 뉴스 다시 보기" (dedup 미적용, 발송 이력 미기록)
+    _NEWS_RECAP_DAYS = 7
+    _NEWS_RECAP_LIMIT = 3
 
     async def _collect_headlines_today(
         self,
@@ -705,8 +708,20 @@ class AllergyInsightCollector:
         self,
         count: int = 3,
         trending_slots: int = 1,
-        max_papers: int = 3,
+        max_papers: int = 1,
     ) -> list[Dict[str, Any]]:
+        """스폿라이트 카드만 반환 (하위 호환). 여정까지 필요하면 bundle 을 쓴다."""
+        bundle = await self._collect_spotlight_bundle(
+            count=count, trending_slots=trending_slots, max_papers=max_papers,
+        )
+        return bundle["cards"]
+
+    async def _collect_spotlight_bundle(
+        self,
+        count: int = 3,
+        trending_slots: int = 1,
+        max_papers: int = 1,
+    ) -> Dict[str, Any]:
         """오늘의 알러지 스폿라이트 (다중 카드).
 
         선정은 서버(AllergyInsight `spotlight_service`)가 수행한다.
@@ -717,7 +732,12 @@ class AllergyInsightCollector:
         구 방식(rising 랭킹을 날짜로 회전)은 rising 판정 알러젠이 2~3종뿐이라
         어류·견과류가 반복 노출됐다. 설계: plans/spotlight-staleness-rotation-plan.md
 
-        Returns: 카드 리스트. 실패 또는 데이터 없음 → 빈 리스트 (템플릿이 섹션 숨김).
+        max_papers=1: 카드당 대표 논문 1편만 소개한다 (메일 분량 A4 1~1.5장 목표).
+        나머지 논문은 이력에 기록되지 않으므로 다음 회차에 소개된다.
+
+        Returns: {"cards": [...], "journey": dict|None}.
+            journey 는 대표 논문 1편의 「논문 한 편의 여정」 — email_html 을 그대로
+            끼워 넣는다 (렌더링은 AllergyInsight 가 담당). 실패 시 빈 구조.
         """
         with self._track(
             data_type="spotlight",
@@ -735,6 +755,9 @@ class AllergyInsightCollector:
                 )
                 body = self._unwrap(raw)
                 spotlights = body.get("spotlights", []) or []
+                journey = body.get("journey")
+                if not (isinstance(journey, dict) and journey.get("email_html")):
+                    journey = None
 
                 cards = []
                 for s in spotlights:
@@ -748,17 +771,18 @@ class AllergyInsightCollector:
                 m["raw_count"] = len(spotlights)
                 m["final_count"] = len(cards)
                 logger.info(
-                    "AllergyInsight 스폿라이트 수집 완료: %d건 %s",
+                    "AllergyInsight 스폿라이트 수집 완료: %d건 %s, 여정=%s",
                     len(cards),
                     [(c["allergen_code"], c.get("slot_type")) for c in cards],
+                    (journey or {}).get("paper", {}).get("paper_id"),
                 )
-                return cards
+                return {"cards": cards, "journey": journey}
             except Exception as e:
                 m["error"] = str(e)[:480]
                 logger.warning(
                     f"AllergyInsight 스폿라이트 수집 실패 (빈 리스트 폴백): {e}"
                 )
-                return []
+                return {"cards": [], "journey": None}
 
     async def _collect_weekly_metrics(
         self, report_date: Optional[str] = None, window_days: int = 7
@@ -1019,6 +1043,19 @@ class AllergyInsightCollector:
                 target_count=5,
             )
 
+            # 2-1. 신규 뉴스가 0건이면 최근 7일 주요 뉴스를 "다시 보기"로 채운다.
+            #      dedup 으로 풀이 고갈되면 뉴스 섹션이 통째로 빠져 메일 첫 화면이
+            #      스폿라이트가 되는 문제 방지. 발송 이력(sent_articles)에는
+            #      기록하지 않도록 별도 키(news_recap)로 둔다.
+            news_recap: list = []
+            if not top_headlines and not company_digest:
+                recap_payload = await self._collect_headlines_today(
+                    limit=self._NEWS_RECAP_LIMIT,
+                    exclude_ids=[],
+                    fallback_window_days=self._NEWS_RECAP_DAYS,
+                )
+                news_recap = recap_payload.get("headlines", [])[: self._NEWS_RECAP_LIMIT]
+
             # 3. 논문 수집 (공개 API) — fail-safe: papers 엔드포인트 장애가
             #    헤드라인·다이제스트 등 정상 수집분까지 무산시키지 않도록
             #    실패 시 해당 섹션만 비운다 (템플릿이 빈 섹션 자동 숨김).
@@ -1046,7 +1083,9 @@ class AllergyInsightCollector:
 
             # 7. N2 신규 — 알러지 인사이트 스폿라이트 / 신흥 치료법 / 알러젠 트렌드.
             #    모두 fail-safe 폴백, 빈 결과면 템플릿이 섹션 자동 숨김.
-            spotlights = await self._collect_spotlight()
+            spotlight_bundle = await self._collect_spotlight_bundle()
+            spotlights = spotlight_bundle["cards"]
+            journey = spotlight_bundle["journey"]
             treatments = await self._collect_treatments_overview()
             trends_rising = await self._collect_allergen_ranking(
                 direction="rising", limit=5
@@ -1080,6 +1119,9 @@ class AllergyInsightCollector:
                 "weekly_metrics": weekly_metrics,
                 # N2 신규
                 "spotlights": spotlights,
+                # 대표 논문 「논문 한 편의 여정」 (email_html 포함, 없으면 None)
+                "journey": journey,
+                "news_recap": news_recap,
                 # 구 템플릿/소비자 호환 — 첫 카드를 단일 객체 키로도 노출
                 "spotlight": spotlights[0] if spotlights else None,
                 "treatments": treatments,

@@ -286,48 +286,57 @@
         <!-- 5. 테넌트별 데이터 수집 -->
         <h2>5. 테넌트별 데이터 수집</h2>
 
-        <h3>AllergyInsight - 뉴스 수집</h3>
-        <p>AllergyInsight 일일 뉴스레터의 <strong>[오늘의 주요 뉴스]</strong> 섹션은 AllergyInsight Backend의 공개 API를 통해 최신 뉴스만 수집합니다.</p>
-
-        <div class="info-box highlight">
-            <strong>수집 API</strong>
-            <p><code>GET /api/public/analytics/news/recent?days=1&amp;max_age_days=2&amp;limit=10</code></p>
-        </div>
+        <h3>AllergyInsight - 일일 브리핑 구성</h3>
+        <p>AllergyInsight 일일 뉴스레터는 <strong>A4 1~1.5장</strong> 분량을 목표로 섹션마다 핵심만 짧게 보여줍니다.
+           자세한 내용은 각 항목의 링크(원문 기사·논문·여정 페이지)로 이어집니다.</p>
 
         <table>
             <thead>
                 <tr>
-                    <th>항목</th>
-                    <th>설명</th>
+                    <th>순서 · 섹션</th>
+                    <th>구성</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td>API 엔드포인트</td>
-                    <td><code>/api/public/analytics/news/recent</code> (공개, 인증 불필요)</td>
+                    <td>1. 오늘의 3줄</td>
+                    <td>뉴스 · 논문 여정 · 스폿라이트 핵심을 한 줄씩 요약</td>
                 </tr>
                 <tr>
-                    <td>필터링</td>
-                    <td>LLM 분석 완료(<code>is_processed</code>) + 관련성 확인(<code>is_relevant</code>) 뉴스만 포함</td>
+                    <td>2. 📰 오늘의 뉴스</td>
+                    <td>핵심 헤드라인과 기업 동향을 합친 단일 섹션. 최대 3건, 같은 기업은 한 번만, 제목 + 요약 한 줄(60자).
+                        최근 7일 발송분은 제외하며, 새 뉴스가 0건이면 <strong>최근 주요 뉴스 다시 보기</strong>(최대 3건)로 채웁니다.
+                        다시 보기 기사는 발송 이력에 다시 기록하지 않습니다.</td>
                 </tr>
                 <tr>
-                    <td>신선도</td>
-                    <td><code>max_age_days=2</code> — 발행일 기준 2일 이내 뉴스만 수집</td>
+                    <td>3. 🧭 논문 한 편의 여정</td>
+                    <td>스폿라이트 대표 논문이 수집 → 태깅 → AI 요약 → 검색 색인 → 용어사전으로 어떻게 바뀌었는지 좌→우 흐름으로 표시.
+                        블록 HTML은 AllergyInsight 가 만들어 주며(<code>journey.email_html</code>), 대표 논문이 없으면 블록이 생략됩니다.</td>
                 </tr>
                 <tr>
-                    <td>정렬</td>
-                    <td>발행일 최신순(<code>published_at DESC</code>), 중요도는 2차 정렬</td>
+                    <td>4. 🔬 오늘의 알러지 스폿라이트</td>
+                    <td>카드 3장. 카드마다 지표 한 줄 + 대표 논문 1편(임상 함의 80자) + 처방 참고 3개 (<code>max_papers=1</code>)</td>
                 </tr>
                 <tr>
-                    <td>최대 건수</td>
-                    <td>10건 (템플릿에서 상위 3건 표시)</td>
+                    <td>5. 📚 최신 논문</td>
+                    <td>3편, 한국어 제목 + 저널 한 줄</td>
                 </tr>
                 <tr>
-                    <td>뉴스 없는 날</td>
-                    <td>"오늘은 새로운 알러지 관련 뉴스가 없습니다" 안내 표시</td>
+                    <td>6. 🌡 알러젠 트렌드</td>
+                    <td>상승·하락 각 3개를 한 줄로 표시</td>
+                </tr>
+                <tr>
+                    <td>주간판(월요일)</td>
+                    <td>💉 신흥 치료법, 💊 약물 업데이트 전체, 📈 주간 메트릭을 추가로 노출. 평일 약물 섹션은 블랙박스 경고·회수가 있을 때만 표시</td>
                 </tr>
             </tbody>
         </table>
+
+        <div class="info-box highlight">
+            <strong>수집 API (AllergyInsight 공개 API)</strong>
+            <p><code>/api/public/analytics/headlines/today</code> · <code>/api/public/analytics/company-digest</code> ·
+               <code>/api/public/analytics/spotlight/today?max_papers=1</code> (응답의 <code>journey</code> 포함)</p>
+        </div>
 
         <div class="info-box">
             <strong>논문 및 통계</strong>
@@ -411,7 +420,7 @@
 
         <div class="faq-item">
             <div class="faq-question">Q. AllergyInsight 뉴스레터에 같은 뉴스가 반복됩니다</div>
-            <div class="faq-answer">일일 뉴스 수집은 AllergyInsight Backend의 <code>/api/public/analytics/news/recent</code> API를 사용하며, 발행일 기준 2일 이내의 분석 완료된 뉴스만 수집합니다. 반복이 계속되면 Backend의 뉴스 수집/분석 상태를 확인하세요.</div>
+            <div class="faq-answer">「오늘의 뉴스」는 최근 7일 발송한 기사·기업을 제외하고 선정합니다. 새 뉴스가 0건인 날에만 최근 주요 뉴스를 "다시 보기"로 보여주며, 이 경우 섹션 제목 옆에 안내 문구가 붙습니다. 다시 보기가 자주 나오면 AllergyInsight Backend의 뉴스 수집량(품질 기준값)을 확인하세요.</div>
         </div>
 
         <div class="faq-item">
@@ -456,9 +465,9 @@
         <h3>발송 메일에서 바로 요청 (E1·E2)</h3>
         <p>구독자가 받는 <strong>뉴스레터 메일 안에서</strong> 콘텐츠 요청을 시작할 수 있습니다.</p>
         <ul>
-            <li><strong>푸터 CTA</strong> — 메일 하단의 "맞춤 콘텐츠 요청하기" 버튼</li>
-            <li><strong>섹션별 딥링크</strong> — 핵심 헤드라인·산업/기업 동향·최신 논문 섹션마다
-                "이 분야 맞춤 콘텐츠 더 받기" 링크</li>
+            <li><strong>하단 CTA</strong> — 메일 하단 피드백 버튼 아래의 "맞춤 콘텐츠 요청하기" 링크</li>
+            <li><strong>섹션별 딥링크</strong> — 오늘의 뉴스·최신 논문 섹션마다
+                "이 분야 맞춤 콘텐츠" 링크</li>
         </ul>
         <p>이메일은 입력 폼을 직접 담을 수 없으므로, 링크를 누르면
            <strong>요청 랜딩 페이지</strong>(<code>/{tenant}/persona/request</code>)가 열리고
