@@ -5,7 +5,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: newsletterplatform-scheduler
-    restart: unless-stopped
+    # always: OrbStack/호스트 종료 시 컨테이너 stop 이 '수동 중지'로 기록되어
+    # unless-stopped 는 재기동 후 복귀하지 않음 (2026-10-11 장애). 반드시 always 유지.
+    restart: always
     env_file:
       - .env.production
     volumes:
@@ -43,7 +45,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: newsletterplatform-web
-    restart: unless-stopped
+    # always: OrbStack/호스트 종료 시 컨테이너 stop 이 '수동 중지'로 기록되어
+    # unless-stopped 는 재기동 후 복귀하지 않음 (2026-10-11 장애). 반드시 always 유지.
+    restart: always
     env_file:
       - .env.production
     ports:

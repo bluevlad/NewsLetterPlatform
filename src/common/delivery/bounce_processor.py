@@ -228,7 +228,16 @@ class BounceProcessor:
         result = []
         for crit in self.NDR_SEARCH_CRITERIA:
             try:
-                typ, data = imap.uid("SEARCH", None, f"SINCE {since_str}", crit)
+                if crit.isascii():
+                    typ, data = imap.uid("SEARCH", None, f"SINCE {since_str}", crit)
+                else:
+                    # imaplib 은 명령행을 ASCII 로 인코딩 — 비ASCII 값은
+                    # CHARSET UTF-8 + literal 로 전송 (RFC 3501 §6.4.4)
+                    key, value = crit.strip("()").split(" ", 1)
+                    imap.literal = value.strip('"').encode("utf-8")
+                    typ, data = imap.uid(
+                        "SEARCH", "CHARSET", "UTF-8", f"SINCE {since_str}", key,
+                    )
                 if typ != "OK" or not data or not data[0]:
                     continue
                 for uid in data[0].split():
