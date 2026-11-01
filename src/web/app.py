@@ -25,6 +25,7 @@ from ..common.subscription.email_service import send_verification_email
 from ..common.scheduler.jobs import send_welcome_newsletter
 from ..common.database.repository import (
     get_session, SendHistoryRepository, NewsletterArchiveRepository,
+    JobExecutionRepository,
     SubscriberRepository, SubscriberTopicRequestRepository,
 )
 from ..common.security import (
@@ -32,6 +33,7 @@ from ..common.security import (
     verify_turnstile,
     get_client_ip,
 )
+from ..common.timeutil import today_kst
 from ..tenant.registry import get_registry
 from ..tenant.allergy_insight.persona_client import (
     PersonaNewsletterClient, INTEREST_ALLERGENS, persona_default_depth,
@@ -219,7 +221,7 @@ async def api_health_content():
 
 @app.get("/api/health/scheduler", response_class=JSONResponse)
 async def api_health_scheduler():
-    """Readiness 엔드포인트 — 당일 발송 통계 기반 스케줄러 상태"""
+    """Readiness 엔드포인트 — 당일 발송 통계 + 잡 실행 이력 기반 스케줄러 상태"""
     try:
         registry = get_registry()
         total = 0
@@ -232,11 +234,14 @@ async def api_health_scheduler():
                 tenant_stats[tid] = stats
                 total += stats["total"]
                 failed += stats["failed"]
+            # 당일(KST) 수집/발송 잡 실행 결과 — 재시도·catch-up 가시화 (#4)
+            executions = JobExecutionRepository.list_for_date(session, today_kst())
 
         return JSONResponse(content={
             "total": total,
             "failed": failed,
             "tenants": tenant_stats,
+            "job_executions": executions,
         })
     except Exception as e:
         logger.error(f"Scheduler health check failed: {e}")

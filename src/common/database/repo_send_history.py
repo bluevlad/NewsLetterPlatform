@@ -269,3 +269,18 @@ class SendHistoryRepository:
             .all()
         )
         return {row[0] for row in rows}
+
+    @staticmethod
+    def purge_older_than(session: Session, days: int = 90) -> int:
+        """보존 기간(기본 90일) 초과 발송 이력 삭제 (#4).
+
+        dedup(최대 월 단위)·관리자 통계(최근 7일)·catch-up 갭 판정 모두
+        90일 이내 이력만 사용하므로 영향 없음.
+        """
+        cutoff = _today_start_utc() - timedelta(days=days)
+        deleted = (
+            session.query(SendHistory)
+            .filter(SendHistory.sent_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        return int(deleted or 0)

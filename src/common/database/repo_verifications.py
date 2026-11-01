@@ -1,11 +1,12 @@
 """이메일 인증(EmailVerification) 저장소. P1b 분해(2026-08-15)로 repository.py 에서 분리."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
+from ..timeutil import today_start_utc as _today_start_utc
 from .models import EmailVerification, VerificationType
 
 logger = logging.getLogger(__name__)
@@ -77,3 +78,14 @@ class EmailVerificationRepository:
                 EmailVerification.created_at >= since,
             )
         ).count()
+
+    @staticmethod
+    def purge_older_than(session: Session, days: int = 30) -> int:
+        """보존 기간(기본 30일) 초과 인증 요청 삭제 — 인증 코드·가입 메타(PII) 최소 보관 (#4)."""
+        cutoff = _today_start_utc() - timedelta(days=days)
+        deleted = (
+            session.query(EmailVerification)
+            .filter(EmailVerification.created_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        return int(deleted or 0)

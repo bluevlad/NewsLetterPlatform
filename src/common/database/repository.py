@@ -31,6 +31,7 @@ from .repo_bounce import BounceLogRepository  # noqa: F401
 from .repo_sent_articles import SentArticleRepository  # noqa: F401
 from .repo_metrics import CollectionMetricRepository  # noqa: F401
 from .repo_engagement import EngagementEventRepository  # noqa: F401
+from .repo_job_executions import JobExecutionRepository  # noqa: F401
 
 __all__ = [
     "init_db", "get_session", "get_session_factory", "run_all_migrations",
@@ -38,4 +39,5 @@ __all__ = [
     "SendHistoryRepository", "CollectedDataRepository",
     "NewsletterArchiveRepository", "EmailVerificationRepository",
     "BounceLogRepository", "SentArticleRepository", "CollectionMetricRepository",
+    "JobExecutionRepository",
 ]
