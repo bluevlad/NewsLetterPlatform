@@ -217,3 +217,61 @@ class TestStartupCatchup:
         self._baseline()
         assert jobs.schedule_startup_catchup(setup, window_minutes=1) == []
         assert jobs.schedule_startup_catchup(setup, window_minutes=0) == []
+
+
+# ==================== 데이터 보존 정책 (PR-3) ====================
+
+from datetime import datetime as _dt
+
+from src.common.database.models import EmailVerification, SendHistory, VerificationType
+
+
+class TestDataRetention:
+    def _seed(self):
+        now = _dt.utcnow()
+        with get_session() as s:
+            for age in (31, 5):  # 인증: 30일 초과 1건 / 이내 1건
+                s.add(EmailVerification(
+                    tenant_id="t1", email=f"a{age}@x.com", code="123456",
+                    verification_type=VerificationType.SUBSCRIBE,
+                    created_at=now - timedelta(days=age),
+                    expires_at=now - timedelta(days=age) + timedelta(minutes=10),
+                ))
+            for age in (91, 60):  # 발송 이력: 90일 초과 1건 / 이내 1건
+                s.add(SendHistory(
+                    tenant_id="t1", subscriber_id=1, subject="s",
+                    is_success=True, sent_at=now - timedelta(days=age),
+                ))
+
+    def test_purges_expired_rows_only(self, db):
+        self._seed()
+        result = jobs.run_data_retention_job()
+        assert result["email_verifications"] == 1
+        assert result["send_history"] == 1
+        assert all(n >= 0 for n in result.values())
+        with get_session() as s:
+            assert s.query(EmailVerification).count() == 1
+            assert s.query(SendHistory).count() == 1
+
+    def test_one_table_failure_isolated(self, db, monkeypatch):
+        self._seed()
+        alerts = []
+        monkeypatch.setattr(jobs, "send_ops_alert", lambda *a, **k: alerts.append(a))
+
+        def boom(*a, **k):
+            raise RuntimeError("locked")
+
+        monkeypatch.setattr(jobs.SentArticleRepository, "purge_older_than", boom)
+        result = jobs.run_data_retention_job()
+        assert result["sent_articles"] == -1
+        assert result["send_history"] == 1  # 다른 테이블은 계속 정리
+        assert alerts and "sent_articles" in alerts[0][1]
+
+    def test_registered_daily(self):
+        from src.main import register_tenants
+
+        register_tenants()
+        sch = BackgroundScheduler()
+        jobs.register_all_jobs(sch)
+        job = sch.get_job("data_retention")
+        assert job is not None and job.func is jobs.run_data_retention_job

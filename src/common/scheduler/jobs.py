@@ -19,6 +19,7 @@ from ..database.repository import (
     SubscriberRepository, SendHistoryRepository,
     NewsletterArchiveRepository, SentArticleRepository,
     CollectionMetricRepository, JobExecutionRepository,
+    EmailVerificationRepository,
 )
 from ..database.models import CollectionMetric
 from ..alerts import send_ops_alert
@@ -1151,13 +1152,13 @@ def run_insight_brief_job(tenant_id: str) -> None:
 
 
 def run_engagement_relay_job(tenant_id: str = "allergy-insight") -> None:
-    """Engagement 이벤트 일 배치 릴레이 + 보존 정책 (P2 — 페르소나 스펙 N4).
+    """Engagement 이벤트 일 배치 릴레이 (P2 — 페르소나 스펙 N4).
 
     미릴레이(open/click/feedback) 이벤트를 persona_code 스냅샷과 함께
     AllergyInsight `/api/newsletter/engagement` 로 배치 전송한다.
     - 페르소나 키 미설정 → 릴레이 스킵 (로컬 수집은 계속 — 트랙 E 입력)
     - 백엔드 미구현(404)·오류 → 미마킹 유지, 다음 실행에서 재시도
-    - 90일 초과 이벤트는 전 테넌트 purge (sent_articles 와 동일 정책)
+    - 90일 보존 purge 는 run_data_retention_job 으로 이관 (#4)
     """
     import httpx
 
@@ -1165,11 +1166,6 @@ def run_engagement_relay_job(tenant_id: str = "allergy-insight") -> None:
     from ...tenant.allergy_insight.config import (
         tenant_settings as allergy_settings,
     )
-
-    with get_session() as session:
-        purged = EngagementEventRepository.purge_older_than(session, days=90)
-    if purged:
-        logger.info(f"engagement 이벤트 {purged}건 purge (90일 초과)")
 
     key = allergy_settings.allergy_insight_newsletter_api_key
     if not key:
@@ -1429,6 +1425,47 @@ def schedule_startup_catchup(scheduler, window_minutes: int) -> list[str]:
     return scheduled
 
 
+def run_data_retention_job() -> dict:
+    """데이터 보존 정책 일 배치 (#4) — 보존 기간 초과 이력 일괄 삭제.
+
+    테이블별 독립 트랜잭션으로 정리해 한 테이블 실패가 나머지를 막지 않는다.
+    새 이력 테이블을 추가하면 purge_older_than 을 구현하고 여기에 등록할 것.
+
+    Returns:
+        {테이블명: 삭제 건수 | -1(실패)}
+    """
+    from ..database.repo_engagement import EngagementEventRepository
+
+    history_days = settings.retention_history_days
+    targets = [
+        ("email_verifications", EmailVerificationRepository,
+         settings.retention_verification_days),
+        ("send_history", SendHistoryRepository, history_days),
+        ("sent_articles", SentArticleRepository, history_days),
+        ("collection_metrics", CollectionMetricRepository, history_days),
+        ("engagement_events", EngagementEventRepository, history_days),
+        ("job_executions", JobExecutionRepository,
+         settings.retention_job_execution_days),
+    ]
+    result = {}
+    for table, repo, days in targets:
+        try:
+            with get_session() as session:
+                result[table] = repo.purge_older_than(session, days=days)
+        except Exception as e:
+            result[table] = -1
+            logger.warning(f"[retention] {table} 정리 실패: {e}")
+
+    logger.info(
+        "[retention] 보존 기간 초과 데이터 정리: "
+        + ", ".join(f"{t}={n}" for t, n in result.items())
+    )
+    failed = [t for t, n in result.items() if n < 0]
+    if failed:
+        send_ops_alert("데이터 보존 정리 실패", f"실패 테이블: {', '.join(failed)}")
+    return result
+
+
 def register_all_jobs(scheduler: BlockingScheduler) -> None:
     """TenantRegistry 순회하며 모든 작업 등록.
 
@@ -1567,7 +1604,7 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
 
     # === Engagement 릴레이 (일 1회 04:50 — 수집 시작 전) ===
     # 로컬 수집된 open/click/feedback 을 AllergyInsight 로 배치 전송 (N4)
-    # + 90일 보존 purge. 페르소나 키 미설정 시 릴레이만 스킵.
+    # 페르소나 키 미설정 시 릴레이 스킵 (보존 purge 는 data_retention 잡).
     scheduler.add_job(
         run_engagement_relay_job,
         trigger=CronTrigger(hour=4, minute=50),
@@ -1575,6 +1612,15 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
         name="Engagement 이벤트 릴레이 (N4)",
     )
     logger.info("engagement_relay 등록: 매일 04:50")
+
+    # === 데이터 보존 정리 (일 1회 04:40 — 수집·릴레이 전 저부하 시간대) ===
+    scheduler.add_job(
+        run_data_retention_job,
+        trigger=CronTrigger(hour=4, minute=40),
+        id="data_retention",
+        name="데이터 보존 정책 정리",
+    )
+    logger.info("data_retention 등록: 매일 04:40")
 
     # === Heartbeat (10분 주기) ===
     # Docker healthcheck(check_heartbeat)가 스케줄러 루프 생존을 판정하는 근거.
