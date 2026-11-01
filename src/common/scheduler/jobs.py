@@ -45,6 +45,25 @@ _HOLIDAY_TEST_SLOT = "early"  # 휴일 테스트 모드는 early 슬롯만 발�
 # SUPER_ADMIN_EMAILS 에만 STALE 배너로 발송. (FRESHNESS_PLAN AC-8 / 트랙 F P6)
 STALE_CACHE_THRESHOLD_SECONDS = 24 * 3600
 
+# 스케줄러 공통 잡 옵션 (#4 장애 복구).
+# APScheduler 기본 misfire_grace_time 은 1초라, Docker VM 일시정지·스레드 풀
+# 포화로 실행이 1초만 밀려도 그날 수집/발송이 통째로 스킵된다.
+# 1시간 안의 지연은 1회 실행으로 흡수(coalesce)하고, 같은 잡의 동시 실행은 막는다.
+SCHEDULER_JOB_DEFAULTS = {
+    "misfire_grace_time": 3600,
+    "coalesce": True,
+    "max_instances": 1,
+}
+
+# 수집 잡 재시도 간격(초) — 1분 → 5분 → 15분 (최초 1회 + 재시도 3회).
+# 발송 슬롯(수집 + 약 1시간)보다 충분히 앞서 끝나도록 총 21분 이내로 둔다.
+# 발송 잡은 재시도하지 않는다 — 휴일 테스트 등 dedup 없는 발송 계획이 있어
+# 재실행 시 중복 발송 위험이 있기 때문 (수신자 단위 재전송은 run_send_job 이 담당).
+COLLECT_RETRY_DELAYS_SECONDS = (60, 300, 900)
+
+# register_all_jobs 가 보관 — 재시도 잡을 DateTrigger 로 예약할 때 사용.
+_scheduler = None
+
 
 def _html_fingerprint(html: str) -> str:
     return hashlib.sha256(html.encode("utf-8")).hexdigest()
@@ -310,8 +329,20 @@ def _compute_catchup_days(session, tenant_id: str) -> Optional[int]:
     return gap if gap >= 2 else None
 
 
-def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
-    """데이터 수집 작업"""
+def run_collect_job(
+    tenant_id: str, newsletter_type: str = "daily",
+    alert_on_failure: bool = True,
+) -> bool:
+    """데이터 수집 작업
+
+    Args:
+        alert_on_failure: 수집 예외 시 운영 경보 발송 여부. 스케줄 재시도
+            래퍼(run_scheduled_collect)는 마지막 시도에서만 True 로 호출한다.
+
+    Returns:
+        False — 수집 중 예외 발생 (재시도 대상).
+        True — 성공 또는 재시도가 무의미한 종료(테넌트 없음·수집 데이터 없음).
+    """
     type_label = f"[{newsletter_type}]" if newsletter_type != "daily" else ""
     logger.info(f"[{tenant_id}]{type_label} 데이터 수집 시작")
 
@@ -319,8 +350,9 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
     tenant = registry.get(tenant_id)
     if not tenant:
         logger.error(f"[{tenant_id}] 테넌트를 찾을 수 없습니다.")
-        return
+        return True
 
+    success = True
     try:
         if newsletter_type == "daily":
             # dedup 활성 테넌트는 최근 발송 이력을 exclude_ids/exclude_companies
@@ -370,7 +402,7 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
                 "이전 캐시 데이터로 발송됩니다."
             )
             update_health("collect")
-            return
+            return True
 
         with get_session() as session:
             for data_type, data in collected.items():
@@ -390,16 +422,18 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
         logger.info(f"[{tenant_id}]{type_label} 데이터 수집 완료: {list(collected.keys())}")
 
     except Exception as e:
+        success = False
         logger.exception(
             f"[{tenant_id}]{type_label} 데이터 수집 중 오류: {e}. "
             "이전 캐시 데이터로 발송됩니다."
         )
         # 무음 실패 방지 — 수집 실패는 stale 재발송의 전조이므로 즉시 경보 (P2)
-        send_ops_alert(
-            f"{newsletter_type} 데이터 수집 실패",
-            f"{str(e)[:300]}\n이전 캐시로 발송이 진행될 수 있습니다.",
-            tenant_id=tenant_id,
-        )
+        if alert_on_failure:
+            send_ops_alert(
+                f"{newsletter_type} 데이터 수집 실패",
+                f"{str(e)[:300]}\n이전 캐시로 발송이 진행될 수 있습니다.",
+                tenant_id=tenant_id,
+            )
 
     # 수집 메트릭 영속화 — 성공/실패 무관(부분 수집도 가시화).
     # collector 가 누적해 둔 _metrics 를 1회 drain 후 DB 기록한다.
@@ -420,6 +454,7 @@ def run_collect_job(tenant_id: str, newsletter_type: str = "daily") -> None:
         )
 
     update_health("collect")
+    return success
 
 
 def run_send_job(
@@ -1190,6 +1225,50 @@ def run_engagement_relay_job(tenant_id: str = "allergy-insight") -> None:
         logger.warning(f"[{tenant_id}] engagement 릴레이 오류: {e}")
 
 
+def run_scheduled_collect(
+    tenant_id: str, newsletter_type: str = "daily", attempt: int = 1
+) -> None:
+    """스케줄용 수집 잡 — 실패 시 지수 백오프 재시도 (#4).
+
+    재시도는 워커 스레드에서 sleep 하지 않고 DateTrigger 1회성 잡으로 예약한다
+    (15분 대기 동안 스레드 풀 슬롯을 점유하지 않도록). 운영 경보는 마지막
+    시도가 실패했을 때만 1회 발송한다. 수동 실행(admin/run-once)은 이 래퍼를
+    거치지 않고 run_collect_job 을 직접 호출하므로 영향 없음.
+    """
+    max_attempts = len(COLLECT_RETRY_DELAYS_SECONDS) + 1
+    is_last = attempt >= max_attempts
+    ok = run_collect_job(tenant_id, newsletter_type, alert_on_failure=is_last)
+    if ok:
+        if attempt > 1:
+            logger.info(f"[{tenant_id}][{newsletter_type}] 수집 재시도 성공 ({attempt}회차)")
+        return
+
+    label = f"[{tenant_id}][{newsletter_type}]"
+    if is_last:
+        logger.error(f"{label} 수집 최종 실패 — {attempt}회 시도 후 포기")
+        return
+    if _scheduler is None:
+        logger.warning(f"{label} 수집 실패 — 스케줄러 미등록 상태라 재시도 예약 불가")
+        return
+
+    from apscheduler.triggers.date import DateTrigger
+
+    delay = COLLECT_RETRY_DELAYS_SECONDS[attempt - 1]
+    suffix = "" if newsletter_type == "daily" else f"_{newsletter_type}"
+    _scheduler.add_job(
+        run_scheduled_collect,
+        trigger=DateTrigger(run_date=datetime.now() + timedelta(seconds=delay)),
+        args=[tenant_id, newsletter_type, attempt + 1],
+        id=f"retry_collect{suffix}_{tenant_id}",
+        name=f"Retry Collect {tenant_id} [{newsletter_type}] #{attempt + 1}",
+        replace_existing=True,
+    )
+    logger.warning(
+        f"{label} 수집 실패 — {delay}초 후 재시도 예약 "
+        f"({attempt + 1}/{max_attempts})"
+    )
+
+
 def register_all_jobs(scheduler: BlockingScheduler) -> None:
     """TenantRegistry 순회하며 모든 작업 등록.
 
@@ -1198,6 +1277,8 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
       - 발송: 슬롯(early/mid/late)마다 별도 cron 잡으로 분리
       - weekly/monthly 발송 시간은 daily 슬롯에서 -10분 (slots.WEEKLY_MONTHLY_OFFSET_MINUTES)
     """
+    global _scheduler
+    _scheduler = scheduler
     registry = get_registry()
 
     for tenant in registry.get_all():
@@ -1251,7 +1332,7 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
             name_prefix = "" if freq == "daily" else f"{freq.capitalize()} "
 
             scheduler.add_job(
-                run_collect_job,
+                run_scheduled_collect,
                 trigger=CronTrigger(**collect_trigger),
                 args=[tid, freq],
                 id=f"collect{suffix}_{tid}",
