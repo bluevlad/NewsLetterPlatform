@@ -101,6 +101,12 @@ class Settings(BaseSettings):
         default=False, env="HOLIDAY_ADMIN_TEST_ENABLED"
     )
 
+    # 스케줄러 재기동 catch-up (#4) — 다운타임으로 놓친 당일 수집/발송 중
+    # 예정 시각이 이 범위(분) 안에 지난 것만 기동 직후 1회 보충 실행. 0 이면 비활성.
+    job_catchup_window_minutes: int = Field(
+        default=120, env="JOB_CATCHUP_WINDOW_MINUTES"
+    )
+
     # LLMOps 관측 보고 (BATCH_RUN_REPORTING v0.3.0, fire-and-forget)
     # 비어 있으면 보고 비활성. consumer_id 는 service-registry llm_consumers[].id 와 일치.
     llmops_enabled: bool = Field(default=False, env="LLMOPS_ENABLED")

@@ -15,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.config import settings
 from src.common.database import init_db
 from src.common.scheduler.jobs import (
-    run_collect_job, run_send_job, register_all_jobs, SCHEDULER_JOB_DEFAULTS
+    run_collect_job, run_send_job, register_all_jobs, SCHEDULER_JOB_DEFAULTS,
+    schedule_startup_catchup,
 )
 from src.tenant.registry import get_registry, discover_and_register
 
@@ -57,6 +58,7 @@ def run_scheduler():
 
     scheduler = BlockingScheduler(job_defaults=SCHEDULER_JOB_DEFAULTS)
     register_all_jobs(scheduler)
+    schedule_startup_catchup(scheduler, settings.job_catchup_window_minutes)
 
     try:
         scheduler.start()

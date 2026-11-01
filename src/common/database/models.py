@@ -299,6 +299,43 @@ class CollectionMetric(Base):
         )
 
 
+class JobExecution(Base):
+    """스케줄 잡 실행 이력 — 실행 단위 멱등성 · 재기동 catch-up 근거 (#4)
+
+    (tenant_id, job_key, newsletter_type, run_date) 당 1행. 재시도는 같은 행의
+    attempts 를 올린다. status='success' 는 "실행 완료"(휴일 스킵 등 정상 종료 포함)
+    이며, 같은 날 같은 키의 재실행(재기동 catch-up·중복 트리거)을 막는 기준이 된다.
+    """
+    __tablename__ = "job_executions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(50), nullable=False)
+    # 'collect' | 'send:early' | 'send:mid' | 'send:late'
+    job_key = Column(String(30), nullable=False)
+    newsletter_type = Column(String(20), default="daily", nullable=False)
+    run_date = Column(Date, nullable=False)          # KST 기준 실행일
+    status = Column(String(20), default="running", nullable=False)  # running|success|failed
+    attempts = Column(Integer, default=0, nullable=False)
+    error_message = Column(String(500))
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    finished_at = Column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "job_key", "newsletter_type", "run_date",
+            name="uq_job_executions_run",
+        ),
+        Index("idx_job_executions_date", "run_date"),
+    )
+
+    def __repr__(self):
+        return (
+            f"<JobExecution(tenant={self.tenant_id}, job={self.job_key}, "
+            f"type={self.newsletter_type}, date={self.run_date}, "
+            f"status={self.status}, attempts={self.attempts})>"
+        )
+
+
 class BounceLog(Base):
     """이메일 bounce 이력 (NDR 자동 처리)
 

@@ -18,7 +18,7 @@ from ..database.repository import (
     get_session, CollectedDataRepository,
     SubscriberRepository, SendHistoryRepository,
     NewsletterArchiveRepository, SentArticleRepository,
-    CollectionMetricRepository,
+    CollectionMetricRepository, JobExecutionRepository,
 )
 from ..database.models import CollectionMetric
 from ..alerts import send_ops_alert
@@ -26,6 +26,7 @@ from ..delivery.gmail_sender import get_sender
 from ..delivery.bounce_processor import run_bounce_processor
 from ..holiday import KST, holiday_name, non_business_day_reason
 from ..template.renderer import get_renderer
+from ..timeutil import today_kst
 from .health import update_health
 from .send_plan import (
     alert_plan, holiday_test_plan, manual_plan, normal_plan,
@@ -1225,6 +1226,38 @@ def run_engagement_relay_job(tenant_id: str = "allergy-insight") -> None:
         logger.warning(f"[{tenant_id}] engagement 릴레이 오류: {e}")
 
 
+def _execution_succeeded(tenant_id: str, job_key: str, newsletter_type: str,
+                         run_date: date) -> bool:
+    """멱등 가드 조회 — DB 오류 시 False (가드 실패가 잡 실행을 막지 않도록)."""
+    try:
+        with get_session() as session:
+            return JobExecutionRepository.has_succeeded(
+                session, tenant_id, job_key, newsletter_type, run_date
+            )
+    except Exception as e:
+        logger.warning(f"[{tenant_id}] job_executions 조회 실패 (가드 생략): {e}")
+        return False
+
+
+def _record_execution(phase: str, tenant_id: str, job_key: str,
+                      newsletter_type: str, run_date: date,
+                      success: bool = True, error: Optional[str] = None) -> None:
+    """실행 이력 기록 (best-effort) — phase: 'start' | 'finish'."""
+    try:
+        with get_session() as session:
+            if phase == "start":
+                JobExecutionRepository.mark_started(
+                    session, tenant_id, job_key, newsletter_type, run_date
+                )
+            else:
+                JobExecutionRepository.mark_finished(
+                    session, tenant_id, job_key, newsletter_type, run_date,
+                    success=success, error_message=error,
+                )
+    except Exception as e:
+        logger.warning(f"[{tenant_id}] job_executions 기록 실패 ({phase}): {e}")
+
+
 def run_scheduled_collect(
     tenant_id: str, newsletter_type: str = "daily", attempt: int = 1
 ) -> None:
@@ -1235,15 +1268,25 @@ def run_scheduled_collect(
     시도가 실패했을 때만 1회 발송한다. 수동 실행(admin/run-once)은 이 래퍼를
     거치지 않고 run_collect_job 을 직접 호출하므로 영향 없음.
     """
-    max_attempts = len(COLLECT_RETRY_DELAYS_SECONDS) + 1
-    is_last = attempt >= max_attempts
-    ok = run_collect_job(tenant_id, newsletter_type, alert_on_failure=is_last)
-    if ok:
-        if attempt > 1:
-            logger.info(f"[{tenant_id}][{newsletter_type}] 수집 재시도 성공 ({attempt}회차)")
+    label = f"[{tenant_id}][{newsletter_type}]"
+    run_date = today_kst()
+    if attempt == 1 and _execution_succeeded(tenant_id, "collect", newsletter_type, run_date):
+        logger.info(f"{label} {run_date} 수집 이미 완료 — 멱등 가드로 스킵")
         return
 
-    label = f"[{tenant_id}][{newsletter_type}]"
+    max_attempts = len(COLLECT_RETRY_DELAYS_SECONDS) + 1
+    is_last = attempt >= max_attempts
+    _record_execution("start", tenant_id, "collect", newsletter_type, run_date)
+    ok = run_collect_job(tenant_id, newsletter_type, alert_on_failure=is_last)
+    _record_execution(
+        "finish", tenant_id, "collect", newsletter_type, run_date,
+        success=ok, error=None if ok else "collect raised (see logs)",
+    )
+    if ok:
+        if attempt > 1:
+            logger.info(f"{label} 수집 재시도 성공 ({attempt}회차)")
+        return
+
     if is_last:
         logger.error(f"{label} 수집 최종 실패 — {attempt}회 시도 후 포기")
         return
@@ -1267,6 +1310,123 @@ def run_scheduled_collect(
         f"{label} 수집 실패 — {delay}초 후 재시도 예약 "
         f"({attempt + 1}/{max_attempts})"
     )
+
+
+def run_scheduled_send(
+    tenant_id: str, newsletter_type: str = "daily", slot: str = None
+) -> None:
+    """스케줄용 발송 잡 — 실행 단위 멱등 가드 + 실행 이력 기록 (#4).
+
+    수신자 단위 중복 방지는 기존 send_history dedup 이 담당하고, 이 래퍼는
+    같은 날 같은 슬롯이 이미 완료됐으면 잡 자체를 건너뛴다(재기동 catch-up·
+    중복 트리거 방어). 재시도는 하지 않는다 (COLLECT_RETRY_DELAYS_SECONDS 주석 참조).
+    """
+    job_key = f"send:{slot}" if slot else "send"
+    run_date = today_kst()
+    if _execution_succeeded(tenant_id, job_key, newsletter_type, run_date):
+        logger.info(
+            f"[{tenant_id}][{newsletter_type}][{slot}] {run_date} 발송 이미 완료 "
+            "— 멱등 가드로 스킵"
+        )
+        return
+
+    _record_execution("start", tenant_id, job_key, newsletter_type, run_date)
+    try:
+        run_send_job(tenant_id, newsletter_type, manual=False, slot=slot)
+    except Exception as e:
+        logger.exception(f"[{tenant_id}][{newsletter_type}][{slot}] 발송 잡 예외: {e}")
+        _record_execution(
+            "finish", tenant_id, job_key, newsletter_type, run_date,
+            success=False, error=str(e),
+        )
+        return
+    _record_execution("finish", tenant_id, job_key, newsletter_type, run_date)
+
+
+def schedule_startup_catchup(scheduler, window_minutes: int) -> list[str]:
+    """재기동 catch-up — 다운타임 중 놓친 당일 수집/발송을 1회 보충 실행 (#4).
+
+    메모리 jobstore 는 재기동 시 다음 실행 시각부터 다시 계산하므로
+    misfire_grace_time 만으로는 다운타임 중 지나간 실행이 복구되지 않는다.
+    등록된 수집/발송 잡의 '오늘 예정 시각'이 지금부터 window_minutes 이내 과거이고
+    job_executions 에 완료 기록이 없으면 즉시(발송은 수집 이후로) 1회 예약한다.
+
+    - 테넌트 이력 0건(도입 직후)이면 기준선이 없으므로 보충하지 않는다.
+    - window_minutes <= 0 이면 비활성.
+
+    Returns:
+        예약된 catch-up 잡 id 목록.
+    """
+    if window_minutes <= 0:
+        return []
+    from apscheduler.triggers.date import DateTrigger
+
+    tz = scheduler.timezone
+    now = datetime.now(tz)
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    run_date = now.date()
+
+    missed = []
+    for job in scheduler.get_jobs():
+        if job.func is run_scheduled_collect:
+            tenant_id, newsletter_type = job.args[0], job.args[1]
+            job_key, slot = "collect", None
+        elif job.func is run_scheduled_send:
+            tenant_id = job.kwargs["tenant_id"]
+            newsletter_type = job.kwargs["newsletter_type"]
+            slot = job.kwargs.get("slot")
+            job_key = f"send:{slot}" if slot else "send"
+        else:
+            continue
+        fire = job.trigger.get_next_fire_time(None, midnight)
+        if fire is None or not (midnight <= fire <= now):
+            continue
+        if now - fire > timedelta(minutes=window_minutes):
+            continue
+        missed.append((job, tenant_id, newsletter_type, job_key, slot))
+
+    scheduled = []
+    collect_pending = set()
+    try:
+        with get_session() as session:
+            # 수집을 먼저 처리해 같은 테넌트·주기 발송이 수집 이후로 밀리도록
+            for job, tenant_id, newsletter_type, job_key, slot in sorted(
+                missed, key=lambda m: m[3] != "collect"
+            ):
+                if not JobExecutionRepository.has_any(session, tenant_id):
+                    continue
+                if JobExecutionRepository.has_succeeded(
+                    session, tenant_id, job_key, newsletter_type, run_date
+                ):
+                    continue
+                if job_key == "collect":
+                    collect_pending.add((tenant_id, newsletter_type))
+                    delay = 30
+                elif (tenant_id, newsletter_type) in collect_pending:
+                    delay = 20 * 60  # 수집(재시도 포함 최대 ~21분)과 겹치지 않도록
+                else:
+                    delay = 60
+                catchup_id = f"catchup_{job.id}"
+                scheduler.add_job(
+                    job.func,
+                    trigger=DateTrigger(run_date=now + timedelta(seconds=delay)),
+                    args=job.args, kwargs=job.kwargs,
+                    id=catchup_id, name=f"Catch-up {job.name}",
+                    replace_existing=True,
+                )
+                scheduled.append(catchup_id)
+    except Exception as e:
+        logger.warning(f"재기동 catch-up 판정 실패 (보충 실행 생략): {e}")
+        return scheduled
+
+    if scheduled:
+        logger.warning(f"재기동 catch-up 예약 {len(scheduled)}건: {scheduled}")
+        send_ops_alert(
+            "스케줄러 재기동 catch-up",
+            f"다운타임 중 누락된 잡 {len(scheduled)}건 보충 실행 예약: "
+            + ", ".join(scheduled),
+        )
+    return scheduled
 
 
 def register_all_jobs(scheduler: BlockingScheduler) -> None:
@@ -1346,12 +1506,12 @@ def register_all_jobs(scheduler: BlockingScheduler) -> None:
             for s in DAILY_SLOTS:
                 s_hour, s_minute = get_slot_time(s["key"], freq)
                 scheduler.add_job(
-                    run_send_job,
+                    run_scheduled_send,
                     trigger=CronTrigger(
                         hour=s_hour, minute=s_minute, **send_extra
                     ),
                     kwargs={"tenant_id": tid, "newsletter_type": freq,
-                            "manual": False, "slot": s["key"]},
+                            "slot": s["key"]},
                     id=f"send{suffix}_{tid}_{s['key']}",
                     name=f"Send {name_prefix}{tenant.display_name} [{s['label']}]",
                 )
